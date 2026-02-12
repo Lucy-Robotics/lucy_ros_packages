@@ -22,10 +22,6 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(FILES
-  system_scripts/lucy_workspace.zsh.inc
-  DESTINATION lib/${PROJECT_NAME}
-)
 
 if(BUILD_TESTING)
   set(ament_cmake_flake8_CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/ament_flake8.ini")
