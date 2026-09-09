@@ -12,7 +12,7 @@ Service/action layer for the hardware config workflow.
 |---|-------|--------------|--------------|
 | 1 | **VALIDATE** | yes | schema + URDF cross-check on the YAML |
 | 2 | **GENERATE** | **yes — including `simulation_only`** | runs `lucy_config_generator` and installs the resulting `inmoov_ros2_control.xacro` and `controllers.yaml` into `thais_urdf` so URDF limits and joint topology are up to date even when no firmware build runs |
-| 3 | **BUILD** | skipped in `simulation_only` / `build_only=false` | RP2040 cmake/make for each selected board |
+| 3 | **BUILD** | skipped in `simulation_only` / `build_only=false` | Cargo build (`thumbv6m-none-eabi`) + `elf2uf2-rs` per selected board |
 | 4 | **FLASH** | skipped in `simulation_only` / `build_only=true` | `sudo picotool load` per board (see below) |
 | 5 | **RELOAD** | yes | calls `/lucy_control/restart` so `robot_state_publisher` + `ros2_control` re-read URDF + controller YAML; Gazebo topology changes still require a relaunch |
 
@@ -24,14 +24,10 @@ After a successful build, each selected board with a non-empty `serial_id` is fl
 
 - `sudo picotool load <absolute_path_to_uf2> -f --ser <serial_id>` — the pipeline passes the UF2 under `firmware.build_dir`. **`picotool load` reboots the Pico into application mode**; a separate `picotool reboot` is **not** run (it races USB re-enumeration and often fails with exit **249**).
 - Optional **1 s** pause after load (env `LUCY_PIPELINE_FLASH_POST_LOAD_DELAY_SEC`, set `0` to disable) before polling USB.
-- Wait (default **5 s**, env `LUCY_PIPELINE_FLASH_WAIT_SEC`) until `/dev/serial/by-id/*` contains the serial (case-insensitive substring match).
-- Wait for the next `std_msgs/msg/Int32` on the uptime topic (default **`/uptime_publisher`**, up to **30 s**, env `LUCY_PIPELINE_FLASH_UPTIME_WAIT_SEC`) so micro-ROS is publishing after boot.
+- Wait (default **5 s**, env `LUCY_PIPELINE_FLASH_WAIT_SEC`) until USB serial reappears (case-insensitive serial substring match).
+- Verify the board answers a Modbus FC03 read of holding register 0 (up to **30 s**, env `LUCY_PIPELINE_FLASH_UPTIME_WAIT_SEC`).
 
-Shell aliases (e.g. `pico-flash-right-arm`) must use a **full path** to the `.uf2` or **`cd`** to the firmware `build/` directory first; otherwise picotool fails with **Could not open 'pico_micro_ros_right_arm.uf2'**.
-
-Override the uptime topic with env `LUCY_PIPELINE_UPTIME_TOPIC` or optional per-board YAML key `topic_uptime` (relative names get a leading `/`).
-
-Per-board isolation: one board failing load or wait steps does not stop other boards. Boards that failed **build** are skipped for flash; if **every** selected board failed build, the action aborts before flash.
+Shell aliases must use a **full path** to the `.uf2` or **`cd`** to the firmware `build/` directory first.
 
 ### Passwordless sudo for picotool
 

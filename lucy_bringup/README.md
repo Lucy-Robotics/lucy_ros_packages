@@ -8,7 +8,7 @@ System launch files and scripts for the Lucy robot on NVIDIA Jetson AGX Orin.
 
 | Argument | Default | When true / meaning |
 |----------|---------|---------------------|
-| **`real`** | `true` | micro-ROS agents (serial arms), USB webcam (**`camera_ros`**), RealSense |
+| **`real`** | `true` | `lucy_modbus_bridge` per board with `serial_id`, USB webcam (**`camera_ros`**), RealSense |
 | **`rviz`** | `false` | RViz2 with **`robot_package`** RViz config (`use_sim_time:=false`). If **`gazebo:=true`**, forwarded as **`start_rviz`** to **`thais_urdf/gazebo.launch.py`** (no duplicate RViz). |
 | **`gazebo`** | `false` | Include **`thais_urdf/gazebo.launch.py`**. **Requires `real:=false`** or launch aborts with **`RuntimeError`**. |
 | **`robot_package`** | `thais_urdf` | **`control.launch.py`**, config paths, RViz config share |
@@ -54,7 +54,7 @@ ros2 launch lucy_bringup lucy.launch.py
 # Jetson + RViz + panel
 ros2 launch lucy_bringup lucy.launch.py rviz:=true
 
-# Dev + panel + control + RViz (no micro-ROS / cameras)
+# Dev + panel + control + RViz (no Modbus bridges / cameras)
 ros2 launch lucy_bringup lucy.launch.py real:=false rviz:=true
 
 # Gazebo sim + panel (``rviz:=false`` = headless Gazebo)
@@ -67,7 +67,7 @@ ros2 launch lucy_bringup lucy.launch.py robot_package:=my_robot_urdf
 
 ### Stopping (`stop_lucy.sh`)
 
-The script interrupts the ROS pane (twice), stops the web pane, kills the tmux session, then runs a **fallback cleanup** for common orphaned processes (`rosbridge_websocket*`, `micro_ros_agent`). It does **not** guarantee **every** node on the machine is gone: nodes started in another shell, another host on the same `ROS_DOMAIN_ID`, or names that linger briefly in discovery can still appear in `ros2 node list`. Use `ros2 node list` after stopping; if needed, stop other terminals or match remaining processes with `pgrep -af ros2`.
+The script interrupts the ROS pane (twice), stops the web pane, kills the tmux session, then runs a **fallback cleanup** for common orphaned processes (`rosbridge_websocket*`, `lucy_modbus_bridge` / `modbus_bridge_node`). It does **not** guarantee **every** node on the machine is gone: nodes started in another shell, another host on the same `ROS_DOMAIN_ID`, or names that linger briefly in discovery can still appear in `ros2 node list`. Use `ros2 node list` after stopping; if needed, stop other terminals or match remaining processes with `pgrep -af ros2`.
 
 ## Architecture
 
@@ -76,8 +76,7 @@ The script interrupts the ROS pane (twice), stops the web pane, kills the tmux s
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Pane 0: ROS2 Nodes (Top 60%)                                │
-│  ├─ micro_ros_agent_right                                   │
-│  ├─ micro_ros_agent_left                                    │
+│  ├─ lucy_modbus_bridge (per board)                          │
 │  ├─ rosbridge_server                                        │
 │  ├─ audio_capturer_node                                     │
 │  └─ audio_player_node                                       │

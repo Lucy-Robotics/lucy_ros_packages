@@ -362,5 +362,17 @@ class PipelineActionServer(Node):
             return
         fw_cfg_dir = (self._paths.workspace_src / firmware_src_dir / 'config').resolve()
         fw_cfg_dir.mkdir(parents=True, exist_ok=True)
-        for cfile in out_dir.glob('config_*.c'):
-            shutil.copy2(cfile, fw_cfg_dir / cfile.name)
+        for yfile in out_dir.glob('config_*.yaml'):
+            shutil.copy2(yfile, fw_cfg_dir / yfile.name)
+        # Also keep a default config.yaml for single-board cargo builds.
+        yaml_files = sorted(out_dir.glob('config_*.yaml'))
+        if yaml_files:
+            rp2040_cfg = (
+                self._paths.workspace_src
+                / firmware_src_dir
+                / 'firmwares'
+                / 'rp2040'
+                / 'config.yaml'
+            )
+            rp2040_cfg.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(yaml_files[0], rp2040_cfg)

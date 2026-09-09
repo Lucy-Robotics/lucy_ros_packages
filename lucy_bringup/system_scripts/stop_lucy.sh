@@ -60,7 +60,8 @@ sleep 1
 echo -e "${BLUE}  → Cleaning up orphaned Lucy launch helpers (if any)...${NC}"
 pkill -TERM -f rosbridge_websocket 2>/dev/null || true
 pkill -TERM -f rosbridge_websocket_launch 2>/dev/null || true
-pkill -TERM -f micro_ros_agent 2>/dev/null || true
+pkill -TERM -f lucy_modbus_bridge 2>/dev/null || true
+pkill -TERM -f modbus_bridge_node 2>/dev/null || true
 sleep 2
 pkill -KILL -f rosbridge_websocket 2>/dev/null || true
 pkill -KILL -f rosbridge_websocket_launch 2>/dev/null || true

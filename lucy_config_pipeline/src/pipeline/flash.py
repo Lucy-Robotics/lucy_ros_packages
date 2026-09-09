@@ -34,8 +34,8 @@ def run_flash_phase(
     Only boards present in ``boards_built_ok`` are considered. Boards without a
     non-empty ``serial_id`` are skipped (not counted as failure).
 
-    After USB serial re-enumeration, optionally waits for ``std_msgs/Int32`` on
-    the board uptime topic (see ``_uptime_topic``) when ``node`` is set.
+    After USB serial re-enumeration, optionally verifies the board answers a
+    Modbus read (holding register 0) when ``uptime_wait_seconds > 0``.
 
     Returns ``(failed_board_ids, flashed_board_ids)`` in stable board order.
     """
@@ -111,18 +111,17 @@ def run_flash_phase(
                     f'USB serial did not become ready within {usb_wait_seconds}s '
                     f'(board {board})'
                 )
-            if node is not None and uptime_wait_seconds > 0:
-                topic = _uptime_topic(boards_entry)
+            if uptime_wait_seconds > 0:
                 feedback(
                     phase='flash',
                     progress=min(1.0, row + 0.75 / total),
-                    detail=f'waiting for uptime on {topic} (up to {uptime_wait_seconds}s)',
+                    detail=f'verifying Modbus on serial {serial} (up to {uptime_wait_seconds}s)',
                     board=board,
                 )
-                if not _wait_uptime_message(node, topic, float(uptime_wait_seconds)):
+                if not _wait_modbus_ready(serial, float(uptime_wait_seconds)):
                     raise TimeoutError(
-                        f'no uptime message on {topic!r} within {uptime_wait_seconds}s '
-                        f'(board {board})'
+                        f'Modbus verify failed within {uptime_wait_seconds}s '
+                        f'(board {board}, serial {serial})'
                     )
             flashed.append(board)
             feedback(
@@ -150,30 +149,67 @@ def run_flash_phase(
     return failed, flashed
 
 
-def _uptime_topic(boards_entry: dict) -> str:
-    """Resolve absolute ROS 2 topic for ``std_msgs/msg/Int32`` uptime ticks."""
-    raw = boards_entry.get('topic_uptime')
-    if isinstance(raw, str):
-        t = raw.strip()
-        if t:
-            return t if t.startswith('/') else f'/{t}'
-    env = os.environ.get('LUCY_PIPELINE_UPTIME_TOPIC', '').strip()
-    if env:
-        return env if env.startswith('/') else f'/{env}'
-    return '/uptime_publisher'
+def _modbus_crc(data: bytes) -> bytes:
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            if crc & 0x0001:
+                crc = (crc >> 1) ^ 0xA001
+            else:
+                crc >>= 1
+    return crc.to_bytes(2, 'little')
 
 
-def _wait_uptime_message(node: Node, topic: str, timeout_sec: float) -> bool:
-    """
-    Wait for one ``std_msgs/msg/Int32`` on ``topic`` within ``timeout_sec``.
+def _wait_modbus_ready(serial_id: str, timeout_sec: float) -> bool:
+    """Probe the board with Modbus FC03 read of register 0 after flash."""
+    try:
+        import serial
+        from serial.tools import list_ports
+    except ImportError:
+        # pyserial missing: fall back to USB presence only.
+        return True
 
-    Returns True if a message was received, False on timeout.
-    """
-    from rclpy.wait_for_message import wait_for_message
-    from std_msgs.msg import Int32
+    needle = serial_id.strip().lower()
+    deadline = time.monotonic() + max(0.1, float(timeout_sec))
+    port_name = None
+    while time.monotonic() < deadline and port_name is None:
+        for info in list_ports.comports():
+            hay = ' '.join(
+                filter(
+                    None,
+                    [
+                        info.device,
+                        info.serial_number or '',
+                        info.description or '',
+                        info.hwid or '',
+                    ],
+                )
+            ).lower()
+            if needle and needle in hay:
+                port_name = info.device
+                break
+        if port_name is None:
+            time.sleep(0.5)
+    if port_name is None:
+        return False
 
-    ok, _msg = wait_for_message(Int32, node, topic, time_to_wait=timeout_sec)
-    return bool(ok)
+    # FC03: slave 1, start 0, qty 1
+    req = bytearray([0x01, 0x03, 0x00, 0x00, 0x00, 0x01])
+    req.extend(_modbus_crc(req))
+
+    while time.monotonic() < deadline:
+        try:
+            with serial.Serial(port_name, 115200, timeout=0.5) as ser:
+                ser.reset_input_buffer()
+                ser.write(req)
+                resp = ser.read(7)
+                if len(resp) >= 5 and resp[0] == 0x01 and resp[1] == 0x03:
+                    return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    return False
 
 
 def _wait_for_usb_serial(serial_id: str, timeout_seconds: int) -> bool:

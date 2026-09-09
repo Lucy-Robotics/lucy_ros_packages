@@ -6,10 +6,11 @@ ROS 2 **Jazzy** repository for **Lucy** (Sentience Robotics): runtime bringup, `
 
 | Package | One-line role |
 |---------|----------------|
-| [**lucy_bringup**](lucy_bringup/) | Jetson **system launch**: micro-ROS agents, **`web_ros_api`** (rosbridge + **`lucy_config_pipeline`**), RealSense, `camera_ros`, delayed [`lucy_ros2_control`](lucy_ros2_control/) bringup; **`lucy_*_development`** composes the web stack with **`thais_urdf`** RViz/Gazebo. |
-| [**lucy_ros2_control**](lucy_ros2_control/) | **Hardware** `ros2_control` plugin (`LucySystemHardware`), controller YAML, `control.launch.py` for the real robot stack (no RViz/rosbridge in that launch). |
-| [**lucy_config_generator**](lucy_config_generator/) | **Config pipeline**: reads **`thais_urdf`** hardware YAML and emits RP2040 firmware C, `ros2_control` xacro, and `controllers.yaml` (see package README). |
-| [**lucy_config_pipeline**](lucy_config_pipeline/) | **Config store + `ConfigurePipeline` action**: validate YAML, generate artifacts, build/flash RP2040 firmware via `picotool` [README](lucy_config_pipeline/README.md). |
+| [**lucy_bringup**](lucy_bringup/) | Jetson **system launch**: **`lucy_modbus_bridge`**, **`web_ros_api`** (rosbridge + **`lucy_config_pipeline`**), RealSense, `camera_ros`, [`lucy_ros2_control`](lucy_ros2_control/) bringup; development launches compose the web stack with the robot URDF package. |
+| [**lucy_ros2_control**](lucy_ros2_control/) | **Hardware** `ros2_control` plugin (`LucySystemHardware` → SHM registers), shared clamp/mapping helpers. |
+| [**lucy_modbus_bridge**](lucy_modbus_bridge/) | Relays SHM dirty registers to Modbus RTU over USB CDC. |
+| [**lucy_config_generator**](lucy_config_generator/) | **Config pipeline**: reads robot hardware YAML and emits Rust firmware YAML, `ros2_control` xacro, and `controllers.yaml`. |
+| [**lucy_config_pipeline**](lucy_config_pipeline/) | **Config store + `ConfigurePipeline` action**: validate, generate, Cargo build/flash RP2040 firmware via `picotool` [README](lucy_config_pipeline/README.md). |
 | [**camera_ros**](camera_ros/) | GStreamer-based **MJPEG** → `sensor_msgs/CompressedImage`; client-aware activation. |
 
 Package names match directories (`<name>` in each `package.xml`).
@@ -23,7 +24,7 @@ Package names match directories (`<name>` in each `package.xml`).
 
 - **OS**: Ubuntu 24.04
 - **ROS**: [ROS 2 Jazzy](https://docs.ros.org/en/jazzy/Installation.html).
-- **Per-package extras**: Jetson-typical USB video and audio stacks for bringup; RealSense SDK stack for `realsense2_camera`; serial devices for micro-ROS. See each package README and `lucy_bringup/REALSENSE.md`.
+- **Per-package extras**: Jetson-typical USB video and audio stacks for bringup; RealSense SDK stack for `realsense2_camera`; USB serial for Modbus boards. See each package README and `lucy_bringup/REALSENSE.md`.
 
 ## Picotool and passwordless sudo
 
@@ -114,11 +115,13 @@ GitHub Actions (`.github/workflows/ci.yml`) runs **`rosdep`**, **`colcon build`*
 |-----|----------|
 | This file | Anyone cloning **this** repository |
 | [**docs/DEVELOPER.md**](docs/DEVELOPER.md) | **Contributors** — build, CI, package internals, extension checklist |
+| [**docs/ROS2_CONTROL.md**](docs/ROS2_CONTROL.md) | **ros2_control** — SHM/Modbus path, `LucySystemHardware`, launches |
+| [**docs/INTEGRATION_MODBUS.md**](docs/INTEGRATION_MODBUS.md) | **Integration checklist** — generate → Cargo build → flash → bridge |
 | [lucy_bringup/README.md](lucy_bringup/README.md) | Operators and integrators (devices, tmux, launch args) |
 | [lucy_ros2_control/README.md](lucy_ros2_control/README.md) | Control stack quick start |
-| [**docs/ROS2_CONTROL.md**](docs/ROS2_CONTROL.md) | **ros2_control** — general concepts + Lucy (`LucySystemHardware`, topics, launches) |
-| [**lucy_config_generator/README.md**](lucy_config_generator/README.md) | Hardware YAML → firmware C, `ros2_control` xacro, controllers |
+| [**lucy_config_generator/README.md**](lucy_config_generator/README.md) | Hardware YAML → firmware YAML, `ros2_control` xacro, controllers |
 | [**lucy_config_pipeline/README.md**](lucy_config_pipeline/README.md) | Config services + pipeline action (build/flash); [passwordless sudo for picotool](lucy_config_pipeline/README.md#passwordless-sudo-for-picotool) |
+| [lucy_modbus_bridge/README.md](lucy_modbus_bridge/README.md) | SHM → Modbus RTU bridge |
 | [camera_ros/README.md](camera_ros/README.md) | Camera topics, parameters, troubleshooting |
 
 If these repos live under **`lucy_ws`**, see **`lucy_ws/docs/developer_lucy_packages.md`** (index into each repo’s `docs/DEVELOPER.md`) and **`lucy_ws/docs/simulation_and_visualization.md`** (full-stack pipeline).

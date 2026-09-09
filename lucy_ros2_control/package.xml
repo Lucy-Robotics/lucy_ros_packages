@@ -3,7 +3,7 @@
 <package format="3">
   <name>lucy_ros2_control</name>
   <version>1.0.0</version>
-  <description>Robot-agnostic ros2_control hardware plugin for Lucy micro-ROS actuator boards.</description>
+  <description>Robot-agnostic ros2_control hardware plugin for Lucy Modbus actuator boards (SHM register table).</description>
   <maintainer email="contact@sentience-robotics.fr">Sentience Robotics Team</maintainer>
   <license>GPL-3.0</license>
 

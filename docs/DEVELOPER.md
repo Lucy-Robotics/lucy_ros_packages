@@ -12,9 +12,11 @@ Conventions follow common packaging practice ([REP-149](https://www.ros.org/reps
 
 | Package | Responsibility |
 |---------|----------------|
-| `lucy_bringup` | Jetson **system bringup**: micro-ROS agents, `rosbridge_server`, `camera_ros`, RealSense, delayed include of `lucy_ros2_control`. |
-| `lucy_ros2_control` | **Hardware** `ros2_control`: `LucySystemHardware` plugin, `lucy_controllers.yaml`, `control.launch.py`. |
-| `lucy_config_generator` | Reads **`thais_urdf`** `config/hardware/active.yaml` (or selected export) → RP2040 `config_*.c`, `ros2_control` xacro, `controllers.yaml`. |
+| `lucy_bringup` | Jetson **system bringup**: `lucy_modbus_bridge`, `rosbridge_server`, `camera_ros`, RealSense, control include. |
+| `lucy_ros2_control` | **Hardware** `ros2_control`: `LucySystemHardware` plugin (SHM register table). |
+| `lucy_modbus_bridge` | SHM → Modbus RTU over USB serial (one node per board). |
+| `lucy_config_generator` | Hardware YAML → RP2040 `config_*.yaml`, `ros2_control` xacro, `controllers.yaml`. |
+| `lucy_config_pipeline` | Config store + `ConfigurePipeline` (validate → generate → Cargo build → flash → reload). |
 | `camera_ros` | MJPEG → `sensor_msgs/msg/CompressedImage`; GStreamer pipeline; pytest. |
 
 ---
@@ -28,7 +30,9 @@ lucy_ros_packages/
 │   └── ROS2_CONTROL.md      # ros2_control concepts + Lucy implementation
 ├── lucy_bringup/
 ├── lucy_ros2_control/
+├── lucy_modbus_bridge/
 ├── lucy_config_generator/
+├── lucy_config_pipeline/
 └── camera_ros/
 ```
 
@@ -62,7 +66,7 @@ source install/setup.bash
 | **Launch** | `ros2 launch lucy_bringup lucy.launch.py` |
 | **Args** | `device0`, `device1` (default `/dev/ttyACM0`, `/dev/ttyACM1`); audio args declared but audio nodes are **commented out** in `lucy.launch.py`; RealSense via `realsense.launch.py`. |
 | **Scripts** | `system_scripts/*.sh` → installed under `lib/lucy_bringup`. |
-| **Runtime deps** | `micro_ros_agent`, `lucy_ros2_control`, `rosbridge_server`, `camera_ros`, `audio_common`, `realsense2_camera`, `launch`, `launch_ros`. |
+| **Runtime deps** | `lucy_modbus_bridge`, `lucy_ros2_control`, `rosbridge_server`, `camera_ros`, `audio_common`, `realsense2_camera`, `lucy_config_pipeline`, `launch`, `launch_ros`. |
 
 **Developers**
 
@@ -96,7 +100,7 @@ source install/setup.bash
 | Item | Detail |
 |------|--------|
 | **CLI** | `ros2 run lucy_config_generator generate …` (see package **README**). |
-| **Tests** | `colcon test --packages-select lucy_config_generator` — golden outputs for C, xacro, YAML. |
+| **Tests** | `colcon test --packages-select lucy_config_generator` — golden outputs for firmware YAML, xacro, controllers. |
 
 ---
 
