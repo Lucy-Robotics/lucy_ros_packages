@@ -207,7 +207,12 @@ def _validate_lucy_launch(context):
 
 
 def _modbus_node_name(board_id: str) -> str:
-    """Match ``lucy_config_generator.schema.derive_ros2_node_name``."""
+    """Logical ros2_control ``node_name`` for a board (full, untruncated).
+
+    Must match the hardware plugin ``node_name`` parameter. POSIX SHM/sem
+    stems are truncated inside ``lucy_modbus_bridge.shm.shm_node_name_for``
+    the same way as ``LucySystemHardware`` (e.g. left_arm -> ``rface_left_arm``).
+    """
     suffix = board_id
     if board_id.startswith('rp2040_'):
         suffix = board_id[len('rp2040_') :]

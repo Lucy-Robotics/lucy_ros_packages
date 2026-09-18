@@ -23,3 +23,13 @@ ros2 launch lucy_modbus_bridge modbus_bridge.launch.py serial_id:=E6617C93E38584
 
 POSIX `shm_open` / `sem_open` only (Linux/macOS). Windows requires migrating the
 hardware interface to Boost.Interprocess first.
+
+## SHM naming
+
+`node_name` is the logical ros2_control hardware name (e.g.
+`lucy_hardware_interface_left_arm`). The bridge truncates it with the same
+rule as `LucySystemHardware` before calling `shm_open` (14-char tail under
+Darwin's 31-char limit → `rface_left_arm`).
+
+Dirty bits use `uint8_t[32]` (not uint32 words), matching `RegisterHeader`.
+

@@ -53,7 +53,9 @@ class ModbusBridgeNode(Node):
         period = 1.0 / max(poll_hz, 1.0)
         self._timer = self.create_timer(period, self._on_timer)
         self.get_logger().info(
-            f'bridge ready: shm={self._node_name} serial={self._port.port} slave={self._slave}'
+            f'bridge ready: node_name={self._node_name} '
+            f'shm={self._shm.shm_node_name} '
+            f'serial={self._port.port} slave={self._slave}'
         )
 
     def _open_serial(self):
