@@ -230,10 +230,13 @@ class PipelineActionServer(Node):
                         else 'rendering ros2_control'
                     ),
                 )
+                # Always regenerate the full ros2_control / controllers stack.
+                # boards_to_flash only filters firmware build/flash — a subset
+                # flash must not wipe HI blocks / controllers for other boards.
                 self._generate_to_dir(
                     out_dir=out_dir,
                     config_yaml=config_yaml,
-                    boards_filter=None if goal.simulation_only else boards_set,
+                    boards_filter=None,
                     targets={'ros2_control', 'controllers'},
                     simulation_only=goal.simulation_only,
                 )
