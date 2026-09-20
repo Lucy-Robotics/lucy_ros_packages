@@ -7,6 +7,9 @@ import shutil
 import tempfile
 import threading
 
+from lucy_config_generator.generate import generate
+from lucy_config_generator.schema import resolve_generated_files
+from lucy_msgs.action import ConfigurePipeline
 from rclpy.action import ActionServer
 from rclpy.action import CancelResponse
 from rclpy.action import GoalResponse
@@ -15,14 +18,6 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 from std_srvs.srv import Trigger
 
-from lucy_config_generator.generate import generate
-from lucy_config_generator.schema import resolve_generated_files
-from lucy_msgs.action import ConfigurePipeline
-
-from ..config_store import ConfigStore
-from ..error_format import format_error_lines
-from ..validation import urdf_crosscheck
-from ..validation import validate_schema
 from .build import run_build_phase
 from .flash import flash_picotool_timeout_seconds
 from .flash import flash_uptime_wait_seconds
@@ -32,6 +27,10 @@ from .models import PipelinePaths
 from .selection import board_build_plan
 from .selection import resolve_mapping_input
 from .selection import select_boards_to_process
+from ..config_store import ConfigStore
+from ..error_format import format_error_lines
+from ..validation import urdf_crosscheck
+from ..validation import validate_schema
 
 
 class PipelineActionServer(Node):

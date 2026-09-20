@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..config_store import ConfigStore
 from .models import FirmwarePaths
+from ..config_store import ConfigStore
 
 
 def resolve_mapping_input(store: ConfigStore, mapping_file: str) -> tuple[str, str]:

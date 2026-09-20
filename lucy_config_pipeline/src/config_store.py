@@ -57,7 +57,10 @@ class ConfigStore:
             val = str(meta.get(key, '')).strip()
             if val:
                 lines.append(f'{key}: "{val}"')
-        self.active_meta_yaml.write_text('\n'.join(lines) + ('\n' if lines else ''), encoding='utf-8')
+        self.active_meta_yaml.write_text(
+            '\n'.join(lines) + ('\n' if lines else ''),
+            encoding='utf-8',
+        )
 
     def get_active_name(self) -> str:
         data = self.read_active_meta()

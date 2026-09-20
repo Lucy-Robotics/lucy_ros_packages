@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import base64
-import zlib
 from pathlib import Path
+import zlib
 
-import rclpy
 from ament_index_python.packages import get_package_share_directory
-from rclpy.node import Node
-
 from lucy_msgs.srv import ActivateConfig
 from lucy_msgs.srv import DeleteConfig
 from lucy_msgs.srv import GetConfig
 from lucy_msgs.srv import GetMesh
 from lucy_msgs.srv import ListConfigs
 from lucy_msgs.srv import SaveConfig
+import rclpy
+from rclpy.node import Node
 
 from ..config_store import ConfigStore
 from ..error_format import format_error_lines
