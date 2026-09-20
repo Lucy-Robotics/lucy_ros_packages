@@ -13,24 +13,22 @@ SETUP_HINT = (
 )
 
 
+def _find_workspace_root() -> Path:
+    """Locate lucy_ws by walking up until ``pixi.toml`` + firmware setup script exist."""
+    for parent in Path(__file__).resolve().parents:
+        if (parent / 'pixi.toml').is_file() and (
+            parent / 'scripts' / 'firmware_setup.py'
+        ).is_file():
+            return parent
+    raise FileNotFoundError(
+        'workspace root (pixi.toml + scripts/firmware_setup.py) not found; '
+        'cannot verify firmware toolchain'
+    )
+
+
 def _load_firmware_setup_module():
     """Load workspace ``scripts/firmware_setup.py`` without installing a package."""
-    # .../lucy_ws/src/lucy_ros_packages/lucy_config_pipeline/src/pipeline/this.py
-    # parents: pipeline, src, lucy_config_pipeline, lucy_ros_packages, src, lucy_ws
-    workspace_root = Path(__file__).resolve().parents[5]
-    script = workspace_root / 'scripts' / 'firmware_setup.py'
-    if not script.is_file():
-        # Fallback: walk up looking for scripts/firmware_setup.py
-        here = Path(__file__).resolve()
-        for parent in here.parents:
-            candidate = parent / 'scripts' / 'firmware_setup.py'
-            if candidate.is_file():
-                script = candidate
-                break
-        else:
-            raise FileNotFoundError(
-                'scripts/firmware_setup.py not found; cannot verify firmware toolchain'
-            )
+    script = _find_workspace_root() / 'scripts' / 'firmware_setup.py'
 
     mod_name = 'lucy_firmware_setup_check'
     spec = importlib.util.spec_from_file_location(mod_name, script)

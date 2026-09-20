@@ -145,6 +145,15 @@ def _resolve_robot_paths(context):
     """
     from launch.actions import SetLaunchConfiguration
 
+    # Installed module name is ``src`` (lucy_config_pipeline setuptools layout).
+    try:
+        from src.robot_paths import resolve_robot_description_paths
+    except ImportError as exc:
+        raise RuntimeError(
+            'lucy.launch.py: cannot import src.robot_paths — is '
+            'lucy_config_pipeline built and the workspace overlay sourced?'
+        ) from exc
+
     robot_package = LaunchConfiguration('robot_package').perform(context).strip()
     if not robot_package:
         # _validate_lucy_launch already raised; nothing to resolve.
@@ -238,18 +247,29 @@ def _resolve_hardware_yaml(context) -> Path | None:
 def _hi_node_names_in_robot(robot_root: Path) -> set[str]:
     """``node_name`` params from generated ros2_control xacro under ``description/``."""
     import re
+    import xml.etree.ElementTree as ET
 
     names: set[str] = set()
     desc = robot_root / 'description'
     if not desc.is_dir():
         return names
-    pattern = re.compile(r'<param\s+name="node_name">\s*([^<\s]+)\s*</param>')
+    # Fallback for xacro that is not well-formed XML (macros / unexpanded tags).
+    pattern = re.compile(
+        r"""<param\s+name=["']node_name["']>\s*([^<\s]+)\s*</param>"""
+    )
     for path in desc.rglob('*.xacro'):
         try:
             text = path.read_text(encoding='utf-8')
         except OSError:
             continue
-        names.update(m.group(1) for m in pattern.finditer(text))
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError:
+            names.update(m.group(1) for m in pattern.finditer(text))
+            continue
+        for el in root.iter('param'):
+            if el.get('name') == 'node_name' and el.text:
+                names.add(el.text.strip())
     return names
 
 
@@ -310,8 +330,7 @@ def _real_hardware_stack(context, *args, **kwargs):
                 LogInfo(msg=f'lucy.launch: Modbus bridge for {board_id} serial={serial}')
             )
 
-    # Cameras / RealSense remain opt-in (commented) until wiring is restored.
-    _ = get_package_share_directory('camera_ros')
+    # Cameras / RealSense remain opt-in until wiring is restored.
     return out
 
 

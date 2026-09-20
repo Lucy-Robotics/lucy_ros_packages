@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 from unittest.mock import MagicMock
 from unittest.mock import patch
@@ -55,8 +56,8 @@ def pipeline_paths(tmp_path: Path) -> PipelinePaths:
 
 
 @pytest.mark.skipif(
-    not Path('/opt/ros/jazzy').exists(),
-    reason='ROS 2 Jazzy overlay required for lucy_msgs/rclpy',
+    importlib.util.find_spec('rclpy') is None,
+    reason='rclpy not importable (run inside Pixi env with ROS feature)',
 )
 def test_hardware_activate_aborts_when_toolchain_missing(pipeline_paths: PipelinePaths):
     data = yaml.safe_load(_FIXTURE.read_text(encoding='utf-8'))

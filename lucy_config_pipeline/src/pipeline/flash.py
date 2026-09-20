@@ -256,18 +256,99 @@ def _picotool_load_cmd(uf2: Path, serial: str, *, force: bool = True) -> list[st
     return cmd
 
 
+def _windows_bootsel_mount() -> Path | None:
+    """Find the RPI-RP2 BOOTSEL drive letter on Windows (no pywin32 required)."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return None
+
+    kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+    GetLogicalDriveStringsW = kernel32.GetLogicalDriveStringsW
+    GetLogicalDriveStringsW.argtypes = [wintypes.DWORD, wintypes.LPWSTR]
+    GetLogicalDriveStringsW.restype = wintypes.DWORD
+    GetVolumeInformationW = kernel32.GetVolumeInformationW
+    GetVolumeInformationW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.LPWSTR,
+        wintypes.DWORD,
+        wintypes.LPDWORD,
+        wintypes.LPDWORD,
+        wintypes.LPDWORD,
+        wintypes.LPWSTR,
+        wintypes.DWORD,
+    ]
+    GetVolumeInformationW.restype = wintypes.BOOL
+
+    buf_len = GetLogicalDriveStringsW(0, None)
+    if not buf_len:
+        return None
+    buf = ctypes.create_unicode_buffer(buf_len)
+    written = GetLogicalDriveStringsW(buf_len, buf)
+    if not written:
+        return None
+
+    # Double-NUL terminated list of "C:\\", "D:\\", …
+    raw = ctypes.wstring_at(ctypes.addressof(buf), written)
+    drives = [d for d in raw.split('\x00') if d]
+
+    for drive in drives:
+        vol_name = ctypes.create_unicode_buffer(261)
+        ok = GetVolumeInformationW(
+            drive,
+            vol_name,
+            261,
+            None,
+            None,
+            None,
+            None,
+            0,
+        )
+        if ok and vol_name.value.upper() == 'RPI-RP2':
+            return Path(drive)
+    return None
+
+
 def _bootsel_volume_dev() -> Path | None:
-    """Return the RPI-RP2 block device if the Pico is already in BOOTSEL MSD mode."""
-    by_label = Path('/dev/disk/by-label/RPI-RP2')
-    if by_label.exists():
-        try:
-            return by_label.resolve()
-        except OSError:
-            return by_label
+    """Return the RPI-RP2 device/mount path if the Pico is already in BOOTSEL MSD mode.
+
+    - Linux: ``/dev/disk/by-label/RPI-RP2`` (block device; mount via findmnt/udisksctl)
+    - macOS: ``/Volumes/RPI-RP2`` (auto-mounted)
+    - Windows: drive letter whose volume label is ``RPI-RP2``
+    """
+    import sys
+
+    if sys.platform.startswith('linux'):
+        by_label = Path('/dev/disk/by-label/RPI-RP2')
+        if by_label.exists():
+            try:
+                return by_label.resolve()
+            except OSError:
+                return by_label
+        return None
+
+    if sys.platform == 'darwin':
+        mount = Path('/Volumes/RPI-RP2')
+        return mount if mount.is_dir() else None
+
+    if sys.platform == 'win32':
+        return _windows_bootsel_mount()
+
     return None
 
 
 def _find_mount_point_for(dev: Path) -> Path | None:
+    """Resolve a mount directory for the BOOTSEL volume.
+
+    On Linux ``dev`` is a block device; on macOS/Windows ``dev`` is already the
+    mount root returned by :func:`_bootsel_volume_dev`.
+    """
+    import sys
+
+    if sys.platform in ('darwin', 'win32'):
+        return dev if dev.is_dir() else None
+
     try:
         out = subprocess.run(
             ['findmnt', '-n', '-o', 'TARGET', str(dev)],
@@ -282,14 +363,19 @@ def _find_mount_point_for(dev: Path) -> Path | None:
 
 
 def _copy_uf2_to_bootsel_volume(uf2: Path, feedback: Callable[..., None], board: str) -> bool:
-    """Flash by copying UF2 onto the RPI-RP2 mass-storage volume (already in BOOTSEL)."""
+    """Flash by copying UF2 onto the RPI-RP2 mass-storage volume (already in BOOTSEL).
+
+    Linux may need ``udisksctl`` to mount; macOS and Windows expose an already-
+    mounted path from :func:`_bootsel_volume_dev`.
+    """
     import shutil
+    import sys
 
     dev = _bootsel_volume_dev()
     if dev is None:
         return False
     mount = _find_mount_point_for(dev)
-    if mount is None:
+    if mount is None and sys.platform.startswith('linux'):
         # Try user mount (no special libusb; works when seat can access the disk).
         try:
             subprocess.run(
@@ -316,17 +402,28 @@ def _copy_uf2_to_bootsel_volume(uf2: Path, feedback: Callable[..., None], board:
         detail=f'copying {uf2.name} → {dest}',
         board=board,
     )
-    shutil.copy2(uf2, dest)
-    # Pico reboots when the UF2 is written; mount often disappears.
     try:
-        subprocess.run(
-            ['udisksctl', 'unmount', '-b', str(dev)],
-            capture_output=True,
-            text=True,
-            check=False,
+        shutil.copy2(uf2, dest)
+    except OSError as exc:
+        # Pico often remounts/disappears mid-write; treat as success if copy started.
+        feedback(
+            phase='flash',
+            progress=0.0,
+            detail=f'UF2 copy finished with I/O note (device may have rebooted): {exc}',
+            board=board,
         )
-    except FileNotFoundError:
-        pass
+        return True
+    # Pico reboots when the UF2 is written; mount often disappears.
+    if sys.platform.startswith('linux'):
+        try:
+            subprocess.run(
+                ['udisksctl', 'unmount', '-b', str(dev)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            pass
     return True
 
 
@@ -399,19 +496,31 @@ def _flash_uf2_to_board(
     )
 
 
+def _usb_serial_matches(needle: str, *, device: str = '', serial_number: str = '',
+                        description: str = '', hwid: str = '') -> bool:
+    hay = ' '.join(
+        filter(None, [device, serial_number, description, hwid])
+    ).lower()
+    return needle in hay
+
+
 def _wait_for_usb_serial(serial_id: str, timeout_seconds: int) -> bool:
     """Return whether USB CDC for ``serial_id`` is back after flash.
 
-    Checks ``/dev/serial/by-id`` first, then pyserial ``list_ports`` (same
-    substring match as Modbus verify) — by-id can lag or be absent on some hosts.
+    - Linux: prefer ``/dev/serial/by-id`` (stable udev symlinks), then pyserial.
+    - macOS / Windows: pyserial ``list_ports`` only (no by-id tree).
     """
+    import sys
+
     needle = serial_id.strip().lower()
     if not needle:
         return False
     deadline = time.monotonic() + max(0.1, float(timeout_seconds))
-    by_id = Path('/dev/serial/by-id')
+    use_by_id = sys.platform.startswith('linux')
+    by_id = Path('/dev/serial/by-id') if use_by_id else None
+
     while time.monotonic() < deadline:
-        if by_id.is_dir():
+        if by_id is not None and by_id.is_dir():
             for entry in by_id.iterdir():
                 name = entry.name.lower()
                 if needle not in name:
@@ -428,18 +537,13 @@ def _wait_for_usb_serial(serial_id: str, timeout_seconds: int) -> bool:
             list_ports = None  # type: ignore[assignment]
         if list_ports is not None:
             for info in list_ports.comports():
-                hay = ' '.join(
-                    filter(
-                        None,
-                        [
-                            info.device,
-                            info.serial_number or '',
-                            info.description or '',
-                            info.hwid or '',
-                        ],
-                    )
-                ).lower()
-                if needle in hay:
+                if _usb_serial_matches(
+                    needle,
+                    device=info.device or '',
+                    serial_number=info.serial_number or '',
+                    description=info.description or '',
+                    hwid=info.hwid or '',
+                ):
                     return True
         time.sleep(0.5)
     return False
