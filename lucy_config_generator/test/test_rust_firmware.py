@@ -158,6 +158,11 @@ def test_render_firmware_yaml_pwm_board():
     assert f'max_angle: {_rad(270)}' in text
 
 
+def test_render_firmware_yaml_includes_serial_id():
+    text = render_firmware_yaml(MINIMAL, 'rp2040_left_arm')
+    assert 'serial_id: "ABC"' in text
+
+
 def test_render_firmware_yaml_i2c_board():
     text = render_firmware_yaml(MINIMAL, 'rp2040_torso_head')
     assert 'board_class: internal_servo_i2c_pwm' in text

@@ -2,11 +2,13 @@ board_id: {{ board_id }}
 board: {{ board }}
 board_class: {{ board_class }}
 slave_address: {{ slave_address }}
+serial_id: "{{ serial_id }}"
 firmware_crate: {{ firmware_crate }}
 actuators:
 {% for a in actuators %}
   - id: {{ a.id }}
     enabled: {{ 'true' if a.enabled else 'false' }}
+    virtual_pin: {{ a.virtual_pin }}
     urdf:
       joint: {{ a.urdf_joint }}
     config:
@@ -25,6 +27,7 @@ sensors:
 {% for s in sensors %}
   - id: {{ s.id }}
     enabled: {{ 'true' if s.enabled else 'false' }}
+    virtual_pin: {{ s.virtual_pin }}
     config:
       min_value: {{ s.min_value }}
       max_value: {{ s.max_value }}

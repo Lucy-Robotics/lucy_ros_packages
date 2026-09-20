@@ -4,6 +4,16 @@ import pytest
 from src.pipeline import flash as pipeline_flash
 
 
+@pytest.fixture(autouse=True)
+def _fake_picotool_on_path(monkeypatch: pytest.MonkeyPatch):
+    """Flash phase requires picotool on PATH; tests do not invoke the real binary."""
+    monkeypatch.setattr(
+        pipeline_flash.shutil,
+        'which',
+        lambda name: '/usr/bin/picotool' if name == 'picotool' else None,
+    )
+
+
 def _sample_data() -> dict:
     return {
         'firmware': {'source_dir': 'fw', 'build_dir': 'build'},
@@ -39,7 +49,7 @@ def test_run_flash_phase_skips_board_without_serial(
     monkeypatch.setattr(pipeline_flash, '_run_command', fake_run_command)
     monkeypatch.setattr(pipeline_flash, '_wait_for_usb_serial', lambda *_a, **_k: True)
 
-    failed, flashed = pipeline_flash.run_flash_phase(
+    failed, flashed, _details = pipeline_flash.run_flash_phase(
         data=_sample_data(),
         selected_boards=None,
         boards_built_ok={'rp2040_right_arm', 'rp2040_left_arm'},
@@ -55,7 +65,49 @@ def test_run_flash_phase_skips_board_without_serial(
     assert failed == []
     assert flashed == ['rp2040_right_arm']
     assert len(calls) == 1
-    assert calls[0][:4] == ['sudo', 'picotool', 'load', str(uf2)]
+    assert calls[0][:3] == ['picotool', 'load', str(uf2)]
+    assert '-x' in calls[0]
+    assert 'E6617C93E37A6629' in calls[0]
+
+
+def test_run_flash_phase_uses_sudo_when_env_set(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv('LUCY_PIPELINE_FLASH_POST_LOAD_DELAY_SEC', '0')
+    monkeypatch.setenv('LUCY_PIPELINE_FLASH_USE_SUDO', '1')
+    fw_src = tmp_path / 'fw'
+    fw_build = fw_src / 'build'
+    fw_build.mkdir(parents=True)
+    uf2 = fw_build / 'lucy_right_arm.uf2'
+    uf2.write_bytes(b'uf2')
+
+    calls: list[list[str]] = []
+
+    def fake_run_command(*, cmd: list[str], **_kwargs):
+        calls.append(cmd)
+
+    monkeypatch.setattr(pipeline_flash, '_run_command', fake_run_command)
+    monkeypatch.setattr(pipeline_flash, '_wait_for_usb_serial', lambda *_a, **_k: True)
+
+    failed, flashed, _details = pipeline_flash.run_flash_phase(
+        data=_sample_data(),
+        selected_boards={'rp2040_right_arm'},
+        boards_built_ok={'rp2040_right_arm'},
+        workspace_src=tmp_path,
+        picotool_timeout_seconds=30,
+        usb_wait_seconds=1,
+        uptime_wait_seconds=0,
+        node=None,
+        feedback=lambda **_kwargs: None,
+        log_error=lambda _msg: None,
+    )
+
+    assert failed == []
+    assert flashed == ['rp2040_right_arm']
+    assert calls[0][:5] == ['sudo', '-n', 'picotool', 'load', str(uf2)]
+    assert '-x' in calls[0]
+    assert '-f' in calls[0]
     assert 'E6617C93E37A6629' in calls[0]
 
 
@@ -73,7 +125,7 @@ def test_run_flash_phase_skips_board_not_built_ok(tmp_path: Path, monkeypatch: p
 
     monkeypatch.setattr(pipeline_flash, '_run_command', fake_run_command)
 
-    failed, flashed = pipeline_flash.run_flash_phase(
+    failed, flashed, _details = pipeline_flash.run_flash_phase(
         data=_sample_data(),
         selected_boards=None,
         boards_built_ok=set(),
@@ -100,7 +152,7 @@ def test_run_flash_phase_missing_uf2(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(pipeline_flash, '_run_command', lambda **_k: None)
 
-    failed, flashed = pipeline_flash.run_flash_phase(
+    failed, flashed, _details = pipeline_flash.run_flash_phase(
         data=_sample_data(),
         selected_boards={'rp2040_right_arm'},
         boards_built_ok={'rp2040_right_arm'},
@@ -133,7 +185,7 @@ def test_run_flash_phase_modbus_verify_timeout_fails_board(
     monkeypatch.setattr(pipeline_flash, '_wait_for_usb_serial', lambda *_a, **_k: True)
     monkeypatch.setattr(pipeline_flash, '_wait_modbus_ready', lambda *_a, **_k: False)
 
-    failed, flashed = pipeline_flash.run_flash_phase(
+    failed, flashed, _details = pipeline_flash.run_flash_phase(
         data=_sample_data(),
         selected_boards={'rp2040_right_arm'},
         boards_built_ok={'rp2040_right_arm'},
@@ -148,3 +200,4 @@ def test_run_flash_phase_modbus_verify_timeout_fails_board(
 
     assert failed == ['rp2040_right_arm']
     assert flashed == []
+    assert any('Modbus' in d for d in _details)

@@ -119,11 +119,22 @@ constexpr int kBusServoAngleOffset = 1;
 constexpr int kBusServoCmdOffset = 2;
 constexpr int kBusServoRegisterCount = 3;
 
+/// PWM hobby-servo block: cmd @0, angle @1 (matches firmware PwmServoModbusAdapter).
+constexpr int kPwmServoCmdOffset = 0;
+constexpr int kPwmServoAngleOffset = 1;
+constexpr int kPwmServoRegisterCount = 2;
+
 /// First register of a bus joint's block. virtual_pin is a slot index, not a
 /// register index: a bus servo occupies three registers.
 constexpr int bus_block_base(int virtual_pin)
 {
   return virtual_pin * kBusServoRegisterCount;
+}
+
+/// First register of a PWM joint's block (two registers per virtual_pin).
+constexpr int pwm_block_base(int virtual_pin)
+{
+  return virtual_pin * kPwmServoRegisterCount;
 }
 
 // Firmware bus-servo opcodes (BusServoModbusAdapter::tick).

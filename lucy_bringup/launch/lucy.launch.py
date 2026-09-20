@@ -207,16 +207,17 @@ def _validate_lucy_launch(context):
 
 def _modbus_node_name(board_id: str) -> str:
     """
-    Logical ros2_control ``node_name`` for a board (full, untruncated).
+    Logical ros2_control ``node_name`` for a board.
 
-    Must match the hardware plugin ``node_name`` parameter. POSIX SHM/sem
-    stems are truncated inside ``lucy_modbus_bridge.shm.shm_node_name_for``
-    the same way as ``LucySystemHardware`` (e.g. left_arm -> ``rface_left_arm``).
+    Must match the hardware plugin ``node_name`` parameter from the generated
+    xacro (``derive_ros2_node_name``: bare suffix after ``rp2040_``, e.g.
+    ``rp2040_left_arm`` → ``left_arm``). POSIX SHM/sem stems are derived from
+    that same string inside the HI and ``lucy_modbus_bridge.shm``.
     """
-    suffix = board_id
     if board_id.startswith('rp2040_'):
-        suffix = board_id[len('rp2040_'):]
-    return f'lucy_hardware_interface_{suffix}'
+        return board_id[len('rp2040_'):]
+    return board_id
+
 
 
 def _resolve_hardware_yaml(context) -> Path | None:
@@ -234,6 +235,24 @@ def _resolve_hardware_yaml(context) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
+def _hi_node_names_in_robot(robot_root: Path) -> set[str]:
+    """``node_name`` params from generated ros2_control xacro under ``description/``."""
+    import re
+
+    names: set[str] = set()
+    desc = robot_root / 'description'
+    if not desc.is_dir():
+        return names
+    pattern = re.compile(r'<param\s+name="node_name">\s*([^<\s]+)\s*</param>')
+    for path in desc.rglob('*.xacro'):
+        try:
+            text = path.read_text(encoding='utf-8')
+        except OSError:
+            continue
+        names.update(m.group(1) for m in pattern.finditer(text))
+    return names
+
+
 def _real_hardware_stack(context, *args, **kwargs):
     """Spawn Modbus bridges (+ optional cameras) when ``real`` is true."""
     real = LaunchConfiguration('real').perform(context).lower().strip()
@@ -249,6 +268,12 @@ def _real_hardware_stack(context, *args, **kwargs):
             raise RuntimeError('PyYAML required to spawn lucy_modbus_bridge nodes') from exc
         data = yaml.safe_load(hw_yaml.read_text(encoding='utf-8')) or {}
         boards = data.get('boards') or {}
+        robot_package = LaunchConfiguration('robot_package').perform(context).strip()
+        hi_names: set[str] | None = None
+        if robot_package:
+            share = get_package_share_directory(robot_package)
+            robot_root = _infer_robot_source_root(robot_package, share)
+            hi_names = _hi_node_names_in_robot(robot_root)
         for board_id, bdef in boards.items():
             if not isinstance(bdef, dict):
                 continue
@@ -256,6 +281,16 @@ def _real_hardware_stack(context, *args, **kwargs):
             if not serial:
                 continue
             node_name = _modbus_node_name(board_id)
+            if hi_names is not None and node_name not in hi_names:
+                out.append(
+                    LogInfo(
+                        msg=(
+                            f'lucy.launch: skip Modbus bridge for {board_id}: '
+                            f'no ros2_control node_name={node_name} in robot description'
+                        )
+                    )
+                )
+                continue
             out.append(
                 Node(
                     package='lucy_modbus_bridge',

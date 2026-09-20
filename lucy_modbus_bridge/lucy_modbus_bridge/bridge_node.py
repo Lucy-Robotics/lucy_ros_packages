@@ -34,8 +34,11 @@ class ModbusBridgeNode(Node):
         self.declare_parameter('slave_address', 1)
         self.declare_parameter('baud', 115200)
         self.declare_parameter('poll_hz', 50.0)
-        self.declare_parameter('vid', 0x16C0)
-        self.declare_parameter('pid', 0x27DD)
+        # 0 = do not filter by USB VID/PID (match serial_id / any ACM).
+        # Legacy Custom Servo2040 firmware used 0x16C0/0x27DD; Pico CDC is 0x2E8A.
+        self.declare_parameter('vid', 0)
+        self.declare_parameter('pid', 0)
+        self.declare_parameter('shm_wait_sec', 60.0)
 
         self._node_name = self.get_parameter('node_name').get_parameter_value().string_value
         self._serial_id = self.get_parameter('serial_id').get_parameter_value().string_value.strip()
@@ -43,12 +46,20 @@ class ModbusBridgeNode(Node):
         self._baud = int(self.get_parameter('baud').value)
         self._vid = int(self.get_parameter('vid').value)
         self._pid = int(self.get_parameter('pid').value)
+        shm_wait = float(self.get_parameter('shm_wait_sec').value)
         poll_hz = float(self.get_parameter('poll_hz').value)
 
         if serial is None:
             raise RuntimeError('pyserial is required for lucy_modbus_bridge')
 
-        self._shm = open_board_shm(self._node_name)
+        from lucy_modbus_bridge.shm import shm_object_names
+
+        reg_name, _, _ = shm_object_names(self._node_name)
+        self.get_logger().info(
+            f'waiting up to {shm_wait:.0f}s for HI SHM {reg_name} '
+            f'(node_name={self._node_name})'
+        )
+        self._shm = open_board_shm(self._node_name, timeout_sec=shm_wait)
         self._port = self._open_serial()
         period = 1.0 / max(poll_hz, 1.0)
         self._timer = self.create_timer(period, self._on_timer)
@@ -60,16 +71,32 @@ class ModbusBridgeNode(Node):
 
     def _open_serial(self):
         needle = self._serial_id.lower()
+        candidates = []
         for info in list_ports.comports():
-            if info.vid == self._vid and info.pid == self._pid:
-                hay = ' '.join(
-                    filter(None, [info.device, info.serial_number or '', info.hwid or ''])
-                ).lower()
-                if needle and needle not in hay:
-                    continue
-                return serial.Serial(info.device, self._baud, timeout=0.05)
+            if self._vid and info.vid != self._vid:
+                continue
+            if self._pid and info.pid != self._pid:
+                continue
+            hay = ' '.join(
+                filter(None, [info.device, info.serial_number or '', info.hwid or ''])
+            ).lower()
+            if needle and needle not in hay:
+                continue
+            candidates.append(info)
+        if len(candidates) == 1:
+            info = candidates[0]
+            return serial.Serial(info.device, self._baud, timeout=0.05)
+        if len(candidates) > 1 and needle:
+            # Prefer the port whose serial_number equals the flash id.
+            for info in candidates:
+                if (info.serial_number or '').lower() == needle:
+                    return serial.Serial(info.device, self._baud, timeout=0.05)
+            info = candidates[0]
+            return serial.Serial(info.device, self._baud, timeout=0.05)
+        vid_s = f'{self._vid:#x}' if self._vid else 'any'
+        pid_s = f'{self._pid:#x}' if self._pid else 'any'
         raise RuntimeError(
-            f'no USB serial matching vid={self._vid:#x} pid={self._pid:#x} serial_id={self._serial_id!r}'
+            f'no USB serial matching vid={vid_s} pid={pid_s} serial_id={self._serial_id!r}'
         )
 
     def _on_timer(self) -> None:

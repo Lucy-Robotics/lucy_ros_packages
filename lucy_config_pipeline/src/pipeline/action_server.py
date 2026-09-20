@@ -19,6 +19,7 @@ from rclpy.node import Node
 from std_srvs.srv import Trigger
 
 from .build import run_build_phase
+from .firmware_toolchain import require_firmware_toolchain
 from .flash import flash_picotool_timeout_seconds
 from .flash import flash_uptime_wait_seconds
 from .flash import flash_usb_wait_seconds
@@ -199,6 +200,21 @@ class PipelineActionServer(Node):
             boards = select_boards_to_process(data, list(goal.boards_to_flash))
             boards_set = set(boards) if boards else None
 
+            if not goal.dry_run and not goal.simulation_only:
+                self._feedback(
+                    goal_handle,
+                    phase='validate',
+                    progress=0.85,
+                    detail='firmware toolchain check',
+                )
+                try:
+                    require_firmware_toolchain()
+                except RuntimeError as exc:
+                    result.errors.extend(format_error_lines([str(exc)]))
+                    result.message = 'firmware toolchain not ready'
+                    goal_handle.abort()
+                    return result
+
             with tempfile.TemporaryDirectory(prefix='lucy_config_pipeline_') as tmp:
                 out_dir = Path(tmp)
 
@@ -291,7 +307,7 @@ class PipelineActionServer(Node):
 
             flash_failed: list[str] = []
             if not goal.dry_run and not goal.build_only and not goal.simulation_only:
-                flash_failed, flashed_ok = run_flash_phase(
+                flash_failed, flashed_ok, flash_details = run_flash_phase(
                     data=data,
                     selected_boards=boards,
                     boards_built_ok=built_ok,
@@ -305,12 +321,16 @@ class PipelineActionServer(Node):
                 )
                 result.boards_flashed = flashed_ok
                 if flash_failed:
-                    result.errors.extend(
-                        format_error_lines(
-                            [f"flash failed for boards: {', '.join(sorted(flash_failed))}"]
-                        )
+                    detail_lines = flash_details or [
+                        f"flash failed for boards: {', '.join(sorted(flash_failed))}"
+                    ]
+                    result.errors.extend(format_error_lines(detail_lines))
+                    # Keep a short summary in message; full reasons live in errors.
+                    result.message = (
+                        flash_details[0]
+                        if len(flash_details) == 1
+                        else f"flash failed ({len(flash_failed)} board(s))"
                     )
-                    result.message = 'flash failed'
                     goal_handle.abort()
                     return result
                 if flashed_ok:

@@ -26,9 +26,9 @@ Package names match directories (`<name>` in each `package.xml`).
 - **ROS**: [ROS 2 Jazzy](https://docs.ros.org/en/jazzy/Installation.html).
 - **Per-package extras**: Jetson-typical USB video and audio stacks for bringup; RealSense SDK stack for `realsense2_camera`; USB serial for Modbus boards. See each package README and `lucy_bringup/REALSENSE.md`.
 
-## Picotool and passwordless sudo
+## Pico USB access (picotool without interactive sudo)
 
-The **`lucy_config_pipeline`** flash phase runs **`sudo picotool`**. Copy-paste **sudoers** setup (Ubuntu 24.04) lives in **[lucy_config_pipeline/README.md — Passwordless sudo for picotool](lucy_config_pipeline/README.md#passwordless-sudo-for-picotool)** (same repository; no `../` path).
+The **`lucy_config_pipeline`** flash phase runs **`picotool`** (no sudo by default). One-time USB access setup via **`pixi run firmware-setup`** is documented in **[lucy_config_pipeline/README.md — Pico USB access](lucy_config_pipeline/README.md#pico-usb-access-no-interactive-sudo-during-flash)**.
 
 ## Building (colcon workspace)
 
@@ -120,7 +120,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs **`rosdep`**, **`colcon build`*
 | [lucy_bringup/README.md](lucy_bringup/README.md) | Operators and integrators (devices, tmux, launch args) |
 | [lucy_ros2_control/README.md](lucy_ros2_control/README.md) | Control stack quick start |
 | [**lucy_config_generator/README.md**](lucy_config_generator/README.md) | Hardware YAML → firmware YAML, `ros2_control` xacro, controllers |
-| [**lucy_config_pipeline/README.md**](lucy_config_pipeline/README.md) | Config services + pipeline action (build/flash); [passwordless sudo for picotool](lucy_config_pipeline/README.md#passwordless-sudo-for-picotool) |
+| [**lucy_config_pipeline/README.md**](lucy_config_pipeline/README.md) | Config services + pipeline action (build/flash); [Pico USB access](lucy_config_pipeline/README.md#pico-usb-access-no-interactive-sudo-during-flash) |
 | [lucy_modbus_bridge/README.md](lucy_modbus_bridge/README.md) | SHM → Modbus RTU bridge |
 | [camera_ros/README.md](camera_ros/README.md) | Camera topics, parameters, troubleshooting |
 

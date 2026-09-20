@@ -353,6 +353,7 @@ def render_firmware_yaml(
             {
                 'id': a['id'],
                 'enabled': bool(a.get('enabled', True)),
+                'virtual_pin': int(a['virtual_pin']),
                 'urdf_joint': a['urdf_joint'],
                 'min_pulse': min_pulse,
                 'max_pulse': max_pulse,
@@ -373,6 +374,7 @@ def render_firmware_yaml(
             {
                 'id': s['id'],
                 'enabled': True,
+                'virtual_pin': int(s['virtual_pin']),
                 'min_value': s.get('min_value', 0),
                 'max_value': s.get('max_value', 4095),
                 'driver': DRIVER_PRESSURE,
@@ -386,6 +388,7 @@ def render_firmware_yaml(
         board='rp2040',
         board_class=board_class,
         slave_address=board_slave_address(board),
+        serial_id=str(board.get('serial_id') or '').strip(),
         firmware_crate=resolve_firmware_crate(board),
         actuators=actuators,
         sensors=sensors,

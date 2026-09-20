@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import threading
 import time
@@ -27,7 +28,7 @@ def run_flash_phase(
     node: Node | None,
     feedback: Callable[..., None],
     log_error: Callable[[str], None],
-) -> tuple[list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str]]:
     """
     Flash built UF2 images with picotool.
 
@@ -37,11 +38,19 @@ def run_flash_phase(
     After USB serial re-enumeration, optionally verifies the board answers a
     Modbus read (holding register 0) when ``uptime_wait_seconds > 0``.
 
-    Returns ``(failed_board_ids, flashed_board_ids)`` in stable board order.
+    Returns ``(failed_board_ids, flashed_board_ids, failure_detail_lines)``
+    in stable board order.
     """
     paths = resolve_firmware_paths(data, workspace_src)
     if not paths.build_dir.is_dir():
         raise FileNotFoundError(paths.build_dir)
+
+    if shutil.which('picotool') is None:
+        raise RuntimeError(
+            'picotool not found on PATH. Run: pixi run firmware-setup '
+            '(installs Raspberry Pi picotool + libusb into the Pixi env), '
+            'then restart Core / the config pipeline node.'
+        )
 
     plan = board_build_plan(data, selected_boards)
     flashable = [(b, t) for b, t in plan if b in boards_built_ok]
@@ -49,6 +58,7 @@ def run_flash_phase(
 
     failed: list[str] = []
     flashed: list[str] = []
+    failure_details: list[str] = []
 
     for step_i, (board, target) in enumerate(flashable):
         row = step_i / total
@@ -85,19 +95,18 @@ def run_flash_phase(
                 board=board,
             )
             load_progress = min(1.0, row + 0.25 / total)
-            _run_command(
-                phase='flash',
+            _flash_uf2_to_board(
+                uf2=uf2,
+                serial=serial,
                 board=board,
-                cmd=['sudo', 'picotool', 'load', str(uf2), '-f', '--ser', serial],
                 cwd=paths.build_dir,
                 timeout_seconds=picotool_timeout_seconds,
                 feedback=feedback,
                 stream_progress=load_progress,
             )
-            # ``picotool load`` already reboots the board into application mode; a
-            # follow-up ``picotool reboot`` races USB re-enumeration and often
-            # fails (e.g. exit 249) while the device is offline.
-            post_load_delay = float(os.environ.get('LUCY_PIPELINE_FLASH_POST_LOAD_DELAY_SEC', '1'))
+            # ``picotool load -x`` executes the image; do not follow with
+            # ``picotool reboot`` (races USB re-enumeration, often exit 249).
+            post_load_delay = float(os.environ.get('LUCY_PIPELINE_FLASH_POST_LOAD_DELAY_SEC', '2'))
             if post_load_delay > 0:
                 time.sleep(post_load_delay)
             feedback(
@@ -132,6 +141,8 @@ def run_flash_phase(
             )
         except Exception as exc:
             failed.append(board)
+            detail = f'{board}: {exc}'
+            failure_details.append(detail)
             log_error(f'Flash failed for {board}: {exc}')
             feedback(
                 phase='flash',
@@ -146,7 +157,7 @@ def run_flash_phase(
         detail='flash phase completed',
         board='',
     )
-    return failed, flashed
+    return failed, flashed, failure_details
 
 
 def _modbus_crc(data: bytes) -> bytes:
@@ -198,6 +209,7 @@ def _wait_modbus_ready(serial_id: str, timeout_sec: float) -> bool:
     req = bytearray([0x01, 0x03, 0x00, 0x00, 0x00, 0x01])
     req.extend(_modbus_crc(req))
 
+    perm_denied = False
     while time.monotonic() < deadline:
         try:
             with serial.Serial(port_name, 115200, timeout=0.5) as ser:
@@ -206,14 +218,193 @@ def _wait_modbus_ready(serial_id: str, timeout_sec: float) -> bool:
                 resp = ser.read(7)
                 if len(resp) >= 5 and resp[0] == 0x01 and resp[1] == 0x03:
                     return True
+        except PermissionError:
+            perm_denied = True
         except Exception:
             pass
         time.sleep(0.5)
+    if perm_denied:
+        raise PermissionError(
+            f'cannot open USB serial for Modbus verify (serial_id={serial_id!r}): '
+            'permission denied. Re-run `pixi run firmware-setup` (udev covers VID '
+            '16c0 + 2e8a), ensure you are in dialout, then replug the board.'
+        )
     return False
+
+def _picotool_prefix() -> list[str]:
+    use_sudo = os.environ.get('LUCY_PIPELINE_FLASH_USE_SUDO', '').strip().lower() in (
+        '1',
+        'true',
+        'yes',
+    )
+    if use_sudo:
+        return ['sudo', '-n', 'picotool']
+    return ['picotool']
+
+
+def _picotool_load_cmd(uf2: Path, serial: str, *, force: bool = True) -> list[str]:
+    """Build picotool load argv (optional ``-f`` / ``--ser`` / ``-x``).
+
+    ``-x`` / ``--execute`` boots the loaded image. Without it, a BOOTSEL-only
+    ``picotool load`` can leave the device on the RPI-RP2 volume with no CDC.
+    """
+    cmd = [*_picotool_prefix(), 'load', str(uf2), '-x']
+    if force:
+        cmd.append('-f')
+    if serial.strip():
+        cmd.extend(['--ser', serial.strip()])
+    return cmd
+
+
+def _bootsel_volume_dev() -> Path | None:
+    """Return the RPI-RP2 block device if the Pico is already in BOOTSEL MSD mode."""
+    by_label = Path('/dev/disk/by-label/RPI-RP2')
+    if by_label.exists():
+        try:
+            return by_label.resolve()
+        except OSError:
+            return by_label
+    return None
+
+
+def _find_mount_point_for(dev: Path) -> Path | None:
+    try:
+        out = subprocess.run(
+            ['findmnt', '-n', '-o', 'TARGET', str(dev)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+    target = (out.stdout or '').strip().split('\n', 1)[0].strip()
+    return Path(target) if target else None
+
+
+def _copy_uf2_to_bootsel_volume(uf2: Path, feedback: Callable[..., None], board: str) -> bool:
+    """Flash by copying UF2 onto the RPI-RP2 mass-storage volume (already in BOOTSEL)."""
+    import shutil
+
+    dev = _bootsel_volume_dev()
+    if dev is None:
+        return False
+    mount = _find_mount_point_for(dev)
+    if mount is None:
+        # Try user mount (no special libusb; works when seat can access the disk).
+        try:
+            subprocess.run(
+                ['udisksctl', 'mount', '-b', str(dev)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            pass
+        mount = _find_mount_point_for(dev)
+    if mount is None or not mount.is_dir():
+        feedback(
+            phase='flash',
+            progress=0.0,
+            detail=f'RPI-RP2 present ({dev}) but not mounted',
+            board=board,
+        )
+        return False
+    dest = mount / uf2.name
+    feedback(
+        phase='flash',
+        progress=0.0,
+        detail=f'copying {uf2.name} → {dest}',
+        board=board,
+    )
+    shutil.copy2(uf2, dest)
+    # Pico reboots when the UF2 is written; mount often disappears.
+    try:
+        subprocess.run(
+            ['udisksctl', 'unmount', '-b', str(dev)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        pass
+    return True
+
+
+def _flash_uf2_to_board(
+    *,
+    uf2: Path,
+    serial: str,
+    board: str,
+    cwd: Path,
+    timeout_seconds: int,
+    feedback: Callable[..., None],
+    stream_progress: float,
+) -> None:
+    """Load UF2 via picotool, with BOOTSEL / MSD fallbacks.
+
+    ``picotool load -f --ser <flash_id>`` works when the running firmware
+    exposes the Pico USB reset interface (VID ``2e8a`` + picotool Reset class).
+    Older Custom images (VID ``16c0``) cannot be force-rebooted — put the board
+    in BOOTSEL (hold BOOTSEL) once to install updated firmware, then reflash
+    without the button.
+    """
+    errors: list[str] = []
+
+    # 1) Normal path: force-reboot by flash unique id, then load.
+    try:
+        _run_command(
+            phase='flash',
+            board=board,
+            cmd=_picotool_load_cmd(uf2, serial, force=True),
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
+            feedback=feedback,
+            stream_progress=stream_progress,
+        )
+        return
+    except Exception as exc:
+        errors.append(str(exc))
+        feedback(
+            phase='flash',
+            progress=stream_progress,
+            detail=f'picotool -f --ser failed; trying BOOTSEL fallbacks… ({exc})',
+            board=board,
+        )
+
+    # 2) Already in BOOTSEL: load without --ser / without -f (USB serial ≠ flash id).
+    if _bootsel_volume_dev() is not None:
+        try:
+            _run_command(
+                phase='flash',
+                board=board,
+                cmd=_picotool_load_cmd(uf2, '', force=False),
+                cwd=cwd,
+                timeout_seconds=timeout_seconds,
+                feedback=feedback,
+                stream_progress=stream_progress,
+            )
+            return
+        except Exception as exc:
+            errors.append(str(exc))
+        # 3) MSD copy if picotool still cannot open the device.
+        if _copy_uf2_to_bootsel_volume(uf2, feedback, board):
+            return
+        errors.append('UF2 copy to RPI-RP2 failed or volume not mounted')
+
+    raise RuntimeError(
+        'picotool could not flash this board. Exit 249 / "no BOOTSEL device" usually means '
+        'the running firmware is not picotool-force-resettable (non-Pico USB). '
+        'Hold BOOTSEL, reset/replug so RPI-RP2 appears, then re-run FLASH. '
+        f'Detail: {" | ".join(errors)}'
+    )
 
 
 def _wait_for_usb_serial(serial_id: str, timeout_seconds: int) -> bool:
-    """Return whether a /dev/serial/by-id entry containing ``serial_id`` resolves."""
+    """Return whether USB CDC for ``serial_id`` is back after flash.
+
+    Checks ``/dev/serial/by-id`` first, then pyserial ``list_ports`` (same
+    substring match as Modbus verify) — by-id can lag or be absent on some hosts.
+    """
     needle = serial_id.strip().lower()
     if not needle:
         return False
@@ -231,6 +422,25 @@ def _wait_for_usb_serial(serial_id: str, timeout_seconds: int) -> bool:
                         return True
                 except OSError:
                     continue
+        try:
+            from serial.tools import list_ports
+        except ImportError:
+            list_ports = None  # type: ignore[assignment]
+        if list_ports is not None:
+            for info in list_ports.comports():
+                hay = ' '.join(
+                    filter(
+                        None,
+                        [
+                            info.device,
+                            info.serial_number or '',
+                            info.description or '',
+                            info.hwid or '',
+                        ],
+                    )
+                ).lower()
+                if needle in hay:
+                    return True
         time.sleep(0.5)
     return False
 
@@ -260,11 +470,15 @@ def _run_command(
     watchdog = threading.Timer(timeout_seconds, process.kill)
     watchdog.start()
     emitted = 0
+    tail: list[str] = []
     try:
         for line in process.stdout:
             text = line.strip()
             if not text:
                 continue
+            tail.append(text)
+            if len(tail) > 20:
+                tail.pop(0)
             if emitted < 200:
                 feedback(phase=phase, progress=stream_progress, detail=text, board=board)
             emitted += 1
@@ -275,7 +489,10 @@ def _run_command(
     if timed_out:
         raise TimeoutError(f"command timed out after {timeout_seconds}s: {' '.join(cmd)}")
     if return_code != 0:
-        raise RuntimeError(f"command failed ({return_code}): {' '.join(cmd)}")
+        detail = (' | '.join(tail)) if tail else '(no output)'
+        raise RuntimeError(
+            f"command failed ({return_code}): {' '.join(cmd)} — {detail}"
+        )
 
 
 def flash_picotool_timeout_seconds() -> int:
@@ -283,7 +500,8 @@ def flash_picotool_timeout_seconds() -> int:
 
 
 def flash_usb_wait_seconds() -> int:
-    return int(os.environ.get('LUCY_PIPELINE_FLASH_WAIT_SEC', '5'))
+    # Post-flash CDC re-enumeration is often >5s (especially after first boot).
+    return int(os.environ.get('LUCY_PIPELINE_FLASH_WAIT_SEC', '30'))
 
 
 def flash_uptime_wait_seconds() -> int:

@@ -605,7 +605,7 @@ hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
     // skips the mechanical envelope and wraps negative commands to ~2*pi.
     const uint16_t wire = to_register_milliradians(actuator_command_to_servo_rad(m, cmd_rad));
     const int reg =
-      m.type == Type::BUS_SERVO ? bus_block_base(m.virtual_pin) : m.virtual_pin;
+      m.type == Type::BUS_SERVO ? bus_block_base(m.virtual_pin) : pwm_block_base(m.virtual_pin);
 
 #ifndef _WIN32
     sem_wait(sem_);

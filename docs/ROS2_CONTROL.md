@@ -139,7 +139,7 @@ The panel sends trajectories to **`joint_trajectory_controller`** topics. That r
 1. **VALIDATE** — schema-check hardware YAML.
 2. **GENERATE** — regenerate ros2_control xacro, controllers YAML, and **`config_<board>.yaml`** for Rust firmware. **Always runs**, including in `simulation_only`.
 3. **BUILD** *(optional)* — Cargo (`thumbv6m-none-eabi`) + `elf2uf2-rs`.
-4. **FLASH** *(optional)* — `sudo picotool` + Modbus FC03 verify.
+4. **FLASH** *(optional)* — `picotool` + Modbus FC03 verify.
 5. **RELOAD** — `/lucy_control/restart`.
 
 Decoupling GENERATE from BUILD means the LCP "SIMULATION ONLY" toggle can update URDF limits without touching firmware.
