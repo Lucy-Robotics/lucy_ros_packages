@@ -59,7 +59,9 @@ def pipeline_paths(tmp_path: Path) -> PipelinePaths:
     importlib.util.find_spec('rclpy') is None,
     reason='rclpy not importable (run inside Pixi env with ROS feature)',
 )
-def test_hardware_activate_aborts_when_toolchain_missing(pipeline_paths: PipelinePaths):
+def test_hardware_activate_aborts_when_toolchain_missing(
+    pipeline_paths: PipelinePaths, rclpy_init_shutdown
+):
     data = yaml.safe_load(_FIXTURE.read_text(encoding='utf-8'))
     config_yaml = yaml.dump(data)
 

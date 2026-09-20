@@ -11,12 +11,43 @@ def _sample_data() -> dict:
     }
 
 
-def _make_fw_tree(tmp_path: Path) -> Path:
+def _make_fw_tree(tmp_path: Path, crate: str = 'rp2040_servo2040') -> Path:
     fw_src = tmp_path / 'fw'
     (fw_src / 'firmwares' / 'rp2040').mkdir(parents=True)
     (fw_src / 'firmwares' / 'rp2040' / 'Cargo.toml').write_text('[package]\nname="x"\n')
     (fw_src / 'build').mkdir(parents=True)
     return fw_src
+
+
+def test_firmware_crate_relpath_by_board_class():
+    assert (
+        pipeline_build.firmware_crate_relpath({'board_class': 'internal_servo_only'})
+        == 'firmwares/rp2040_servo2040'
+    )
+    assert (
+        pipeline_build.firmware_crate_relpath({'board_class': 'bus_servo_only'})
+        == 'firmwares/rp2040_bus_servo'
+    )
+    assert (
+        pipeline_build.firmware_crate_relpath({'board_class': 'internal_servo_i2c_pwm'})
+        == 'firmwares/rp2040_servo2040'
+    )
+    assert (
+        pipeline_build.firmware_crate_relpath(
+            {
+                'board_class': 'internal_servo_only',
+                'firmware_crate': 'firmwares/custom',
+            }
+        )
+        == 'firmwares/custom'
+    )
+
+
+def test_firmware_package_name():
+    assert (
+        pipeline_build.firmware_package_name('firmwares/rp2040_servo2040')
+        == 'lucy_embedded_firmware_rp2040_servo2040'
+    )
 
 
 def test_run_build_phase_requires_source_dir(tmp_path: Path):
@@ -59,7 +90,7 @@ def test_run_build_phase_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     fw_src = _make_fw_tree(tmp_path)
     release = fw_src / 'target' / 'thumbv6m-none-eabi' / 'release'
     release.mkdir(parents=True)
-    elf = release / 'lucy_embedded_firmware_rp2040'
+    elf = release / 'lucy_embedded_firmware_rp2040_servo2040'
     elf.write_bytes(b'elf')
 
     monkeypatch.setattr(pipeline_build.shutil, 'which', lambda name: f'/usr/bin/{name}')

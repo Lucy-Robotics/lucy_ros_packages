@@ -147,7 +147,7 @@ def test_render_firmware_yaml_pwm_board():
     text = render_firmware_yaml(MINIMAL, 'rp2040_left_arm')
     assert 'board_id: rp2040_left_arm' in text
     assert 'board_class: internal_servo_only' in text
-    assert 'firmware_crate: firmwares/rp2040_internal_pwm' in text
+    assert 'firmware_crate: firmwares/rp2040_servo2040' in text
     assert 'left_elbow' in text
     assert 'channel: Servo10' in text
     assert 'driver: PwmServoDriver' in text
@@ -166,7 +166,7 @@ def test_render_firmware_yaml_includes_serial_id():
 def test_render_firmware_yaml_i2c_board():
     text = render_firmware_yaml(MINIMAL, 'rp2040_torso_head')
     assert 'board_class: internal_servo_i2c_pwm' in text
-    assert 'firmware_crate: firmwares/rp2040_i2c_pwm' in text
+    assert 'firmware_crate: firmwares/rp2040_servo2040' in text
     assert 'channel: Servo12' in text
     assert 'head_jaw' in text
 
@@ -178,6 +178,9 @@ def test_render_firmware_yaml_bus_servo_board():
     assert 'driver: BusServoDriver' in text
     assert 'channel: UART0:1' in text
     assert 'slave_address: 2' in text
+    # STS3215 ticks, not PWM duty counts
+    assert 'min_pulse: 0' in text
+    assert 'max_pulse: 4095' in text
 
 
 def test_generate_emits_yaml_not_c():

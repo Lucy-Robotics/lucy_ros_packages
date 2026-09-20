@@ -335,6 +335,11 @@ def _firmware_pulse_limits(servo_type: str) -> tuple[int, int]:
     return 1250, 2500
 
 
+def _firmware_bus_pulse_limits() -> tuple[int, int]:
+    """STS3215 position tick span used by BusServoDriver millirad→tick mapping."""
+    return 0, 4095
+
+
 def render_firmware_yaml(
     data: dict[str, Any],
     board_id: str,
@@ -348,7 +353,10 @@ def render_firmware_yaml(
     actuators_raw = _actuators_for_board(data, board_id, enabled_only=True)
     actuators: list[dict[str, Any]] = []
     for a in actuators_raw:
-        min_pulse, max_pulse = _firmware_pulse_limits(str(a.get('servo_type', '180')))
+        if board_class == BOARD_CLASS_BUS_SERVO_ONLY:
+            min_pulse, max_pulse = _firmware_bus_pulse_limits()
+        else:
+            min_pulse, max_pulse = _firmware_pulse_limits(str(a.get('servo_type', '180')))
         actuators.append(
             {
                 'id': a['id'],

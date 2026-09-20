@@ -178,7 +178,7 @@ def test_golden_firmware_left_arm():
     assert 'driver: PwmServoDriver' in got
     assert 'channel: Servo10' in got
     assert 'hardware:' in got
-    assert 'firmware_crate: firmwares/rp2040_internal_pwm' in got
+    assert 'firmware_crate: firmwares/rp2040_servo2040' in got
 
 
 def test_golden_firmware_right_arm():
