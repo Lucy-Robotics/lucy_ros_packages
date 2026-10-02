@@ -41,15 +41,13 @@ source $WORKSPACE/install/setup.zsh 2>/dev/null || true
 echo ""
 echo -e "${BLUE}ROS2 Nodes:${NC}"
 
-# Check micro-ROS pico nodes (should be 2)
-echo -n "  Pico Nodes (2 expected):  "
-PICO_COUNT=$(ros2 node list 2>/dev/null | grep -c "pico_node" || echo "0")
-if [ "$PICO_COUNT" -eq 2 ]; then
-    echo -e "${GREEN}✅ Active ($PICO_COUNT/2)${NC}"
-elif [ "$PICO_COUNT" -eq 1 ]; then
-    echo -e "${YELLOW}⚠️  Partial ($PICO_COUNT/2)${NC}"
+# Check Modbus bridge nodes (one per flashed board with serial_id)
+echo -n "  Modbus bridges:          "
+BRIDGE_COUNT=$(ros2 node list 2>/dev/null | grep -c "modbus_bridge" || echo "0")
+if [ "$BRIDGE_COUNT" -ge 1 ]; then
+    echo -e "${GREEN}✅ Active ($BRIDGE_COUNT)${NC}"
 else
-    echo -e "${RED}❌ Not found (0/2)${NC}"
+    echo -e "${YELLOW}⚠️  None (ok if real:=false)${NC}"
 fi
 
 # Check camera node

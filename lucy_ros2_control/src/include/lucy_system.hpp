@@ -33,14 +33,16 @@
 #include <vector>
 #include <array>
 
+// POSIX shm / named semaphores: real-hardware register transport. MSVC has none
+// of these headers; Windows builds stub the SHM path (see lucy_system.cpp).
+#ifndef _WIN32
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <semaphore.h>
-#include <stdio.h>
-#include <fcntl.h>
 #include <sys/stat.h>
-
+#endif
+#include <stdio.h>
 
 #include "hardware_interface/handle.hpp"
 #include "hardware_interface/hardware_info.hpp"
@@ -117,11 +119,22 @@ constexpr int kBusServoAngleOffset = 1;
 constexpr int kBusServoCmdOffset = 2;
 constexpr int kBusServoRegisterCount = 3;
 
+/// PWM hobby-servo block: cmd @0, angle @1 (matches firmware PwmServoModbusAdapter).
+constexpr int kPwmServoCmdOffset = 0;
+constexpr int kPwmServoAngleOffset = 1;
+constexpr int kPwmServoRegisterCount = 2;
+
 /// First register of a bus joint's block. virtual_pin is a slot index, not a
 /// register index: a bus servo occupies three registers.
 constexpr int bus_block_base(int virtual_pin)
 {
   return virtual_pin * kBusServoRegisterCount;
+}
+
+/// First register of a PWM joint's block (two registers per virtual_pin).
+constexpr int pwm_block_base(int virtual_pin)
+{
+  return virtual_pin * kPwmServoRegisterCount;
 }
 
 // Firmware bus-servo opcodes (BusServoModbusAdapter::tick).
@@ -213,7 +226,11 @@ private:
   // pin N onto the right arm's pin N.
   RegisterHeader * register_header_ = nullptr;
   SharedRegisters * shared_registers_ = nullptr;
+#ifndef _WIN32
   sem_t * sem_ = nullptr;
+#else
+  void * sem_ = nullptr;  // placeholder; SHM transport is unsupported on Windows
+#endif
 
   /// node_name_ sanitised and capped to what shm_open() accepts; the name the
   /// firmware bridge must be given to attach to this component.

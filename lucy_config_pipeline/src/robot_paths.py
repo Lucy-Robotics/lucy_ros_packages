@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-# Historical InMoov/Thais layout used when control.launch.yaml is absent.
+# Fallback when ``config/control.launch.yaml`` is absent (prefer that file).
 _DEFAULT_URDF_REL = 'description/urdf/robot.urdf.xacro'
 _DEFAULT_BASE_REL = 'description'
 _DEFAULT_CONTROLLERS_REL = 'config/controllers.yaml'
@@ -44,12 +44,13 @@ def resolve_robot_description_paths(
     *,
     controllers_basename: str | None = None,
 ) -> tuple[Path, Path, Path]:
-    """Return ``(urdf_xacro, base_path, controllers_yaml)`` for a robot package.
+    """
+    Return ``(urdf_xacro, base_path, controllers_yaml)`` for a robot package.
 
-    Prefers ``config/control.launch.yaml``. Falls back to the historical
-    ``description/urdf/inmoov.urdf.xacro`` layout. When ``controllers_basename``
-    is set (from ``generated_files``), it overrides the controllers filename
-    while keeping the directory from the launch default / fallback.
+    Prefers ``config/control.launch.yaml``. Falls back to
+    ``description/urdf/robot.urdf.xacro``. When ``controllers_basename`` is set
+    (from ``generated_files``), it overrides the controllers filename while
+    keeping the directory from the launch default / fallback.
     """
     defaults = load_robot_launch_defaults(robot_root)
     urdf = resolve_under_robot_root(

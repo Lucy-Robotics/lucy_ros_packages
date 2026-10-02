@@ -5,7 +5,14 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description() -> LaunchDescription:
-    robot_pkg_arg = DeclareLaunchArgument('robot_package', default_value='thais_urdf')
+    robot_pkg_arg = DeclareLaunchArgument(
+        'robot_package',
+        default_value='',
+        description=(
+            'Robot description package (required). Set by lucy.launch / the '
+            'launcher selection; do not rely on a pipeline-local default.'
+        ),
+    )
     config_dir_arg = DeclareLaunchArgument('config_dir', default_value='')
 
     node = Node(

@@ -34,10 +34,10 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     robot_package_arg = DeclareLaunchArgument(
         'robot_package',
-        default_value='thais_urdf',
+        default_value='',
         description=(
-            'Robot package share used for hardware YAML paths '
-            'in lucy_config_pipeline'
+            'Robot package for lucy_config_pipeline hardware YAML paths. '
+            'Set by the parent lucy.launch / launcher; empty here on purpose.'
         ),
     )
     config_dir_arg = DeclareLaunchArgument(

@@ -13,6 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+#ifdef _WIN32
+#define _USE_MATH_DEFINES
+#endif
+
 #include "include/lucy_system.hpp"
 
 #include <format>
@@ -40,6 +44,7 @@ namespace
 constexpr const char * kRegTableSuffix = ".lucy_reg_table";
 constexpr const char * kRegHeaderSuffix = ".lucy_reg_header";
 
+#ifndef _WIN32
 /// Node name the POSIX objects are named after: node_name_ sanitised and capped.
 ///
 /// shm_open() and sem_open() take a name, not a path: a leading '/' and no other
@@ -113,6 +118,7 @@ void * create_shm(
   }
   return addr;
 }
+#endif  // !_WIN32
 }  // namespace
 
 LucySystemHardware::~LucySystemHardware()
@@ -122,6 +128,7 @@ LucySystemHardware::~LucySystemHardware()
 
 void LucySystemHardware::release_registers()
 {
+#ifndef _WIN32
   if (shared_registers_ != nullptr) {
     munmap(shared_registers_, sizeof(SharedRegisters));
     shared_registers_ = nullptr;
@@ -150,6 +157,14 @@ void LucySystemHardware::release_registers()
     sem_unlink(sem_name_.c_str());
     sem_name_.clear();
   }
+#else
+  shared_registers_ = nullptr;
+  register_header_ = nullptr;
+  sem_ = nullptr;
+  reg_table_name_.clear();
+  reg_header_name_.clear();
+  sem_name_.clear();
+#endif
 }
 
 hardware_interface::CallbackReturn LucySystemHardware::on_init(
@@ -328,6 +343,7 @@ hardware_interface::CallbackReturn LucySystemHardware::init_actuator_mappings()
 
 hardware_interface::CallbackReturn LucySystemHardware::init_registers()
 {
+#ifndef _WIN32
   release_registers();
 
   shm_node_name_ = shm_node_name_for(node_name_);
@@ -380,6 +396,16 @@ hardware_interface::CallbackReturn LucySystemHardware::init_registers()
     reg_table_name.c_str(), reg_header_name.c_str(), sem_name.c_str(),
     shm_node_name_.c_str());
   return hardware_interface::CallbackReturn::SUCCESS;
+#else
+  (void)kRegTableSuffix;
+  (void)kRegHeaderSuffix;
+  RCLCPP_ERROR(
+    get_logger(),
+    "POSIX shared-memory register transport is not supported on Windows. "
+    "Use mock_hardware or gazebo; real-hardware SHM requires Linux/macOS "
+    "(Boost.Interprocess port tracked separately).");
+  return hardware_interface::CallbackReturn::ERROR;
+#endif
 }
 
 
@@ -414,16 +440,22 @@ In our case, the hardware is already ready to receive informations
 void LucySystemHardware::write_torque_opcode(
   const ActuatedJointMapping & m, uint16_t opcode)
 {
+#ifndef _WIN32
   const int reg = bus_block_base(m.virtual_pin);
   shared_registers_->register_table[reg + kBusServoIdOffset] =
     static_cast<uint16_t>(m.bus_id);
   register_header_->set_dirty(reg + kBusServoIdOffset);
   shared_registers_->register_table[reg + kBusServoCmdOffset] = opcode;
   register_header_->set_dirty(reg + kBusServoCmdOffset);
+#else
+  (void)m;
+  (void)opcode;
+#endif
 }
 
 void LucySystemHardware::apply_torque_state(bool enable)
 {
+#ifndef _WIN32
   const uint16_t opcode = enable ? kBusServoCmdEnableTorque : kBusServoCmdDisableTorque;
   for (const auto & m : mappings_) {
     if (m.type != Type::BUS_SERVO) {
@@ -436,6 +468,7 @@ void LucySystemHardware::apply_torque_state(bool enable)
       get_logger(), "%s torque on bus servo id %d.",
       enable ? "Enabling" : "Disabling", m.bus_id);
   }
+#endif
   torque_enabled_ = enable;
 }
 
@@ -567,13 +600,14 @@ hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
     }
     hw_old_commands_[i] = cmd_rad;
 
-    // Joint space -> servo space: applies offset_deg / direction / scale and
-    // clamps to [servo_min_deg, servo_max_deg]. Sending the raw joint angle
+    // Joint space -> servo space: applies offset_rad / direction / scale and
+    // clamps to [servo_min_rad, servo_max_rad]. Sending the raw joint angle
     // skips the mechanical envelope and wraps negative commands to ~2*pi.
     const uint16_t wire = to_register_milliradians(actuator_command_to_servo_rad(m, cmd_rad));
     const int reg =
-      m.type == Type::BUS_SERVO ? bus_block_base(m.virtual_pin) : m.virtual_pin;
+      m.type == Type::BUS_SERVO ? bus_block_base(m.virtual_pin) : pwm_block_base(m.virtual_pin);
 
+#ifndef _WIN32
     sem_wait(sem_);
     switch (m.type) {
       case Type::PWM_SERVO:
@@ -597,6 +631,10 @@ hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
         break;
     }
     sem_post(sem_);
+#else
+    (void)wire;
+    (void)reg;
+#endif
   }
 
   if (!publish_actuators_ || !joint_publisher_) {

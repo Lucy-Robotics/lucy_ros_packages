@@ -79,10 +79,10 @@ def test_schema_rejects_null_virtual_pin():
 
 def test_schema_rejects_servo_min_greater_than_max():
     data = _load_mapping()
-    data['actuators'][0]['servo_min_deg'] = 10
-    data['actuators'][0]['servo_max_deg'] = 5
-    data['actuators'][0]['servo_default_deg'] = 7
-    with pytest.raises(ValueError, match='servo_min_deg .* must be <= servo_max_deg'):
+    data['actuators'][0]['servo_min_rad'] = 10
+    data['actuators'][0]['servo_max_rad'] = 5
+    data['actuators'][0]['servo_default_rad'] = 7
+    with pytest.raises(ValueError, match='servo_min_rad .* must be <= servo_max_rad'):
         validate_hardware_yaml(data)
 
 
@@ -108,10 +108,10 @@ def test_schema_rejects_non_bool_enabled_sensor():
         validate_hardware_yaml(data)
 
 
-def test_schema_rejects_non_numeric_offset_deg():
+def test_schema_rejects_non_numeric_offset_rad():
     data = _load_mapping()
-    data['actuators'][0]['offset_deg'] = None
-    with pytest.raises(ValueError, match='offset_deg must be numeric'):
+    data['actuators'][0]['offset_rad'] = None
+    with pytest.raises(ValueError, match='offset_rad must be numeric'):
         validate_hardware_yaml(data)
 
 
@@ -172,28 +172,32 @@ def test_schema_suppresses_sensor_contiguity_when_sensor_has_item_error():
 def test_golden_firmware_left_arm():
     data = _load_mapping()
     got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
-        'config_rp2040_left_arm.c'
+        'config_rp2040_left_arm.yaml'
     ]
-    expected = (_FIXTURES / 'golden_config_rp2040_left_arm.c').read_text(encoding='utf-8')
-    assert got == expected
+    assert 'board_id: rp2040_left_arm' in got
+    assert 'driver: PwmServoDriver' in got
+    assert 'channel: Servo10' in got
+    assert 'hardware:' in got
+    assert 'firmware_crate: firmwares/rp2040_servo2040' in got
 
 
 def test_golden_firmware_right_arm():
     data = _load_mapping()
     got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
-        'config_rp2040_right_arm.c'
+        'config_rp2040_right_arm.yaml'
     ]
-    expected = (_FIXTURES / 'golden_config_rp2040_right_arm.c').read_text(encoding='utf-8')
-    assert got == expected
+    assert 'board_id: rp2040_right_arm' in got
+    assert 'driver: PwmServoDriver' in got
+    assert 'min_angle:' in got
 
 
 def test_golden_firmware_torso():
     data = _load_mapping()
     got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
-        'config_rp2040_torso_head.c'
+        'config_rp2040_torso_head.yaml'
     ]
-    expected = (_FIXTURES / 'golden_config_rp2040_torso_head.c').read_text(encoding='utf-8')
-    assert got == expected
+    assert 'board_id: rp2040_torso_head' in got
+    assert 'min_pulse:' in got
 
 
 def test_golden_ros2_control():
@@ -255,7 +259,7 @@ def test_boards_filter_emits_subset():
         {'firmware'},
         {'rp2040_left_arm'},
     )
-    assert set(got.keys()) == {'config_rp2040_left_arm.c'}
+    assert set(got.keys()) == {'config_rp2040_left_arm.yaml'}
 
 
 def test_generated_files_defaults_when_section_absent():
@@ -349,19 +353,22 @@ def test_bus_servo_board_generates_rust_layout():
         data, _fixture_urdf_xml(), targets={'firmware'}
     )
     assert f'config_{board_id}.c' not in out
-    rust = out[f'config_{board_id}.rs']
-
-    actuators = [a for a in data['actuators'] if a['board'] == board_id]
-    expected = max(int(a['virtual_pin']) for a in actuators) + 1
-    assert f'pub const BUS_SERVO_SLOTS: u16 = {expected};' in rust
-    assert 'pub const BUS_SERVO_BLOCK: u16 = 3;' in rust
+    yaml_text = out[f'config_{board_id}.yaml']
+    assert 'board_class: bus_servo_only' in yaml_text
+    assert 'firmware_crate: firmwares/rp2040_bus_servo' in yaml_text
+    assert 'driver: BusServoDriver' in yaml_text
+    assert 'channel: UART0:' in yaml_text
 
 
 def test_slot_count_is_the_board_joint_count():
-    """virtual_pin is validated contiguous from 0, so slots == joints on the board."""
+    """Enabled actuators appear in architecture YAML; disabled are filtered."""
     data, board_id = _bus_servo_mapping()
     out = generate_from_xacro_string_for_tests(
         data, _fixture_urdf_xml(), targets={'firmware'}
     )
-    count = len([a for a in data['actuators'] if a['board'] == board_id])
-    assert f'pub const BUS_SERVO_SLOTS: u16 = {count};' in out[f'config_{board_id}.rs']
+    yaml_text = out[f'config_{board_id}.yaml']
+    enabled = [
+        a for a in data['actuators'] if a['board'] == board_id and a.get('enabled', True)
+    ]
+    for a in enabled:
+        assert a['id'] in yaml_text

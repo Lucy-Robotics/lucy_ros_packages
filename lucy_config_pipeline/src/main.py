@@ -3,11 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
-import rclpy
-import yaml
-
 from lucy_config_generator.schema import GENERATED_FILES_DEFAULTS
 from lucy_config_generator.schema import resolve_generated_files
+import rclpy
+import yaml
 
 from .config_store import ConfigStore
 from .pipeline.action_server import PipelineActionServer
@@ -73,10 +72,22 @@ def main() -> None:
     rclpy.init()
 
     bootstrap = rclpy.create_node('lucy_config_pipeline_bootstrap')
-    bootstrap.declare_parameter('robot_package', 'thais_urdf')
+    bootstrap.declare_parameter('robot_package', '')
     bootstrap.declare_parameter('config_dir', '')
-    robot_package = bootstrap.get_parameter('robot_package').get_parameter_value().string_value
+    robot_package = (
+        bootstrap.get_parameter('robot_package')
+        .get_parameter_value()
+        .string_value.strip()
+    )
     config_dir = bootstrap.get_parameter('config_dir').get_parameter_value().string_value
+    if not robot_package:
+        bootstrap.destroy_node()
+        rclpy.shutdown()
+        raise SystemExit(
+            'lucy_config_pipeline: robot_package is required '
+            '(set by the launcher via lucy.launch → web_ros_api; '
+            'do not invent a default package here)'
+        )
     paths = _resolve_paths(robot_package, config_dir)
     bootstrap.destroy_node()
 

@@ -13,6 +13,11 @@ setup(
         ('share/' + package_name + '/launch', ['launch/config_pipeline.launch.py']),
     ],
     install_requires=['setuptools', 'PyYAML', 'Jinja2'],
+    extras_require={
+        'test': [
+            'pytest',
+        ],
+    },
     zip_safe=True,
     maintainer='Sentience Robotics Team',
     maintainer_email='contact@sentience-robotics.fr',

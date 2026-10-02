@@ -7,6 +7,9 @@ import shutil
 import tempfile
 import threading
 
+from lucy_config_generator.generate import generate
+from lucy_config_generator.schema import resolve_generated_files
+from lucy_msgs.action import ConfigurePipeline
 from rclpy.action import ActionServer
 from rclpy.action import CancelResponse
 from rclpy.action import GoalResponse
@@ -15,15 +18,8 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 from std_srvs.srv import Trigger
 
-from lucy_config_generator.generate import generate
-from lucy_config_generator.schema import resolve_generated_files
-from lucy_msgs.action import ConfigurePipeline
-
-from ..config_store import ConfigStore
-from ..error_format import format_error_lines
-from ..validation import urdf_crosscheck
-from ..validation import validate_schema
 from .build import run_build_phase
+from .firmware_toolchain import require_firmware_toolchain
 from .flash import flash_picotool_timeout_seconds
 from .flash import flash_uptime_wait_seconds
 from .flash import flash_usb_wait_seconds
@@ -32,6 +28,10 @@ from .models import PipelinePaths
 from .selection import board_build_plan
 from .selection import resolve_mapping_input
 from .selection import select_boards_to_process
+from ..config_store import ConfigStore
+from ..error_format import format_error_lines
+from ..validation import urdf_crosscheck
+from ..validation import validate_schema
 
 
 class PipelineActionServer(Node):
@@ -200,6 +200,21 @@ class PipelineActionServer(Node):
             boards = select_boards_to_process(data, list(goal.boards_to_flash))
             boards_set = set(boards) if boards else None
 
+            if not goal.dry_run and not goal.simulation_only:
+                self._feedback(
+                    goal_handle,
+                    phase='validate',
+                    progress=0.85,
+                    detail='firmware toolchain check',
+                )
+                try:
+                    require_firmware_toolchain()
+                except RuntimeError as exc:
+                    result.errors.extend(format_error_lines([str(exc)]))
+                    result.message = 'firmware toolchain not ready'
+                    goal_handle.abort()
+                    return result
+
             with tempfile.TemporaryDirectory(prefix='lucy_config_pipeline_') as tmp:
                 out_dir = Path(tmp)
 
@@ -215,10 +230,13 @@ class PipelineActionServer(Node):
                         else 'rendering ros2_control'
                     ),
                 )
+                # Always regenerate the full ros2_control / controllers stack.
+                # boards_to_flash only filters firmware build/flash — a subset
+                # flash must not wipe HI blocks / controllers for other boards.
                 self._generate_to_dir(
                     out_dir=out_dir,
                     config_yaml=config_yaml,
-                    boards_filter=None if goal.simulation_only else boards_set,
+                    boards_filter=None,
                     targets={'ros2_control', 'controllers'},
                     simulation_only=goal.simulation_only,
                 )
@@ -292,7 +310,7 @@ class PipelineActionServer(Node):
 
             flash_failed: list[str] = []
             if not goal.dry_run and not goal.build_only and not goal.simulation_only:
-                flash_failed, flashed_ok = run_flash_phase(
+                flash_failed, flashed_ok, flash_details = run_flash_phase(
                     data=data,
                     selected_boards=boards,
                     boards_built_ok=built_ok,
@@ -306,12 +324,16 @@ class PipelineActionServer(Node):
                 )
                 result.boards_flashed = flashed_ok
                 if flash_failed:
-                    result.errors.extend(
-                        format_error_lines(
-                            [f"flash failed for boards: {', '.join(sorted(flash_failed))}"]
-                        )
+                    detail_lines = flash_details or [
+                        f"flash failed for boards: {', '.join(sorted(flash_failed))}"
+                    ]
+                    result.errors.extend(format_error_lines(detail_lines))
+                    # Keep a short summary in message; full reasons live in errors.
+                    result.message = (
+                        flash_details[0]
+                        if len(flash_details) == 1
+                        else f'flash failed ({len(flash_failed)} board(s))'
                     )
-                    result.message = 'flash failed'
                     goal_handle.abort()
                     return result
                 if flashed_ok:
@@ -362,5 +384,27 @@ class PipelineActionServer(Node):
             return
         fw_cfg_dir = (self._paths.workspace_src / firmware_src_dir / 'config').resolve()
         fw_cfg_dir.mkdir(parents=True, exist_ok=True)
-        for cfile in out_dir.glob('config_*.c'):
-            shutil.copy2(cfile, fw_cfg_dir / cfile.name)
+        for yfile in out_dir.glob('config_*.yaml'):
+            shutil.copy2(yfile, fw_cfg_dir / yfile.name)
+        # Also seed each board crate's config.yaml for local cargo builds.
+        yaml_files = sorted(out_dir.glob('config_*.yaml'))
+        boards_map = data.get('boards', {})
+        for yfile in yaml_files:
+            board_id = yfile.stem.removeprefix('config_')
+            board_def = boards_map.get(board_id)
+            if not isinstance(board_def, dict):
+                continue
+            try:
+                from lucy_config_generator.schema import resolve_firmware_crate
+
+                crate_rel = resolve_firmware_crate(board_def)
+            except Exception:
+                continue
+            crate_cfg = (
+                self._paths.workspace_src
+                / firmware_src_dir
+                / crate_rel
+                / 'config.yaml'
+            )
+            crate_cfg.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(yfile, crate_cfg)

@@ -23,9 +23,9 @@ Invalid combinations raise at launch parse time (clear ``RuntimeError``).
 
 Arguments:
 ---------
-- ``real`` (default ``true``): micro-ROS agents, USB webcam, RealSense. When false, those
-  nodes are not constructed (``OpaqueFunction``), so e.g. Docker without ``micro_ros_agent``
-  can run ``real:=false``.
+- ``real`` (default ``true``): USB webcam / RealSense peripherals. When false, those
+  nodes are not constructed (``OpaqueFunction``), so e.g. Docker without camera devices
+  can run ``real:=false``. Hardware boards are driven via Modbus (``lucy_modbus_bridge``).
 - ``rviz`` (default ``false``): RViz2 (real/sim time set per mode). With ``gazebo:=true``,
   forwarded as ``start_rviz`` to ``inmoov_urdf/gazebo.launch.py`` (no second RViz).
 - ``gazebo`` (default ``false``): GZ Sim stack from ``inmoov_urdf``; requires ``real:=false``.
@@ -34,6 +34,8 @@ Arguments:
   keep producing frames without an X server. Forwarded to ``inmoov_urdf/gazebo.launch.py``.
 
 """
+
+from __future__ import annotations
 
 from pathlib import Path
 
@@ -107,41 +109,24 @@ def _default_robot_package():
     return ''
 
 
-def _load_robot_launch_defaults(robot_root: Path) -> dict[str, str]:
-    """Relative path defaults from ``config/control.launch.yaml`` when present."""
-    config_path = robot_root / 'config' / 'control.launch.yaml'
-    if not config_path.is_file():
-        return {}
-    try:
-        import yaml
-    except ImportError:
-        return {}
-    try:
-        data = yaml.safe_load(config_path.read_text(encoding='utf-8')) or {}
-    except (OSError, yaml.YAMLError):
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    out: dict[str, str] = {}
-    for key in ('urdf_path', 'base_path', 'controllers_yaml'):
-        value = data.get(key)
-        if isinstance(value, str) and value.strip():
-            out[key] = value.strip()
-    return out
-
-
 def _resolve_robot_paths(context):
     """
     Fill urdf_path / base_path / controllers_yaml from the selected robot_package.
 
-    Prefers ``config/control.launch.yaml`` in the robot package (relative paths
-    resolved against the package root). Falls back to the historical
-    ``description/urdf/inmoov.urdf.xacro`` layout when that file is absent.
-
-    Explicit ``urdf_path`` / ``base_path`` / ``controllers_yaml`` overrides
-    (non-empty) are left untouched.
+    Reads ``config/control.launch.yaml`` (same helper as lucy_config_pipeline) so
+    ``robot_package:=so_arm101_urdf`` gets ``robot.urdf.xacro``, not a hard-coded
+    InMoov path. Explicit non-empty launch overrides are left untouched.
     """
     from launch.actions import SetLaunchConfiguration
+
+    # Installed module name is ``src`` (lucy_config_pipeline setuptools layout).
+    try:
+        from src.robot_paths import resolve_robot_description_paths
+    except ImportError as exc:
+        raise RuntimeError(
+            'lucy.launch.py: cannot import src.robot_paths — is '
+            'lucy_config_pipeline built and the workspace overlay sourced?'
+        ) from exc
 
     robot_package = LaunchConfiguration('robot_package').perform(context).strip()
     if not robot_package:
@@ -149,27 +134,13 @@ def _resolve_robot_paths(context):
         return []
     share = get_package_share_directory(robot_package)
     robot_root = _infer_robot_source_root(robot_package, share)
-    launch_defaults = _load_robot_launch_defaults(robot_root)
-
-    def _abs(rel_or_abs: str) -> str:
-        p = Path(rel_or_abs)
-        if p.is_absolute():
-            return str(p)
-        return str((robot_root / p).resolve())
-
-    urdf_rel = launch_defaults.get(
-        'urdf_path', 'description/urdf/robot.urdf.xacro'
-    )
-    base_rel = launch_defaults.get('base_path', 'description')
-    controllers_rel = launch_defaults.get(
-        'controllers_yaml', 'config/controllers.yaml'
-    )
+    urdf, base, controllers = resolve_robot_description_paths(robot_root)
 
     defaults = {
-        'urdf_path': _abs(urdf_rel),
+        'urdf_path': str(urdf),
         # Goes into a file:// URI in the xacro, so it must be posix.
-        'base_path': Path(_abs(base_rel)).as_posix(),
-        'controllers_yaml': _abs(controllers_rel),
+        'base_path': base.as_posix(),
+        'controllers_yaml': str(controllers),
     }
     actions = []
     for key, default_value in defaults.items():
@@ -203,12 +174,122 @@ def _validate_lucy_launch(context):
     return []
 
 
+def _modbus_node_name(board_id: str) -> str:
+    """
+    Logical ros2_control ``node_name`` for a board.
+
+    Must match the hardware plugin ``node_name`` parameter from the generated
+    xacro (``derive_ros2_node_name``: bare suffix after ``rp2040_``, e.g.
+    ``rp2040_left_arm`` → ``left_arm``). POSIX SHM/sem stems are derived from
+    that same string inside the HI and ``lucy_modbus_bridge.shm``.
+    """
+    if board_id.startswith('rp2040_'):
+        return board_id[len('rp2040_'):]
+    return board_id
+
+
+def _resolve_hardware_yaml(context) -> Path | None:
+    """Locate active hardware YAML for Modbus bridge spawn."""
+    config_dir = LaunchConfiguration('config_dir').perform(context).strip()
+    if config_dir:
+        candidate = Path(config_dir) / 'active.yaml'
+        return candidate if candidate.is_file() else None
+    robot_package = LaunchConfiguration('robot_package').perform(context).strip()
+    if not robot_package:
+        return None
+    share = get_package_share_directory(robot_package)
+    robot_root = _infer_robot_source_root(robot_package, share)
+    candidate = robot_root / 'config' / 'hardware' / 'active.yaml'
+    return candidate if candidate.is_file() else None
+
+
+def _hi_node_names_in_robot(robot_root: Path) -> set[str]:
+    """``node_name`` params from generated ros2_control xacro under ``description/``."""
+    import re
+    import xml.etree.ElementTree as ET
+
+    names: set[str] = set()
+    desc = robot_root / 'description'
+    if not desc.is_dir():
+        return names
+    # Fallback for xacro that is not well-formed XML (macros / unexpanded tags).
+    pattern = re.compile(
+        r"""<param\s+name=["']node_name["']>\s*([^<\s]+)\s*</param>"""
+    )
+    for path in desc.rglob('*.xacro'):
+        try:
+            text = path.read_text(encoding='utf-8')
+        except OSError:
+            continue
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError:
+            names.update(m.group(1) for m in pattern.finditer(text))
+            continue
+        for el in root.iter('param'):
+            if el.get('name') == 'node_name' and el.text:
+                names.add(el.text.strip())
+    return names
+
+
 def _real_hardware_stack(context, *args, **kwargs):
-    """Build micro-ROS / camera / RealSense only when ``real`` is true (lazy package load)."""
+    """Spawn Modbus bridges (+ optional cameras) when ``real`` is true."""
     real = LaunchConfiguration('real').perform(context).lower().strip()
     if real not in ('true', '1', 'yes'):
         return []
     out = []
+
+    hw_yaml = _resolve_hardware_yaml(context)
+    if hw_yaml is not None:
+        try:
+            import yaml
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError('PyYAML required to spawn lucy_modbus_bridge nodes') from exc
+        data = yaml.safe_load(hw_yaml.read_text(encoding='utf-8')) or {}
+        boards = data.get('boards') or {}
+        robot_package = LaunchConfiguration('robot_package').perform(context).strip()
+        hi_names: set[str] | None = None
+        if robot_package:
+            share = get_package_share_directory(robot_package)
+            robot_root = _infer_robot_source_root(robot_package, share)
+            hi_names = _hi_node_names_in_robot(robot_root)
+        for board_id, bdef in boards.items():
+            if not isinstance(bdef, dict):
+                continue
+            serial = str(bdef.get('serial_id') or '').strip()
+            if not serial:
+                continue
+            node_name = _modbus_node_name(board_id)
+            if hi_names is not None and node_name not in hi_names:
+                out.append(
+                    LogInfo(
+                        msg=(
+                            f'lucy.launch: skip Modbus bridge for {board_id}: '
+                            f'no ros2_control node_name={node_name} in robot description'
+                        )
+                    )
+                )
+                continue
+            out.append(
+                Node(
+                    package='lucy_modbus_bridge',
+                    executable='modbus_bridge_node',
+                    name=f'modbus_bridge_{board_id}',
+                    output='screen',
+                    parameters=[
+                        {
+                            'node_name': node_name,
+                            'serial_id': serial,
+                            'slave_address': 1,
+                        }
+                    ],
+                )
+            )
+            out.append(
+                LogInfo(msg=f'lucy.launch: Modbus bridge for {board_id} serial={serial}')
+            )
+
+    # Cameras / RealSense remain opt-in until wiring is restored.
     return out
 
 
@@ -236,9 +317,11 @@ def generate_launch_description():
         'robot_package',
         default_value=_default_robot_package(),
         description=(
-            'Robot package: control.launch.py + config paths + RViz config + URDF. '
-            'Defaults to the only installed robot package when just one is present, '
-            'else inmoov_urdf.'
+            'Robot package: control.launch.py + config paths + RViz config + URDF + '
+            'lucy_config_pipeline. Set by the launcher robot modifier '
+            '(robot_package:=…). When unset, defaults to the only installed robot '
+            'package, else inmoov_urdf. Forwarded to web_ros_api / the pipeline '
+            '(those launches do not pick a robot on their own).'
         ),
     )
 
@@ -254,7 +337,7 @@ def generate_launch_description():
     real_arg = DeclareLaunchArgument(
         'real',
         default_value='false',
-        description='If true: micro-ROS agents, USB webcam, RealSense',
+        description='If true: lucy_modbus_bridge per board, USB webcam, RealSense',
     )
 
     rviz_arg = DeclareLaunchArgument(
@@ -278,13 +361,15 @@ def generate_launch_description():
         ),
     )
 
+    # Empty defaults: _resolve_robot_paths fills these from the selected
+    # robot_package at launch time, so robot_package:=<pkg> switches the URDF,
+    # base meshes and controllers together. Non-empty overrides are respected.
     urdf_path_arg = DeclareLaunchArgument(
         'urdf_path',
         default_value='',
         description=(
-            'Top-level robot xacro. Empty -> value from '
-            '<robot_package>/config/control.launch.yaml '
-            '(fallback: description/urdf/robot.urdf.xacro)'
+            'URDF/xacro entry. Empty -> path from '
+            '<robot_package>/config/control.launch.yaml'
         ),
     )
     base_path_arg = DeclareLaunchArgument(
@@ -336,6 +421,9 @@ def generate_launch_description():
         ]
     )
 
+    # Force value_type=str so ROS 2 launch does not try to YAML-parse
+    # the xacro output. The URDF starts with `<?xml ...>`, which the YAML
+    # loader rejects with "Unable to parse the value of parameter robot_description".
     robot_description = ParameterValue(
         Command(
             [
@@ -356,7 +444,6 @@ def generate_launch_description():
     robot_description_dict = {'robot_description': robot_description}
 
     robot_state_publisher = Node(
-        condition=IfCondition(LaunchConfiguration('gazebo')),
         package='robot_state_publisher',
         executable='robot_state_publisher',
         name='robot_state_publisher',
@@ -463,8 +550,8 @@ def generate_launch_description():
             LogInfo(msg='========================================'),
             web_ros_api_launch,
             real_hardware,
-            robot_state_publisher,
             ros2_control_launch,
+            robot_state_publisher,
             rviz,
             gazebo,
             LogInfo(msg='========================================'),
