@@ -2,7 +2,12 @@
 
 ROS 2 **Jazzy**. This document explains **ros2_control**, and how it is implemented in Lucy: hardware plugin, SHM/Modbus path, YAML, and launch files. URDF / xacro for `ros2_control` blocks live in the active robot package (e.g. **`thais_urdf`** / **`inmoov_urdf`**); plugin binary and shared helpers live in **`lucy_ros2_control`**.
 
-**Related:** [`DEVELOPER.md`](DEVELOPER.md) (repo layout, CI), robot-package `docs/DEVELOPER.md` for URDF / sim launches.
+**Related:**
+- Architecture index: [`lucy_ws/docs/architecture/README.md`](../../../docs/architecture/README.md)
+- System schematic: [`lucy_ws/docs/architecture/overview.md`](../../../docs/architecture/overview.md)
+- Conventions: [`lucy_ws/docs/architecture/GUIDE.md`](../../../docs/architecture/GUIDE.md)
+- Pipeline / SHM: [`architecture/pipeline_shm.md`](architecture/pipeline_shm.md)
+- [`DEVELOPER.md`](DEVELOPER.md) (repo layout, CI); robot-package `docs/DEVELOPER.md` for URDF / sim launches
 
 ---
 
@@ -37,24 +42,31 @@ Joint names in generated **`controllers.yaml`** must match the URDF / xacro **ex
 
 ## 3. Data flow (Lucy, real robot)
 
+**UML Component (ros2_control actuation)** - clients through SHM/Modbus to firmware.
+System-wide context is only in the [workspace overview](../../../docs/architecture/overview.md).
+
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"lineColor": "#00FF41", "edgeLabelBackground": "#161b22"}}}%%
 flowchart TB
-  C["Clients<br/>Control Panel / External Interface"]
-  CM["controller_manager<br/>trajectory controllers<br/>joint_state_broadcaster"]
-  WL["LucySystemHardware<br/>per-board URDF block"]
-  SHM["POSIX SHM<br/>reg table + dirty bits"]
+  C["Clients"]
+  CM["controller_manager"]
+  WL["LucySystemHardware"]
+  SHM["POSIX_SHM"]
   BR["lucy_modbus_bridge"]
-  FW["RP2040 Rust firmware<br/>Modbus RTU"]
-  JS["/joint_states"]
+  FW["RP2040_firmware"]
+  JS["joint_states"]
 
   C -->|"trajectory"| CM
   CM --> WL
   CM --> JS
-  WL -->|"write() millirad"| SHM --> BR -->|"FC06"| FW
+  WL -->|"write millirad"| SHM
+  SHM --> BR
+  BR -->|"FC06"| FW
+  linkStyle default stroke:#00FF41,stroke-width:2px
 ```
 
 - **`/joint_states`**: fused state for **`robot_state_publisher`**, RViz, TF. Comes from **`joint_state_broadcaster`**, not from Modbus.
-- **SHM / Modbus**: `write()` stores `cmd` + **angle milliradians** (`rad × 1000`) at `virtual_pin * 2` / `+1`. Config YAML angles stay in **degrees**.
+- **SHM / Modbus**: `write()` stores `cmd` + **angle milliradians** (`rad × 1000`) at `virtual_pin * 2` / `+1`. Config YAML angles are **radians** (degrees only at the LCP UI boundary).
 
 ---
 
@@ -71,7 +83,7 @@ flowchart TB
 Per-board parameters (xacro, real hardware path):
 
 - `node_name = lucy_hardware_interface_<suffix>` (SHM segment prefix; must match bridge `node_name`).
-- `publisher_topic` — optional legacy/debug `JointState` topic when `publish_actuators` is true. **Actuation does not depend on this topic.**
+- `publisher_topic` - optional legacy/debug `JointState` topic when `publish_actuators` is true. **Actuation does not depend on this topic.**
 
 Implementation (`lucy_ros2_control/src/lucy_system.cpp`):
 
@@ -79,8 +91,8 @@ Implementation (`lucy_ros2_control/src/lucy_system.cpp`):
 - **`read()`**: no encoders → `hw_positions_` mirrors the last command.
 - **`write()`** (in order):
   1. **URDF clamp** on `hw_commands_` (when enabled in the plugin path).
-  2. **Actuator mapping** — joint rad → servo rad via `actuator_command_to_servo_rad()`.
-  3. **SHM update** — `reg[virtual_pin*2]=1`, `reg[+1]=millirad`, set dirty bits under the board semaphore.
+  2. **Actuator mapping** - joint rad → servo rad via `actuator_command_to_servo_rad()`.
+  3. **SHM update** - `reg[virtual_pin*2]=1`, `reg[+1]=millirad`, set dirty bits under the board semaphore.
 
 > **Gazebo caveat.** `gz_ros2_control` (upstream `jazzy`) does **not** apply the `<command_interface><param name="min/max">` values inside `write()`. Gazebo may still respect joint limits from the spawned model/physics.
 
@@ -110,12 +122,12 @@ The panel sends trajectories to **`joint_trajectory_controller`** topics. That r
 
 ## 7. Operational pitfalls (integration)
 
-1. **Arm controllers inactive** — verify with `ros2 control list_controllers`.
-2. **Sim URDF on hardware** — real boards need `use_gazebo_sim:=false`.
-3. **Bridge / SHM name mismatch** — bridge `node_name` must equal HI `node_name` (`lucy_hardware_interface_<board_suffix>`).
-4. **Encoding** — firmware angle registers are **milliradians**, not degrees.
-5. **URDF limits invisible at runtime** — run the pipeline **GENERATE** step so min/max land in the installed xacro.
-6. **Gazebo over-travel** — see the caveat at the end of §4.
+1. **Arm controllers inactive** - verify with `ros2 control list_controllers`.
+2. **Sim URDF on hardware** - real boards need `use_gazebo_sim:=false`.
+3. **Bridge / SHM name mismatch** - bridge `node_name` must equal HI `node_name` (`lucy_hardware_interface_<board_suffix>`).
+4. **Encoding** - firmware angle registers are **milliradians**, not degrees.
+5. **URDF limits invisible at runtime** - run the pipeline **GENERATE** step so min/max land in the installed xacro.
+6. **Gazebo over-travel** - see the caveat at the end of §4.
 
 ---
 
@@ -136,10 +148,10 @@ The panel sends trajectories to **`joint_trajectory_controller`** topics. That r
 
 `lucy_config_pipeline` exposes the `ConfigurePipeline` action:
 
-1. **VALIDATE** — schema-check hardware YAML.
-2. **GENERATE** — regenerate ros2_control xacro, controllers YAML, and **`config_<board>.yaml`** for Rust firmware. **Always runs**, including in `simulation_only`.
-3. **BUILD** *(optional)* — Cargo (`thumbv6m-none-eabi`) + `elf2uf2-rs`.
-4. **FLASH** *(optional)* — `picotool` + Modbus FC03 verify.
-5. **RELOAD** — `/lucy_control/restart`.
+1. **VALIDATE** - schema-check hardware YAML.
+2. **GENERATE** - regenerate ros2_control xacro, controllers YAML, and **`config_<board>.yaml`** for Rust firmware. **Always runs**, including in `simulation_only`.
+3. **BUILD** *(optional)* - Cargo (`thumbv6m-none-eabi`) + `elf2uf2-rs`.
+4. **FLASH** *(optional)* - `picotool` + Modbus FC03 verify.
+5. **RELOAD** - `/lucy_control/restart`.
 
 Decoupling GENERATE from BUILD means the LCP "SIMULATION ONLY" toggle can update URDF limits without touching firmware.
