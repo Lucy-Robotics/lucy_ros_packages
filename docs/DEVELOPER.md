@@ -1,4 +1,4 @@
-# Developer guide — `lucy_ros_packages`
+# Developer guide - `lucy_ros_packages`
 
 ROS 2 **Jazzy**. For **contributors** who change launch files, nodes, `ros2_control` config, or CI in **this repository only**.
 
@@ -12,9 +12,11 @@ Conventions follow common packaging practice ([REP-149](https://www.ros.org/reps
 
 | Package | Responsibility |
 |---------|----------------|
-| `lucy_bringup` | Jetson **system bringup**: micro-ROS agents, `rosbridge_server`, `camera_ros`, RealSense, delayed include of `lucy_ros2_control`. |
-| `lucy_ros2_control` | **Hardware** `ros2_control`: `LucySystemHardware` plugin, `lucy_controllers.yaml`, `control.launch.py`. |
-| `lucy_config_generator` | Reads **`thais_urdf`** `config/hardware/active.yaml` (or selected export) → RP2040 `config_*.c`, `ros2_control` xacro, `controllers.yaml`. |
+| `lucy_bringup` | Jetson **system bringup**: `lucy_modbus_bridge`, `rosbridge_server`, `camera_ros`, RealSense, control include. |
+| `lucy_ros2_control` | **Hardware** `ros2_control`: `LucySystemHardware` plugin (SHM register table). |
+| `lucy_modbus_bridge` | SHM → Modbus RTU over USB serial (one node per board). |
+| `lucy_config_generator` | Hardware YAML → RP2040 `config_*.yaml`, `ros2_control` xacro, `controllers.yaml`. |
+| `lucy_config_pipeline` | Config store + `ConfigurePipeline` (validate → generate → Cargo build → flash → reload). |
 | `camera_ros` | MJPEG → `sensor_msgs/msg/CompressedImage`; GStreamer pipeline; pytest. |
 
 ---
@@ -28,7 +30,9 @@ lucy_ros_packages/
 │   └── ROS2_CONTROL.md      # ros2_control concepts + Lucy implementation
 ├── lucy_bringup/
 ├── lucy_ros2_control/
+├── lucy_modbus_bridge/
 ├── lucy_config_generator/
+├── lucy_config_pipeline/
 └── camera_ros/
 ```
 
@@ -62,7 +66,7 @@ source install/setup.bash
 | **Launch** | `ros2 launch lucy_bringup lucy.launch.py` |
 | **Args** | `device0`, `device1` (default `/dev/ttyACM0`, `/dev/ttyACM1`); audio args declared but audio nodes are **commented out** in `lucy.launch.py`; RealSense via `realsense.launch.py`. |
 | **Scripts** | `system_scripts/*.sh` → installed under `lib/lucy_bringup`. |
-| **Runtime deps** | `micro_ros_agent`, `lucy_ros2_control`, `rosbridge_server`, `camera_ros`, `audio_common`, `realsense2_camera`, `launch`, `launch_ros`. |
+| **Runtime deps** | `lucy_modbus_bridge`, `lucy_ros2_control`, `rosbridge_server`, `camera_ros`, `audio_common`, `realsense2_camera`, `lucy_config_pipeline`, `launch`, `launch_ros`. |
 
 **Developers**
 
@@ -75,8 +79,8 @@ source install/setup.bash
 |------|--------|
 | **Launch** | `ros2 launch lucy_ros2_control control.launch.py` |
 | **Plugin** | `lucy_ros2_control.xml` → `lucy_ros2_control/LucySystemHardware`; C++ implementation under `hardware/`. |
-| **Config** | `config/lucy_controllers.yaml` — must match joint names in **thais_urdf** xacro (`inmoov_ros2_control.xacro`) when you maintain controllers here; generated **`thais_urdf`** `controllers.yaml` must stay aligned when using **`lucy_config_generator`**. |
-| **Architecture** | **[docs/ROS2_CONTROL.md](ROS2_CONTROL.md)** — general ros2_control → Lucy topics, YAML, launches, pitfalls. |
+| **Config** | `config/lucy_controllers.yaml` - must match joint names in **thais_urdf** xacro (`inmoov_ros2_control.xacro`) when you maintain controllers here; generated **`thais_urdf`** `controllers.yaml` must stay aligned when using **`lucy_config_generator`**. |
+| **Architecture** | **[docs/ROS2_CONTROL.md](ROS2_CONTROL.md)** - general ros2_control → Lucy topics, YAML, launches, pitfalls. |
 
 **When you change controllers or joints**
 
@@ -96,7 +100,7 @@ source install/setup.bash
 | Item | Detail |
 |------|--------|
 | **CLI** | `ros2 run lucy_config_generator generate …` (see package **README**). |
-| **Tests** | `colcon test --packages-select lucy_config_generator` — golden outputs for C, xacro, YAML. |
+| **Tests** | `colcon test --packages-select lucy_config_generator` - golden outputs for firmware YAML, xacro, controllers. |
 
 ---
 
@@ -106,8 +110,8 @@ source install/setup.bash
 
 - **`rosdep install --from-paths src`** for `camera_ros`, `lucy_bringup`, `lucy_ros2_control`, `lucy_config_generator`
 - **`colcon build`** with `BUILD_TESTING=ON`
-- **`colcon test`** — ament linters, `camera_ros` pytests, **`lucy_bringup`** launch `py_compile` tests, **`lucy_ros2_control`** YAML tests, **`lucy_config_generator`** golden tests
-- **`pytest-cov`** — `camera_ros` (`scripts/`), `lucy_bringup` (`launch/`), `lucy_ros2_control` (`test/`), `lucy_config_generator` (`lucy_config_generator/`) → Cobertura XML + HTML under `ws/build/coverage_reports/`; **Codecov** flag `lucy_ros_packages` (optional **`CODECOV_TOKEN`**)
+- **`colcon test`** - ament linters, `camera_ros` pytests, **`lucy_bringup`** launch `py_compile` tests, **`lucy_ros2_control`** YAML tests, **`lucy_config_generator`** golden tests
+- **`pytest-cov`** - `camera_ros` (`scripts/`), `lucy_bringup` (`launch/`), `lucy_ros2_control` (`test/`), `lucy_config_generator` (`lucy_config_generator/`) → Cobertura XML + HTML under `ws/build/coverage_reports/`; **Codecov** flag `lucy_ros_packages` (optional **`CODECOV_TOKEN`**)
 
 Local commands: **README.md** → *Tests and coverage (local)*.
 
@@ -127,7 +131,7 @@ Local commands: **README.md** → *Tests and coverage (local)*.
 | Goal | Command |
 |------|---------|
 | Full Jetson stack | `ros2 launch lucy_bringup lucy.launch.py` |
-| Control stack only | `ros2 launch lucy_ros2_control control.launch.py` (requires **`thais_urdf`** installed in overlay — provides default URDF share) |
+| Control stack only | `ros2 launch lucy_ros2_control control.launch.py` (requires **`thais_urdf`** installed in overlay - provides default URDF share) |
 | USB camera | `ros2 launch camera_ros camera.launch.py` |
 | RViz / Gazebo + web panel | **`lucy_bringup`** **`lucy.launch.py`** with **`rviz`**, **`gazebo`**, **`real`** (see **`lucy_ws/README.md`**) |
 | URDF + RViz/Gazebo without web | **`thais_urdf`** **`control.launch.py`** + **`rviz_standalone.launch.py`**, or **`gazebo.launch.py`** |
