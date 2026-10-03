@@ -10,7 +10,7 @@ Package-level detail for **`lucy_ros_packages`**.
 **UML Activity (config pipeline)** - VALIDATE through RELOAD.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"lineColor": "#00FF41", "edgeLabelBackground": "#161b22"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#0d1117", "mainBkg": "#21262d", "primaryColor": "#21262d", "primaryTextColor": "#f0f6fc", "primaryBorderColor": "#00FF41", "secondaryColor": "#161b22", "secondaryTextColor": "#f0f6fc", "secondaryBorderColor": "#00FF41", "tertiaryColor": "#161b22", "tertiaryTextColor": "#f0f6fc", "tertiaryBorderColor": "#00FF41", "lineColor": "#00FF41", "textColor": "#f0f6fc", "nodeTextColor": "#f0f6fc", "edgeLabelBackground": "#161b22", "clusterBkg": "#0d1117", "clusterBorder": "#00FF41", "titleColor": "#f0f6fc"}}}%%
 flowchart LR
   V["VALIDATE"] --> G["GENERATE"]
   G --> B["BUILD"]
@@ -34,7 +34,7 @@ Toolchain readiness (`pixi run firmware-setup`) gates ACTIVATE / BUILD / FLASH.
 **UML Component (generator)** - `active.yaml` to ROS and firmware artifacts.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"lineColor": "#00FF41", "edgeLabelBackground": "#161b22"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#0d1117", "mainBkg": "#21262d", "primaryColor": "#21262d", "primaryTextColor": "#f0f6fc", "primaryBorderColor": "#00FF41", "secondaryColor": "#161b22", "secondaryTextColor": "#f0f6fc", "secondaryBorderColor": "#00FF41", "tertiaryColor": "#161b22", "tertiaryTextColor": "#f0f6fc", "tertiaryBorderColor": "#00FF41", "lineColor": "#00FF41", "textColor": "#f0f6fc", "nodeTextColor": "#f0f6fc", "edgeLabelBackground": "#161b22", "clusterBkg": "#0d1117", "clusterBorder": "#00FF41", "titleColor": "#f0f6fc"}}}%%
 flowchart TB
   Active["active.yaml"] --> Gen["lucy_config_generator"]
   Gen -.-> Xacro["ros2_control_xacro"]
@@ -80,7 +80,7 @@ sequenceDiagram
 **UML Component (actuation path)** - same path as boxes.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"lineColor": "#00FF41", "edgeLabelBackground": "#161b22"}}}%%
+%%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#0d1117", "mainBkg": "#21262d", "primaryColor": "#21262d", "primaryTextColor": "#f0f6fc", "primaryBorderColor": "#00FF41", "secondaryColor": "#161b22", "secondaryTextColor": "#f0f6fc", "secondaryBorderColor": "#00FF41", "tertiaryColor": "#161b22", "tertiaryTextColor": "#f0f6fc", "tertiaryBorderColor": "#00FF41", "lineColor": "#00FF41", "textColor": "#f0f6fc", "nodeTextColor": "#f0f6fc", "edgeLabelBackground": "#161b22", "clusterBkg": "#0d1117", "clusterBorder": "#00FF41", "titleColor": "#f0f6fc"}}}%%
 flowchart TB
   Clients["Clients"]
   CM["controller_manager"]
