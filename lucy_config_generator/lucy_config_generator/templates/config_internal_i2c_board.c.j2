@@ -27,9 +27,9 @@ void dump_config(void) {
   joint->config.virtual_pin =         {{ a.virtual_pin }};
   joint->config.physical_pin =        INTERNAL_SERVO_{{ a.physical_pin }};
   joint->config.servo_type =          SERVO_TYPE_{{ a.servo_type | replace('"', '') }};
-  joint->config.security_min_angle =  DEG_TO_RAD({{ a.servo_min_deg }});
-  joint->config.security_max_angle =  DEG_TO_RAD({{ a.servo_max_deg }});
-  joint->config.default_angle =       DEG_TO_RAD({{ a.servo_default_deg }});
+  joint->config.security_min_angle =  {{ a.servo_min_rad }};
+  joint->config.security_max_angle =  {{ a.servo_max_rad }};
+  joint->config.default_angle =       {{ a.servo_default_rad }};
   joint->config.init_joint =          &internal_joint_init;
   joint->config.move_joint =          &internal_joint_move;
   joint++;
