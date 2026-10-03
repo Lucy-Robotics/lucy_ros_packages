@@ -43,30 +43,34 @@ Joint names in generated **`controllers.yaml`** must match the URDF / xacro **ex
 ## 3. Data flow (Lucy, real robot)
 
 **UML Component (ros2_control actuation)** - clients through SHM/Modbus to firmware.
-System-wide context is only in the [workspace overview](../../../docs/architecture/overview.md).
+There is **no micro-ROS** path and **no `/actuators/*` command topics** for
+actuation. System-wide context is only in the
+[workspace overview](../../../docs/architecture/overview.md); package detail is in
+[`architecture/pipeline_shm.md`](architecture/pipeline_shm.md).
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#0d1117", "mainBkg": "#21262d", "primaryColor": "#21262d", "primaryTextColor": "#f0f6fc", "primaryBorderColor": "#00FF41", "secondaryColor": "#161b22", "secondaryTextColor": "#f0f6fc", "secondaryBorderColor": "#00FF41", "tertiaryColor": "#161b22", "tertiaryTextColor": "#f0f6fc", "tertiaryBorderColor": "#00FF41", "lineColor": "#00FF41", "textColor": "#f0f6fc", "nodeTextColor": "#f0f6fc", "edgeLabelBackground": "#161b22", "clusterBkg": "#0d1117", "clusterBorder": "#00FF41", "titleColor": "#f0f6fc"}}}%%
 flowchart TB
-  C["Clients"]
+  Clients["Clients"]
   CM["controller_manager"]
-  WL["LucySystemHardware"]
+  HI["LucySystemHardware"]
   SHM["POSIX_SHM"]
-  BR["lucy_modbus_bridge"]
-  FW["RP2040_firmware"]
+  Bridge["lucy_modbus_bridge"]
+  FW["RP2040_Modbus"]
   JS["joint_states"]
 
-  C -->|"trajectory"| CM
-  CM --> WL
-  CM --> JS
-  WL -->|"write millirad"| SHM
-  SHM --> BR
-  BR -->|"FC06"| FW
+  Clients -->|"trajectory"| CM
+  CM --> HI
+  CM -->|"joint_state_broadcaster"| JS
+  HI -->|"write millirad + dirty"| SHM
+  SHM -->|"poll dirty"| Bridge
+  Bridge -->|"FC06 USB CDC"| FW
   linkStyle default stroke:#00FF41,stroke-width:2px
 ```
 
-- **`/joint_states`**: fused state for **`robot_state_publisher`**, RViz, TF. Comes from **`joint_state_broadcaster`**, not from Modbus.
-- **SHM / Modbus**: `write()` stores `cmd` + **angle milliradians** (`rad × 1000`) at `virtual_pin * 2` / `+1`. Config YAML angles are **radians** (degrees only at the LCP UI boundary).
+- **`/joint_states`**: fused state for **`robot_state_publisher`**, RViz, TF. Comes from **`joint_state_broadcaster`**, not from Modbus or firmware.
+- **SHM / Modbus**: `LucySystemHardware::write()` stores `cmd` + **angle milliradians** (`rad × 1000`) at `virtual_pin * 2` / `+1` and sets dirty bits. **`lucy_modbus_bridge`** polls SHM and sends **Modbus FC06** over USB CDC. Config YAML angles are **radians** (degrees only at the LCP UI boundary).
+- **Optional debug**: when `publish_actuators` is true, the HI may also publish a legacy `JointState` topic. Actuation does **not** depend on it.
 
 ---
 

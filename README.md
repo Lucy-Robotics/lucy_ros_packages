@@ -6,7 +6,7 @@ ROS 2 **Jazzy** repository for **Lucy** (Sentience Robotics): runtime bringup, `
 
 | Package | One-line role |
 |---------|----------------|
-| [**lucy_bringup**](lucy_bringup/) | Jetson **system launch**: micro-ROS agents, **`web_ros_api`** (rosbridge + **`lucy_config_pipeline`**), RealSense, `camera_ros`, delayed [`lucy_ros2_control`](lucy_ros2_control/) bringup; **`lucy_*_development`** composes the web stack with **`thais_urdf`** RViz/Gazebo. |
+| [**lucy_bringup**](lucy_bringup/) | Jetson **system launch**: **`lucy_modbus_bridge`**, **`web_ros_api`** (rosbridge + **`lucy_config_pipeline`**), RealSense, `camera_ros`, [`lucy_ros2_control`](lucy_ros2_control/) bringup; **`lucy_*_development`** composes the web stack with **`thais_urdf`** RViz/Gazebo. |
 | [**lucy_ros2_control**](lucy_ros2_control/) | **Hardware** `ros2_control` plugin (`LucySystemHardware`), controller YAML, `control.launch.py` for the real robot stack (no RViz/rosbridge in that launch). |
 | [**lucy_config_generator**](lucy_config_generator/) | **Config pipeline**: reads **`thais_urdf`** hardware YAML and emits RP2040 firmware C, `ros2_control` xacro, and `controllers.yaml` (see package README). |
 | [**lucy_config_pipeline**](lucy_config_pipeline/) | **Config store + `ConfigurePipeline` action**: validate YAML, generate artifacts, build/flash RP2040 firmware via `picotool` [README](lucy_config_pipeline/README.md). |
@@ -23,7 +23,7 @@ Package names match directories (`<name>` in each `package.xml`).
 
 - **OS**: Ubuntu 24.04
 - **ROS**: [ROS 2 Jazzy](https://docs.ros.org/en/jazzy/Installation.html).
-- **Per-package extras**: Jetson-typical USB video and audio stacks for bringup; RealSense SDK stack for `realsense2_camera`; serial devices for micro-ROS. See each package README and `lucy_bringup/REALSENSE.md`.
+- **Per-package extras**: Jetson-typical USB video and audio stacks for bringup; RealSense SDK stack for `realsense2_camera`; USB serial for Modbus bridges. See each package README and `lucy_bringup/REALSENSE.md`.
 
 ## Picotool and passwordless sudo
 
