@@ -7,14 +7,19 @@ from src.pipeline import build as pipeline_build
 def _sample_data() -> dict:
     return {
         'firmware': {'source_dir': 'fw', 'build_dir': 'build'},
-        'boards': {'rp2040_right_arm': {'firmware_target': 'lucy_right_arm'}},
+        'boards': {
+            'rp2040_right_arm': {
+                'firmware_target': 'lucy_right_arm',
+                'board_class': 'internal_servo_only',
+            },
+        },
     }
 
 
 def _make_fw_tree(tmp_path: Path, crate: str = 'rp2040_servo2040') -> Path:
     fw_src = tmp_path / 'fw'
-    (fw_src / 'firmwares' / 'rp2040').mkdir(parents=True)
-    (fw_src / 'firmwares' / 'rp2040' / 'Cargo.toml').write_text('[package]\nname="x"\n')
+    (fw_src / 'firmwares' / crate).mkdir(parents=True)
+    (fw_src / 'firmwares' / crate / 'Cargo.toml').write_text('[package]\nname="x"\n')
     (fw_src / 'build').mkdir(parents=True)
     return fw_src
 

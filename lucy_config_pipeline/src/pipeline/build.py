@@ -6,8 +6,21 @@ import shutil
 import subprocess
 import threading
 
+from lucy_config_generator.schema import resolve_firmware_crate
+
 from .selection import board_build_plan
 from .selection import resolve_firmware_paths
+
+
+def firmware_crate_relpath(board: dict) -> str:
+    """Relative firmwares/<crate> path for a board definition."""
+    return resolve_firmware_crate(board)
+
+
+def firmware_package_name(crate_relpath: str) -> str:
+    """Cargo package / ELF basename derived from firmwares/<dir> path."""
+    crate_dir = Path(crate_relpath).name
+    return f'lucy_embedded_firmware_{crate_dir}'
 
 
 def run_build_phase(
@@ -35,22 +48,27 @@ def run_build_phase(
             'cargo not found; run `pixi run firmware-setup` to install the Rust toolchain'
         )
 
-    manifest = paths.source_dir / 'firmwares' / 'rp2040' / 'Cargo.toml'
-    if not manifest.is_file():
-        raise FileNotFoundError(manifest)
-
+    boards_map = data.get('boards', {})
     failed_boards: list[str] = []
     for board, target in plan:
+        board_def = boards_map.get(board, {})
+        crate_rel = firmware_crate_relpath(board_def)
+        manifest = paths.source_dir / crate_rel / 'Cargo.toml'
+        package_name = firmware_package_name(crate_rel)
+
         feedback(
             phase='build',
             progress=step_idx / total_steps,
-            detail=f'building cargo target for {board} ({target})',
+            detail=f'building {crate_rel} for {board} ({target})',
             board=board,
         )
         try:
-            # Install board config.yaml next to the RP2040 crate for build.rs.
+            if not manifest.is_file():
+                raise FileNotFoundError(manifest)
+
+            # Install board config.yaml next to the selected crate for build.rs.
             board_cfg = paths.source_dir / 'config' / f'config_{board}.yaml'
-            crate_cfg = paths.source_dir / 'firmwares' / 'rp2040' / 'config.yaml'
+            crate_cfg = paths.source_dir / crate_rel / 'config.yaml'
             if board_cfg.is_file():
                 shutil.copy2(board_cfg, crate_cfg)
 
@@ -77,11 +95,9 @@ def run_build_phase(
                 / 'target'
                 / 'thumbv6m-none-eabi'
                 / 'release'
-                / 'lucy_embedded_firmware_rp2040'
+                / package_name
             )
-            # Binary name may match package name without extension.
             if not elf.exists():
-                # Fallback: first non-.d file in release dir matching package.
                 release_dir = paths.source_dir / 'target' / 'thumbv6m-none-eabi' / 'release'
                 candidates = [
                     p

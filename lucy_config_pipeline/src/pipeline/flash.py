@@ -231,6 +231,7 @@ def _wait_modbus_ready(serial_id: str, timeout_sec: float) -> bool:
         )
     return False
 
+
 def _picotool_prefix() -> list[str]:
     use_sudo = os.environ.get('LUCY_PIPELINE_FLASH_USE_SUDO', '').strip().lower() in (
         '1',
@@ -243,7 +244,8 @@ def _picotool_prefix() -> list[str]:
 
 
 def _picotool_load_cmd(uf2: Path, serial: str, *, force: bool = True) -> list[str]:
-    """Build picotool load argv (optional ``-f`` / ``--ser`` / ``-x``).
+    """
+    Build picotool load argv (optional ``-f`` / ``--ser`` / ``-x``).
 
     ``-x`` / ``--execute`` boots the loaded image. Without it, a BOOTSEL-only
     ``picotool load`` can leave the device on the RPI-RP2 volume with no CDC.
@@ -311,7 +313,8 @@ def _windows_bootsel_mount() -> Path | None:
 
 
 def _bootsel_volume_dev() -> Path | None:
-    """Return the RPI-RP2 device/mount path if the Pico is already in BOOTSEL MSD mode.
+    """
+    Return the RPI-RP2 device/mount path if the Pico is already in BOOTSEL MSD mode.
 
     - Linux: ``/dev/disk/by-label/RPI-RP2`` (block device; mount via findmnt/udisksctl)
     - macOS: ``/Volumes/RPI-RP2`` (auto-mounted)
@@ -339,7 +342,8 @@ def _bootsel_volume_dev() -> Path | None:
 
 
 def _find_mount_point_for(dev: Path) -> Path | None:
-    """Resolve a mount directory for the BOOTSEL volume.
+    """
+    Resolve a mount directory for the BOOTSEL volume.
 
     On Linux ``dev`` is a block device; on macOS/Windows ``dev`` is already the
     mount root returned by :func:`_bootsel_volume_dev`.
@@ -363,7 +367,8 @@ def _find_mount_point_for(dev: Path) -> Path | None:
 
 
 def _copy_uf2_to_bootsel_volume(uf2: Path, feedback: Callable[..., None], board: str) -> bool:
-    """Flash by copying UF2 onto the RPI-RP2 mass-storage volume (already in BOOTSEL).
+    """
+    Flash by copying UF2 onto the RPI-RP2 mass-storage volume (already in BOOTSEL).
 
     Linux may need ``udisksctl`` to mount; macOS and Windows expose an already-
     mounted path from :func:`_bootsel_volume_dev`.
@@ -437,7 +442,8 @@ def _flash_uf2_to_board(
     feedback: Callable[..., None],
     stream_progress: float,
 ) -> None:
-    """Load UF2 via picotool, with BOOTSEL / MSD fallbacks.
+    """
+    Load UF2 via picotool, with BOOTSEL / MSD fallbacks.
 
     ``picotool load -f --ser <flash_id>`` works when the running firmware
     exposes the Pico USB reset interface (VID ``2e8a`` + picotool Reset class).
@@ -505,7 +511,8 @@ def _usb_serial_matches(needle: str, *, device: str = '', serial_number: str = '
 
 
 def _wait_for_usb_serial(serial_id: str, timeout_seconds: int) -> bool:
-    """Return whether USB CDC for ``serial_id`` is back after flash.
+    """
+    Return whether USB CDC for ``serial_id`` is back after flash.
 
     - Linux: prefer ``/dev/serial/by-id`` (stable udev symlinks), then pyserial.
     - macOS / Windows: pyserial ``list_ports`` only (no by-id tree).

@@ -219,7 +219,6 @@ def _modbus_node_name(board_id: str) -> str:
     return board_id
 
 
-
 def _resolve_hardware_yaml(context) -> Path | None:
     """Locate active hardware YAML for Modbus bridge spawn."""
     config_dir = LaunchConfiguration('config_dir').perform(context).strip()

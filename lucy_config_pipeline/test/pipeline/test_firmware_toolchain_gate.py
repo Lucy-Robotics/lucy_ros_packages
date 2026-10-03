@@ -15,9 +15,9 @@ import pytest
 
 pytest.importorskip('rclpy')
 
-from src.pipeline.action_server import PipelineActionServer
-from src.pipeline.models import PipelinePaths
-import yaml
+from src.pipeline.action_server import PipelineActionServer  # noqa: E402
+from src.pipeline.models import PipelinePaths  # noqa: E402
+import yaml  # noqa: E402
 
 _FIXTURE = (
     Path(__file__).resolve().parents[2]

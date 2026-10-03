@@ -332,7 +332,7 @@ class PipelineActionServer(Node):
                     result.message = (
                         flash_details[0]
                         if len(flash_details) == 1
-                        else f"flash failed ({len(flash_failed)} board(s))"
+                        else f'flash failed ({len(flash_failed)} board(s))'
                     )
                     goal_handle.abort()
                     return result
