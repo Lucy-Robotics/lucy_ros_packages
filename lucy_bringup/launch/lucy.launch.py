@@ -145,15 +145,6 @@ def _resolve_robot_paths(context):
     """
     from launch.actions import SetLaunchConfiguration
 
-    # Installed module name is ``src`` (lucy_config_pipeline setuptools layout).
-    try:
-        from src.robot_paths import resolve_robot_description_paths
-    except ImportError as exc:
-        raise RuntimeError(
-            'lucy.launch.py: cannot import src.robot_paths — is '
-            'lucy_config_pipeline built and the workspace overlay sourced?'
-        ) from exc
-
     robot_package = LaunchConfiguration('robot_package').perform(context).strip()
     if not robot_package:
         # _validate_lucy_launch already raised; nothing to resolve.
