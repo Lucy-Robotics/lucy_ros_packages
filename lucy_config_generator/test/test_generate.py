@@ -355,7 +355,7 @@ def test_bus_servo_board_generates_rust_layout():
     assert f'config_{board_id}.c' not in out
     yaml_text = out[f'config_{board_id}.yaml']
     assert 'board_class: bus_servo_only' in yaml_text
-    assert 'firmware_crate: firmwares/rp2040_bus_servo' in yaml_text
+    assert 'firmware_crate: firmwares/rp2040_servo2040' in yaml_text
     assert 'driver: BusServoDriver' in yaml_text
     assert 'channel: UART0:' in yaml_text
 

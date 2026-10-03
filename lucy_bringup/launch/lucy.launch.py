@@ -278,6 +278,14 @@ def _real_hardware_stack(context, *args, **kwargs):
             raise RuntimeError('PyYAML required to spawn lucy_modbus_bridge nodes') from exc
         data = yaml.safe_load(hw_yaml.read_text(encoding='utf-8')) or {}
         boards = data.get('boards') or {}
+        actuators = data.get('actuators') or []
+        sensors = data.get('sensors') or []
+        active_boards: set[str] = set()
+        for row in list(actuators) + list(sensors):
+            if isinstance(row, dict) and row.get('enabled') is True:
+                bid = str(row.get('board') or '').strip()
+                if bid:
+                    active_boards.add(bid)
         robot_package = LaunchConfiguration('robot_package').perform(context).strip()
         hi_names: set[str] | None = None
         if robot_package:
@@ -289,6 +297,16 @@ def _real_hardware_stack(context, *args, **kwargs):
                 continue
             serial = str(bdef.get('serial_id') or '').strip()
             if not serial:
+                continue
+            if board_id not in active_boards:
+                out.append(
+                    LogInfo(
+                        msg=(
+                            f'lucy.launch: skip Modbus bridge for {board_id}: '
+                            'no enabled actuators/sensors in active hardware config'
+                        )
+                    )
+                )
                 continue
             node_name = _modbus_node_name(board_id)
             if hi_names is not None and node_name not in hi_names:

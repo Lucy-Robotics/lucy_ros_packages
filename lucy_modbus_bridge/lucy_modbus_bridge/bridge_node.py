@@ -60,16 +60,44 @@ class ModbusBridgeNode(Node):
             f'(node_name={self._node_name})'
         )
         self._shm = open_board_shm(self._node_name, timeout_sec=shm_wait)
-        self._port = self._open_serial()
+        self._port = None
+        self._warn_missing_serial = True
+        self._try_open_serial()
         period = 1.0 / max(poll_hz, 1.0)
         self._timer = self.create_timer(period, self._on_timer)
-        self.get_logger().info(
-            f'bridge ready: node_name={self._node_name} '
-            f'shm={self._shm.shm_node_name} '
-            f'serial={self._port.port} slave={self._slave}'
-        )
+        if self._port is not None:
+            self.get_logger().info(
+                f'bridge ready: node_name={self._node_name} '
+                f'shm={self._shm.shm_node_name} '
+                f'serial={self._port.port} slave={self._slave}'
+            )
+        else:
+            self.get_logger().warn(
+                f'bridge idle (no USB yet): node_name={self._node_name} '
+                f'serial_id={self._serial_id!r} — will retry each poll'
+            )
 
-    def _open_serial(self):
+    def _try_open_serial(self) -> bool:
+        """Open USB CDC when present; return False without raising if absent."""
+        if self._port is not None:
+            return True
+        port = self._find_serial()
+        if port is None:
+            if self._warn_missing_serial:
+                vid_s = f'{self._vid:#x}' if self._vid else 'any'
+                pid_s = f'{self._pid:#x}' if self._pid else 'any'
+                self.get_logger().warn(
+                    f'no USB serial matching vid={vid_s} pid={pid_s} '
+                    f'serial_id={self._serial_id!r}; bridge will retry'
+                )
+                self._warn_missing_serial = False
+            return False
+        self._port = port
+        self._warn_missing_serial = True
+        self.get_logger().info(f'USB serial open: {self._port.port}')
+        return True
+
+    def _find_serial(self):
         needle = self._serial_id.lower()
         candidates = []
         for info in list_ports.comports():
@@ -93,13 +121,11 @@ class ModbusBridgeNode(Node):
                     return serial.Serial(info.device, self._baud, timeout=0.05)
             info = candidates[0]
             return serial.Serial(info.device, self._baud, timeout=0.05)
-        vid_s = f'{self._vid:#x}' if self._vid else 'any'
-        pid_s = f'{self._pid:#x}' if self._pid else 'any'
-        raise RuntimeError(
-            f'no USB serial matching vid={vid_s} pid={pid_s} serial_id={self._serial_id!r}'
-        )
+        return None
 
     def _on_timer(self) -> None:
+        if not self._try_open_serial():
+            return
         # Serialize against LucySystemHardware::write via the shared semaphore.
         try:
             wait_sem(self._shm)
@@ -124,6 +150,12 @@ class ModbusBridgeNode(Node):
                     _ = self._port.read(16)
                 except Exception as exc:  # noqa: BLE001
                     self.get_logger().error(f'Modbus write failed reg={reg}: {exc}')
+                    try:
+                        self._port.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    self._port = None
+                    self._warn_missing_serial = True
                     continue
                 set_clean(self._shm.header_mm, reg)
         finally:

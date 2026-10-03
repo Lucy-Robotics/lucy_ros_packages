@@ -97,11 +97,12 @@ BOARD_CLASSES = frozenset(
 )
 
 # board_class → Cargo package directory under firmwares/ (relative to firmware.source_dir).
-# Pimoroni Servo2040 is one firmware; board_class selects layout/capabilities in YAML.
+# Pimoroni Servo2040 is one firmware; board_class selects layout/capabilities in YAML
+# (PWM / UART-bus / I2C-PWM / ADC banks gated by codegen HAS_* flags).
 BOARD_CLASS_TO_CRATE: dict[str, str] = {
     BOARD_CLASS_INTERNAL_ONLY: 'firmwares/rp2040_servo2040',
     BOARD_CLASS_INTERNAL_I2C_PWM: 'firmwares/rp2040_servo2040',
-    BOARD_CLASS_BUS_SERVO_ONLY: 'firmwares/rp2040_bus_servo',
+    BOARD_CLASS_BUS_SERVO_ONLY: 'firmwares/rp2040_servo2040',
 }
 
 # Driver / Modbus adapter names emitted into per-board firmware YAML.

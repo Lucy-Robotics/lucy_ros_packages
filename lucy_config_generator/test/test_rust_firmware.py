@@ -174,7 +174,7 @@ def test_render_firmware_yaml_i2c_board():
 def test_render_firmware_yaml_bus_servo_board():
     text = render_firmware_yaml(MINIMAL, 'rp2040_so_arm')
     assert 'board_class: bus_servo_only' in text
-    assert 'firmware_crate: firmwares/rp2040_bus_servo' in text
+    assert 'firmware_crate: firmwares/rp2040_servo2040' in text
     assert 'driver: BusServoDriver' in text
     assert 'channel: UART0:1' in text
     assert 'slave_address: 2' in text

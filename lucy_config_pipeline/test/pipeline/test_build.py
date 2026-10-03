@@ -31,7 +31,7 @@ def test_firmware_crate_relpath_by_board_class():
     )
     assert (
         pipeline_build.firmware_crate_relpath({'board_class': 'bus_servo_only'})
-        == 'firmwares/rp2040_bus_servo'
+        == 'firmwares/rp2040_servo2040'
     )
     assert (
         pipeline_build.firmware_crate_relpath({'board_class': 'internal_servo_i2c_pwm'})
