@@ -42,10 +42,10 @@ enum class Type
   BUS_SERVO
 };
 
-/// Convert radians to degrees.
+/// Convert radians to degrees (UI / diagnostics only).
 double rad_to_deg(double rad);
 
-/// Convert degrees to radians.
+/// Convert degrees to radians (UI / diagnostics only).
 double deg_to_rad(double deg);
 
 /// URDF joint-space command envelope (radians); ``±inf`` means "unbounded".
@@ -62,12 +62,12 @@ struct ActuatedJointMapping
   Type type{0};
   int virtual_pin{0};
   int bus_id{0};
-  double offset_deg{0.0};
+  double offset_rad{0.0};
   double direction{1.0};
   double scale{1.0};
-  double servo_min_deg{0.0};
-  double servo_max_deg{0.0};
-  double servo_default_deg{0.0};
+  double servo_min_rad{0.0};
+  double servo_max_rad{0.0};
+  double servo_default_rad{0.0};
   /// URDF joint-space limits from command_interface min/max (rad).
   double min_rad{-std::numeric_limits<double>::infinity()};
   double max_rad{std::numeric_limits<double>::infinity()};
@@ -111,12 +111,11 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
   double min_rad,
   double max_rad);
 
-/// Default joint position (rad) derived from the actuator's ``servo_default_deg``.
+/// Default joint position (rad) derived from the actuator's ``servo_default_rad``.
 double default_joint_position_rad(const ActuatedJointMapping & m);
 
 /// Servo angle (rad) published to firmware for a joint-space command (rad):
-/// maps joint→servo degrees, clamps to ``[servo_min_deg, servo_max_deg]``, then
-/// converts back to radians.
+/// maps joint→servo radians, clamps to ``[servo_min_rad, servo_max_rad]``.
 double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd_rad);
 
 /// Sort ``mappings`` ascending by ``virtual_pin`` and return the first repeated

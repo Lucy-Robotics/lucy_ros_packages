@@ -17,8 +17,14 @@ import jinja2
 from lucy_config_generator.schema import BOARD_CLASS_BUS_SERVO_ONLY
 from lucy_config_generator.schema import BOARD_CLASS_INTERNAL_I2C_PWM
 from lucy_config_generator.schema import BOARD_CLASS_INTERNAL_ONLY
+from lucy_config_generator.schema import board_slave_address
+from lucy_config_generator.schema import channel_for_actuator
+from lucy_config_generator.schema import channel_for_sensor
 from lucy_config_generator.schema import derive_ros2_hardware_name
 from lucy_config_generator.schema import derive_ros2_node_name
+from lucy_config_generator.schema import driver_for_board_class
+from lucy_config_generator.schema import DRIVER_PRESSURE
+from lucy_config_generator.schema import resolve_firmware_crate
 from lucy_config_generator.schema import resolve_generated_files
 from lucy_config_generator.schema import validate_hardware_yaml
 
@@ -67,16 +73,19 @@ def _xacro_argv(
 
 def _parse_urdf_joints_xml(
     urdf_xml: str,
-) -> tuple[set[str], dict[str, tuple[float, float]]]:
-    """Joint names and URDF ``<limit lower upper>`` (rad) for revolute/prismatic joints."""
+) -> tuple[set[str], dict[str, tuple[float, float]], set[str]]:
+    """Joint names, URDF limits (rad), and mimic joint names."""
     root = ET.fromstring(urdf_xml)
     names: set[str] = set()
+    mimics: set[str] = set()
     limits: dict[str, tuple[float, float]] = {}
     for j in root.findall('joint'):
         name = j.attrib.get('name')
         if not name:
             continue
         names.add(name)
+        if j.find('mimic') is not None:
+            mimics.add(name)
         if j.attrib.get('type') not in ('revolute', 'prismatic'):
             continue
         limit_el = j.find('limit')
@@ -87,7 +96,7 @@ def _parse_urdf_joints_xml(
         if lo is None or hi is None:
             continue
         limits[name] = (float(lo), float(hi))
-    return names, limits
+    return names, limits, mimics
 
 
 def _expand_urdf_xacro(
@@ -114,7 +123,7 @@ def urdf_joint_names(
     controller_config: Path,
 ) -> set[str]:
     """Joint names from processed URDF (same args as thais_urdf xacro smoke)."""
-    names, _ = _parse_urdf_joints_xml(
+    names, _, _ = _parse_urdf_joints_xml(
         _expand_urdf_xacro(urdf_xacro, base_path, controller_config)
     )
     return names
@@ -126,7 +135,7 @@ def urdf_joint_limits(
     controller_config: Path,
 ) -> dict[str, tuple[float, float]]:
     """URDF position limits (rad) keyed by joint name."""
-    _, limits = _parse_urdf_joints_xml(
+    _, limits, _ = _parse_urdf_joints_xml(
         _expand_urdf_xacro(urdf_xacro, base_path, controller_config)
     )
     return limits
@@ -177,7 +186,8 @@ def _sensors_for_board_firmware(
 def _actuator_joint_for_ros2(
     actuator: dict[str, Any],
     urdf_limits: dict[str, tuple[float, float]],
-    board_class: str = BOARD_CLASS_INTERNAL_ONLY,
+    *,
+    board_class: str,
 ) -> dict[str, Any]:
     """Copy actuator row and attach URDF command_interface min/max when present."""
     row = dict(actuator)
@@ -186,9 +196,8 @@ def _actuator_joint_for_ros2(
         row['limit_lower_rad'] = pair[0]
         row['limit_upper_rad'] = pair[1]
     if board_class == BOARD_CLASS_BUS_SERVO_ONLY:
-        # physical_pin is the servo's id on the shared UART, not a board pin.
         row['joint_type'] = 'bus_servo'
-        row['bus_id'] = actuator['physical_pin']
+        row['bus_id'] = int(actuator['physical_pin'])
     return row
 
 
@@ -200,8 +209,9 @@ def _ros2_control_blocks(
     blocks: list[dict[str, Any]] = []
     for bid in board_ids:
         bdef = data['boards'][bid]
+        board_class = str(bdef['board_class'])
         joints = [
-            _actuator_joint_for_ros2(a, urdf_limits, bdef['board_class'])
+            _actuator_joint_for_ros2(a, urdf_limits, board_class=board_class)
             for a in _actuators_for_board(data, bid, enabled_only=False)
         ]
         blocks.append(
@@ -277,10 +287,8 @@ def _gazebo_sensors(data: dict[str, Any]) -> list[dict[str, Any]]:
     if 'sensors' not in data:
         return sensors
 
-    tmp_dict: dict[str, list[dict[str, Any]]] = {}
+    tmp_dict = {}
     for sensor in data['sensors']:
-        if not sensor.get('enabled', True):
-            continue
         board_name = sensor['board']
         tmp_dict.setdefault(board_name, []).append({})
 
@@ -304,24 +312,12 @@ def _extra_joints(
     Every actuator (enabled or not) is exported under ``ros2_control`` and trajectory
     controllers; only **non-actuator** URDF joints (passive / unmapped) need
     ``extra_joints`` so ``joint_state_broadcaster`` can publish them for TF.
-
-    ``<mimic>`` joints are excluded: ``robot_state_publisher`` derives their position
-    from the joint they follow, but only for names absent from ``/joint_states``
-    (it inserts, it does not overwrite). Publishing them here at 0.0 would pin them.
+    Mimic joints are driven by ``robot_state_publisher`` and must not be listed.
     """
     actuated = {a['urdf_joint'] for a in data['actuators']}
-    extra = sorted(urdf_joints - actuated - (mimic_joints or set()))
+    mimics = mimic_joints or set()
+    extra = sorted(urdf_joints - actuated - mimics)
     return extra
-
-
-def _mimic_joint_names(urdf_xml: str) -> set[str]:
-    """Names of joints carrying a ``<mimic>`` tag (position slaved to another joint)."""
-    root = ET.fromstring(urdf_xml)
-    return {
-        j.attrib['name']
-        for j in root.findall('joint')
-        if 'name' in j.attrib and j.find('mimic') is not None
-    }
 
 
 def _firmware_template_for_board_class(board_class: str) -> str:
@@ -332,24 +328,67 @@ def _firmware_template_for_board_class(board_class: str) -> str:
     raise ValueError(f'unknown board_class for firmware template: {board_class!r}')
 
 
-BUS_SERVO_BLOCK = 3
+def _firmware_pulse_limits(servo_type: str) -> tuple[int, int]:
+    """Return default RP2040 PWM duty counts for ~1–2 ms pulses at 50 Hz (top=24999)."""
+    # Servo type currently only documents mechanical range; pulse window is shared.
+    _ = servo_type
+    return 1250, 2500
 
 
-def render_firmware_rs(
+def render_firmware_yaml(
     data: dict[str, Any],
     board_id: str,
     env: jinja2.Environment | None = None,
 ) -> str:
-    """Render the Rust register layout for a bus-servo board."""
+    """Render architecture-shaped Rust builder ``config.yaml`` for one board."""
     env = env or _jinja_env()
-    actuators = _actuators_for_board(data, board_id, enabled_only=False)
-    slots = max((int(a['virtual_pin']) for a in actuators), default=-1) + 1
-    tpl = env.get_template('config_bus_servo_board.rs.j2')
+    board = data['boards'][board_id]
+    board_class = str(board['board_class'])
+    driver, _adapter = driver_for_board_class(board_class)
+    actuators_raw = _actuators_for_board(data, board_id, enabled_only=True)
+    actuators: list[dict[str, Any]] = []
+    for a in actuators_raw:
+        min_pulse, max_pulse = _firmware_pulse_limits(str(a.get('servo_type', '180')))
+        actuators.append(
+            {
+                'id': a['id'],
+                'enabled': bool(a.get('enabled', True)),
+                'urdf_joint': a['urdf_joint'],
+                'min_pulse': min_pulse,
+                'max_pulse': max_pulse,
+                'min_angle': float(a['servo_min_rad']),
+                'max_angle': float(a['servo_max_rad']),
+                'default_angle': float(a['servo_default_rad']),
+                'driver': driver,
+                'channel': channel_for_actuator(a, board_class),
+            }
+        )
+
+    sensors_raw = _sensors_for_board_firmware(data, board_id)
+    sensors: list[dict[str, Any]] = []
+    for s in sensors_raw:
+        if not s.get('enabled', True):
+            continue
+        sensors.append(
+            {
+                'id': s['id'],
+                'enabled': True,
+                'min_value': s.get('min_value', 0),
+                'max_value': s.get('max_value', 4095),
+                'driver': DRIVER_PRESSURE,
+                'channel': channel_for_sensor(s),
+            }
+        )
+
+    tpl = env.get_template('config_board.yaml.j2')
     return tpl.render(
         board_id=board_id,
-        bus_servo_block=BUS_SERVO_BLOCK,
-        bus_servo_base=0,
-        bus_servo_slots=slots,
+        board='rp2040',
+        board_class=board_class,
+        slave_address=board_slave_address(board),
+        firmware_crate=resolve_firmware_crate(board),
+        actuators=actuators,
+        sensors=sensors,
     )
 
 
@@ -358,6 +397,7 @@ def render_firmware_c(
     board_id: str,
     env: jinja2.Environment | None = None,
 ) -> str:
+    """Keep deprecated C renderer for golden-test migration; prefer render_firmware_yaml."""
     env = env or _jinja_env()
     actuators = _actuators_for_board(data, board_id, enabled_only=True)
     sensors = _sensors_for_board_firmware(data, board_id)
@@ -380,7 +420,7 @@ def render_ros2_control_xacro(
     env = env or _jinja_env()
     tpl = env.get_template('ros2_control.xacro.j2')
     return tpl.render(
-        robot_name=data.get('robot_name') or 'robot',
+        robot_name=data.get('robot_name', ''),
         blocks=_ros2_control_blocks(data, board_ids, urdf_limits),
     )
 
@@ -394,7 +434,7 @@ def render_gazebo_xacro(
     env = env or _jinja_env()
     tpl = env.get_template('gazebo.xacro.j2')
     return tpl.render(
-        robot_name=data.get('robot_name') or 'robot',
+        robot_name=data.get('robot_name', ''),
         blocks=_ros2_control_blocks(data, board_ids, urdf_limits),
         cameras=_gazebo_xacro_cameras(data),
         sensors=_gazebo_sensors(data),
@@ -480,23 +520,19 @@ def generate(
     names = resolve_generated_files(data)
 
     urdf_xml = _expand_urdf_xacro(urdf_xacro, base_path, controller_config)
-    urdf_names, urdf_limits = _parse_urdf_joints_xml(urdf_xml)
+    urdf_names, urdf_limits, urdf_mimics = _parse_urdf_joints_xml(urdf_xml)
 
     extra: list[str] = []
     if targets & {'controllers', 'all'}:
-        extra = _extra_joints(data, urdf_names, _mimic_joint_names(urdf_xml))
+        extra = _extra_joints(data, urdf_names, urdf_mimics)
 
     env = _jinja_env()
 
     if targets & {'firmware', 'all'} and not simulation_only:
         fw_boards = _resolve_board_ids(data, boards_filter)
         for bid in fw_boards:
-            if data['boards'][bid]['board_class'] == BOARD_CLASS_BUS_SERVO_ONLY:
-                out = output_dir / f'config_{bid}.rs'
-                out.write_text(render_firmware_rs(data, bid, env), encoding='utf-8')
-                continue
-            text = render_firmware_c(data, bid, env)
-            out = output_dir / f'config_{bid}.c'
+            text = render_firmware_yaml(data, bid, env)
+            out = output_dir / f'config_{bid}.yaml'
             out.write_text(text, encoding='utf-8')
 
     if targets & {'ros2_control', 'all'}:
@@ -541,17 +577,14 @@ def generate_from_xacro_string_for_tests(
     else:
         board_ids = _resolve_board_ids(data, boards_filter)
         firmware_boards = board_ids
-    urdf_names, urdf_limits = _parse_urdf_joints_xml(urdf_xml)
-    extra = _extra_joints(data, urdf_names, _mimic_joint_names(urdf_xml))
+    urdf_names, urdf_limits, urdf_mimics = _parse_urdf_joints_xml(urdf_xml)
+    extra = _extra_joints(data, urdf_names, urdf_mimics)
     names = resolve_generated_files(data)
     env = _jinja_env()
     out: dict[str, str] = {}
     if targets & {'firmware', 'all'} and not simulation_only:
         for bid in firmware_boards:
-            if data['boards'][bid]['board_class'] == BOARD_CLASS_BUS_SERVO_ONLY:
-                out[f'config_{bid}.rs'] = render_firmware_rs(data, bid, env)
-                continue
-            out[f'config_{bid}.c'] = render_firmware_c(data, bid, env)
+            out[f'config_{bid}.yaml'] = render_firmware_yaml(data, bid, env)
     if targets & {'ros2_control', 'all'}:
         out[names['ros2_control_xacro']] = render_ros2_control_xacro(
             data, board_ids, urdf_limits, env

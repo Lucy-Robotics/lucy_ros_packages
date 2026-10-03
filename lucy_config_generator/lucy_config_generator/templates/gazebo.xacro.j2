@@ -11,12 +11,12 @@
     <joint name="{{ j.urdf_joint }}">
       <param name="virtual_pin">{{ j.virtual_pin }}</param>
       <param name="servo_type">{{ j.servo_type | replace('"', '') }}</param>
-      <param name="offset_deg">{{ j.offset_deg }}</param>
+      <param name="offset_rad">{{ j.offset_rad }}</param>
       <param name="direction">{{ j.direction }}</param>
       <param name="scale">{{ j.scale }}</param>
-      <param name="servo_min_deg">{{ j.servo_min_deg }}</param>
-      <param name="servo_max_deg">{{ j.servo_max_deg }}</param>
-      <param name="servo_default_deg">{{ j.servo_default_deg }}</param>
+      <param name="servo_min_rad">{{ j.servo_min_rad }}</param>
+      <param name="servo_max_rad">{{ j.servo_max_rad }}</param>
+      <param name="servo_default_rad">{{ j.servo_default_rad }}</param>
       <command_interface name="position" />
       <state_interface name="position" />
     </joint>

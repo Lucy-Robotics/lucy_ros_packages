@@ -567,8 +567,8 @@ hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
     }
     hw_old_commands_[i] = cmd_rad;
 
-    // Joint space -> servo space: applies offset_deg / direction / scale and
-    // clamps to [servo_min_deg, servo_max_deg]. Sending the raw joint angle
+    // Joint space -> servo space: applies offset_rad / direction / scale and
+    // clamps to [servo_min_rad, servo_max_rad]. Sending the raw joint angle
     // skips the mechanical envelope and wraps negative commands to ~2*pi.
     const uint16_t wire = to_register_milliradians(actuator_command_to_servo_rad(m, cmd_rad));
     const int reg =
