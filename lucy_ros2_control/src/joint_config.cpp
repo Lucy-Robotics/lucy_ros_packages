@@ -171,12 +171,12 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
     }
   }
   m.type = type;
-  m.offset_deg = parse_required_double(joint, "offset_deg");
+  m.offset_rad = parse_required_double(joint, "offset_rad");
   m.direction = parse_required_double(joint, "direction");
   m.scale = parse_required_double(joint, "scale");
-  m.servo_min_deg = parse_required_double(joint, "servo_min_deg");
-  m.servo_max_deg = parse_required_double(joint, "servo_max_deg");
-  m.servo_default_deg = parse_required_double(joint, "servo_default_deg");
+  m.servo_min_rad = parse_required_double(joint, "servo_min_rad");
+  m.servo_max_rad = parse_required_double(joint, "servo_max_rad");
+  m.servo_default_rad = parse_required_double(joint, "servo_default_rad");
   m.min_rad = min_rad;
   m.max_rad = max_rad;
 
@@ -189,9 +189,9 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
     throw std::runtime_error(
             "joint '" + joint.name + "' has invalid direction/scale (must be non-zero)");
   }
-  if (m.servo_min_deg > m.servo_max_deg) {
+  if (m.servo_min_rad > m.servo_max_rad) {
     throw std::runtime_error(
-            "joint '" + joint.name + "' has servo_min_deg > servo_max_deg");
+            "joint '" + joint.name + "' has servo_min_rad > servo_max_rad");
   }
   if (std::isfinite(m.min_rad) && std::isfinite(m.max_rad) && m.min_rad > m.max_rad) {
     throw std::runtime_error(
@@ -203,15 +203,13 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
 
 double default_joint_position_rad(const ActuatedJointMapping & m)
 {
-  return deg_to_rad((m.servo_default_deg - m.offset_deg) * m.direction * m.scale);
+  return (m.servo_default_rad - m.offset_rad) * m.direction * m.scale;
 }
 
 double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd_rad)
 {
-  const double joint_deg = rad_to_deg(cmd_rad);
-  const double servo_deg = (joint_deg / (m.direction * m.scale)) + m.offset_deg;
-  const double clamped_deg = clamp_position_command(servo_deg, m.servo_min_deg, m.servo_max_deg);
-  return deg_to_rad(clamped_deg);
+  const double servo_rad = (cmd_rad / (m.direction * m.scale)) + m.offset_rad;
+  return clamp_position_command(servo_rad, m.servo_min_rad, m.servo_max_rad);
 }
 
 std::optional<int> sort_and_find_duplicate_virtual_pin(

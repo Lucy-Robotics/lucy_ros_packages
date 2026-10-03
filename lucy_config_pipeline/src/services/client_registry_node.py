@@ -1,4 +1,5 @@
-"""Transport-agnostic client presence and control arbitration.
+"""
+Transport-agnostic client presence and control arbitration.
 
 See lucy_cli/developer.md for the protocol. Clients register by heart-beating
 their id; this node is the single writer of the connected-client count and the
@@ -10,6 +11,8 @@ from __future__ import annotations
 import threading
 import time
 
+from lucy_msgs.srv import ClientControl
+from lucy_msgs.srv import GetInt
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy
@@ -18,9 +21,6 @@ from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 from std_msgs.msg import Int32
 from std_msgs.msg import String
-
-from lucy_msgs.srv import ClientControl
-from lucy_msgs.srv import GetInt
 
 HEARTBEAT_TOPIC = '/lucy/client_heartbeat'
 CLIENT_COUNT_TOPIC = '/lucy/client_count'
@@ -90,7 +90,10 @@ class ClientRegistryNode(Node):
             expired = [cid for cid, seen in self._last_seen.items() if seen < deadline]
             for cid in expired:
                 del self._last_seen[cid]
-            controller_lost = bool(self._active_client) and self._active_client not in self._last_seen
+            controller_lost = (
+                bool(self._active_client)
+                and self._active_client not in self._last_seen
+            )
             if controller_lost:
                 self._active_client = ''
             count = len(self._last_seen)
@@ -98,7 +101,8 @@ class ClientRegistryNode(Node):
             self.get_logger().info(f'Client expired: {cid} ({count} connected)')
         if controller_lost:
             self.get_logger().info('Active controller expired; control released')
-        # Republish so volatile subscribers (web via rosbridge) converge without a dedicated query; subscribers dedupe by value.
+        # Republish so volatile subscribers (web via rosbridge) converge without
+        # a dedicated query; subscribers dedupe by value.
         self._publish_count()
         self._publish_active()
 

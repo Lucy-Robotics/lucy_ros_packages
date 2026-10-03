@@ -115,8 +115,8 @@ if(BUILD_TESTING)
   # RoboStack macOS: gtest_vendor sources pick up mismatched gtest headers from
   # $CONDA_PREFIX/include (TestInfo API drift). GTests are enabled on Linux only;
   # lucy_ws CI (scripts/ci_colcon_test.sh on linux-64) runs them. Re-enable on
-  # APPLE when RoboStack ships consistent gtest headers across platforms.
-  if(NOT APPLE)
+  # APPLE/WIN32 when RoboStack ships consistent gtest headers across platforms.
+  if(NOT APPLE AND NOT WIN32)
     find_package(ament_cmake_gtest REQUIRED)
     ament_add_gtest(test_position_limit_clamp test/test_position_limit_clamp.cpp)
     target_include_directories(test_position_limit_clamp PRIVATE

@@ -33,14 +33,16 @@
 #include <vector>
 #include <array>
 
+// POSIX shm / named semaphores: real-hardware register transport. MSVC has none
+// of these headers; Windows builds stub the SHM path (see lucy_system.cpp).
+#ifndef _WIN32
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <semaphore.h>
-#include <stdio.h>
-#include <fcntl.h>
 #include <sys/stat.h>
-
+#endif
+#include <stdio.h>
 
 #include "hardware_interface/handle.hpp"
 #include "hardware_interface/hardware_info.hpp"
@@ -213,7 +215,11 @@ private:
   // pin N onto the right arm's pin N.
   RegisterHeader * register_header_ = nullptr;
   SharedRegisters * shared_registers_ = nullptr;
+#ifndef _WIN32
   sem_t * sem_ = nullptr;
+#else
+  void * sem_ = nullptr;  // placeholder; SHM transport is unsupported on Windows
+#endif
 
   /// node_name_ sanitised and capped to what shm_open() accepts; the name the
   /// firmware bridge must be given to attach to this component.

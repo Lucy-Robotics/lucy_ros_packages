@@ -9,11 +9,11 @@ def _sample_data() -> dict:
         'firmware': {'source_dir': 'fw', 'build_dir': 'build'},
         'boards': {
             'rp2040_right_arm': {
-                'firmware_target': 'pico_micro_ros_right_arm',
+                'firmware_target': 'lucy_right_arm',
                 'serial_id': 'E6617C93E37A6629',
             },
             'rp2040_left_arm': {
-                'firmware_target': 'pico_micro_ros_left_arm',
+                'firmware_target': 'lucy_left_arm',
                 'serial_id': None,
             },
         },
@@ -28,7 +28,7 @@ def test_run_flash_phase_skips_board_without_serial(
     fw_src = tmp_path / 'fw'
     fw_build = fw_src / 'build'
     fw_build.mkdir(parents=True)
-    uf2 = fw_build / 'pico_micro_ros_right_arm.uf2'
+    uf2 = fw_build / 'lucy_right_arm.uf2'
     uf2.write_bytes(b'uf2')
 
     calls: list[list[str]] = []
@@ -64,7 +64,7 @@ def test_run_flash_phase_skips_board_not_built_ok(tmp_path: Path, monkeypatch: p
     fw_src = tmp_path / 'fw'
     fw_build = fw_src / 'build'
     fw_build.mkdir(parents=True)
-    (fw_build / 'pico_micro_ros_right_arm.uf2').write_bytes(b'uf2')
+    (fw_build / 'lucy_right_arm.uf2').write_bytes(b'uf2')
 
     calls: list[list[str]] = []
 
@@ -118,16 +118,7 @@ def test_run_flash_phase_missing_uf2(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert errors
 
 
-def test_uptime_topic_from_yaml_and_env(monkeypatch: pytest.MonkeyPatch):
-    assert pipeline_flash._uptime_topic({'topic_uptime': 'ns/uptime'}) == '/ns/uptime'
-    assert pipeline_flash._uptime_topic({'topic_uptime': '/abs/uptime'}) == '/abs/uptime'
-    monkeypatch.delenv('LUCY_PIPELINE_UPTIME_TOPIC', raising=False)
-    assert pipeline_flash._uptime_topic({}) == '/uptime_publisher'
-    monkeypatch.setenv('LUCY_PIPELINE_UPTIME_TOPIC', 'custom/uptime')
-    assert pipeline_flash._uptime_topic({}) == '/custom/uptime'
-
-
-def test_run_flash_phase_uptime_timeout_fails_board(
+def test_run_flash_phase_modbus_verify_timeout_fails_board(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -135,15 +126,12 @@ def test_run_flash_phase_uptime_timeout_fails_board(
     fw_src = tmp_path / 'fw'
     fw_build = fw_src / 'build'
     fw_build.mkdir(parents=True)
-    uf2 = fw_build / 'pico_micro_ros_right_arm.uf2'
+    uf2 = fw_build / 'lucy_right_arm.uf2'
     uf2.write_bytes(b'uf2')
 
     monkeypatch.setattr(pipeline_flash, '_run_command', lambda **_k: None)
     monkeypatch.setattr(pipeline_flash, '_wait_for_usb_serial', lambda *_a, **_k: True)
-    monkeypatch.setattr(pipeline_flash, '_wait_uptime_message', lambda *_a, **_k: False)
-
-    class _DummyNode:
-        pass
+    monkeypatch.setattr(pipeline_flash, '_wait_modbus_ready', lambda *_a, **_k: False)
 
     failed, flashed = pipeline_flash.run_flash_phase(
         data=_sample_data(),
@@ -153,7 +141,7 @@ def test_run_flash_phase_uptime_timeout_fails_board(
         picotool_timeout_seconds=30,
         usb_wait_seconds=1,
         uptime_wait_seconds=5,
-        node=_DummyNode(),
+        node=None,
         feedback=lambda **_kwargs: None,
         log_error=lambda _msg: None,
     )

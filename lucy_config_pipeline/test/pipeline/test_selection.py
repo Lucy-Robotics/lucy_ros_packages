@@ -47,10 +47,12 @@ def test_select_boards_to_process():
 
 
 def test_resolve_firmware_paths_relative(tmp_path: Path):
-    data = {'firmware': {'source_dir': 'micro_ros_raspberrypi_pico_sdk', 'build_dir': 'build'}}
+    data = {'firmware': {'source_dir': 'lucy_embedded_firmware', 'build_dir': 'build/firmware'}}
     paths = resolve_firmware_paths(data, tmp_path)
-    assert paths.source_dir == (tmp_path / 'micro_ros_raspberrypi_pico_sdk').resolve()
-    assert paths.build_dir == (tmp_path / 'micro_ros_raspberrypi_pico_sdk' / 'build').resolve()
+    assert paths.source_dir == (tmp_path / 'lucy_embedded_firmware').resolve()
+    assert paths.build_dir == (
+        tmp_path / 'lucy_embedded_firmware' / 'build' / 'firmware'
+    ).resolve()
 
 
 def test_resolve_firmware_paths_requires_source_dir(tmp_path: Path):
@@ -61,19 +63,19 @@ def test_resolve_firmware_paths_requires_source_dir(tmp_path: Path):
 def test_board_build_plan_all_and_selected():
     data = {
         'boards': {
-            'rp2040_left_arm': {'firmware_target': 'pico_micro_ros_left_arm'},
-            'rp2040_right_arm': {'firmware_target': 'pico_micro_ros_right_arm'},
+            'rp2040_left_arm': {'firmware_target': 'lucy_left_arm'},
+            'rp2040_right_arm': {'firmware_target': 'lucy_right_arm'},
         }
     }
 
     all_plan = board_build_plan(data, None)
     assert all_plan == [
-        ('rp2040_left_arm', 'pico_micro_ros_left_arm'),
-        ('rp2040_right_arm', 'pico_micro_ros_right_arm'),
+        ('rp2040_left_arm', 'lucy_left_arm'),
+        ('rp2040_right_arm', 'lucy_right_arm'),
     ]
 
     selected_plan = board_build_plan(data, {'rp2040_right_arm'})
-    assert selected_plan == [('rp2040_right_arm', 'pico_micro_ros_right_arm')]
+    assert selected_plan == [('rp2040_right_arm', 'lucy_right_arm')]
 
 
 def test_board_build_plan_requires_firmware_target():

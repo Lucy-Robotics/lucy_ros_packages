@@ -44,10 +44,11 @@ def resolve_robot_description_paths(
     *,
     controllers_basename: str | None = None,
 ) -> tuple[Path, Path, Path]:
-    """Return ``(urdf_xacro, base_path, controllers_yaml)`` for a robot package.
+    """
+    Return ``(urdf_xacro, base_path, controllers_yaml)`` for a robot package.
 
     Prefers ``config/control.launch.yaml``. Falls back to the historical
-    ``description/urdf/inmoov.urdf.xacro`` layout. When ``controllers_basename``
+    ``description/urdf/robot.urdf.xacro`` layout. When ``controllers_basename``
     is set (from ``generated_files``), it overrides the controllers filename
     while keeping the directory from the launch default / fallback.
     """

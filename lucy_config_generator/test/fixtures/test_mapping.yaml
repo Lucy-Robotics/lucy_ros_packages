@@ -13,8 +13,9 @@ boards:
   rp2040_left_arm:
     serial_id: ""
     board_class: internal_servo_only
+    slave_address: 1
     internal_servo_slots: 18
-    firmware_target: pico_micro_ros_left_arm
+    firmware_target: lucy_left_arm
     compile_definition: USE_LEFT_ARM
     topic_actuators: actuators/left_arm
     topic_sensors: sensors/left_arm
@@ -24,8 +25,9 @@ boards:
   rp2040_right_arm:
     serial_id: ""
     board_class: internal_servo_only
+    slave_address: 1
     internal_servo_slots: 18
-    firmware_target: pico_micro_ros_right_arm
+    firmware_target: lucy_right_arm
     compile_definition: USE_RIGHT_ARM
     topic_actuators: actuators/right_arm
     topic_sensors: sensors/right_arm
@@ -35,8 +37,9 @@ boards:
   rp2040_torso_head:
     serial_id: ""
     board_class: internal_servo_i2c_pwm
+    slave_address: 1
     internal_servo_slots: 18
-    firmware_target: pico_micro_ros_torso
+    firmware_target: lucy_torso
     compile_definition: USE_TORSO
     topic_actuators: actuators/torso
     topic_sensors: sensors/torso
@@ -51,12 +54,12 @@ actuators:
     virtual_pin: 0
     physical_pin: 10
     servo_type: "270"
-    offset_deg: 0.0
+    offset_rad: 0
     direction: 1
     scale: 1.0
-    servo_min_deg: 0.0
-    servo_max_deg: 270.0
-    servo_default_deg: 135.0
+    servo_min_rad: 0
+    servo_max_rad: 4.71239
+    servo_default_rad: 2.35619
     enabled: true
   - id: left_disabled
     urdf_joint: left_disabled_joint
@@ -64,12 +67,12 @@ actuators:
     virtual_pin: 1
     physical_pin: 11
     servo_type: "270"
-    offset_deg: 0.0
+    offset_rad: 0
     direction: 1
     scale: 1.0
-    servo_min_deg: 0.0
-    servo_max_deg: 270.0
-    servo_default_deg: 135.0
+    servo_min_rad: 0
+    servo_max_rad: 4.71239
+    servo_default_rad: 2.35619
     enabled: false
   - id: right_a
     urdf_joint: right_a_joint
@@ -77,12 +80,12 @@ actuators:
     virtual_pin: 0
     physical_pin: 10
     servo_type: "270"
-    offset_deg: 0.0
+    offset_rad: 0
     direction: 1
     scale: 1.0
-    servo_min_deg: 0.0
-    servo_max_deg: 270.0
-    servo_default_deg: 135.0
+    servo_min_rad: 0
+    servo_max_rad: 4.71239
+    servo_default_rad: 2.35619
     enabled: true
   - id: torso_left_y
     urdf_joint: left_shoulder_y_link_joint
@@ -90,12 +93,12 @@ actuators:
     virtual_pin: 0
     physical_pin: 5
     servo_type: "270"
-    offset_deg: 0.0
+    offset_rad: 0
     direction: 1
     scale: 1.0
-    servo_min_deg: 0.0
-    servo_max_deg: 270.0
-    servo_default_deg: 0.0
+    servo_min_rad: 0
+    servo_max_rad: 4.71239
+    servo_default_rad: 0
     enabled: true
   - id: torso_right_y
     urdf_joint: right_shoulder_y_link_joint
@@ -103,12 +106,12 @@ actuators:
     virtual_pin: 1
     physical_pin: 6
     servo_type: "270"
-    offset_deg: 0.0
+    offset_rad: 0
     direction: 1
     scale: 1.0
-    servo_min_deg: 0.0
-    servo_max_deg: 270.0
-    servo_default_deg: 0.0
+    servo_min_rad: 0
+    servo_max_rad: 4.71239
+    servo_default_rad: 0
     enabled: true
 
 sensors:
