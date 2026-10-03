@@ -18,6 +18,11 @@ setup(
     maintainer_email='contact@sentience-robotics.fr',
     description='SHM → Modbus RTU bridge for Lucy RP2040 firmware',
     license='GPL-3.0',
+    extras_require={
+        'test': [
+            'pytest',
+        ],
+    },
     entry_points={
         'console_scripts': [
             'modbus_bridge_node = lucy_modbus_bridge.bridge_node:main',
