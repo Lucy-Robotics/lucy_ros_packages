@@ -35,7 +35,11 @@ def test_run_build_phase_reports_missing_uf2(tmp_path: Path, monkeypatch: pytest
     _make_fw_tree(tmp_path)
     errors: list[str] = []
 
-    monkeypatch.setattr(pipeline_build.shutil, 'which', lambda name: '/usr/bin/cargo' if name == 'cargo' else None)
+    monkeypatch.setattr(
+        pipeline_build.shutil,
+        'which',
+        lambda name: '/usr/bin/cargo' if name == 'cargo' else None,
+    )
     monkeypatch.setattr(pipeline_build, '_run_command', lambda **_k: None)
 
     failed = pipeline_build.run_build_phase(

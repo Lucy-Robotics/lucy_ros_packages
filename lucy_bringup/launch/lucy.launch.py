@@ -37,7 +37,6 @@ Arguments:
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
@@ -207,7 +206,8 @@ def _validate_lucy_launch(context):
 
 
 def _modbus_node_name(board_id: str) -> str:
-    """Logical ros2_control ``node_name`` for a board (full, untruncated).
+    """
+    Logical ros2_control ``node_name`` for a board (full, untruncated).
 
     Must match the hardware plugin ``node_name`` parameter. POSIX SHM/sem
     stems are truncated inside ``lucy_modbus_bridge.shm.shm_node_name_for``
@@ -215,7 +215,7 @@ def _modbus_node_name(board_id: str) -> str:
     """
     suffix = board_id
     if board_id.startswith('rp2040_'):
-        suffix = board_id[len('rp2040_') :]
+        suffix = board_id[len('rp2040_'):]
     return f'lucy_hardware_interface_{suffix}'
 
 
