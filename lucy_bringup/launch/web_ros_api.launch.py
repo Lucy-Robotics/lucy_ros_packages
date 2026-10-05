@@ -86,9 +86,20 @@ def generate_launch_description():
         ],
     )
 
+    hardware_discovery_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('lucy_hardware_discovery'),
+                'launch',
+                'hardware_discovery.launch.py',
+            ])
+        ]),
+    )
+
     return LaunchDescription([
         robot_package_arg,
         config_dir_arg,
         rosbridge,
         config_pipeline_launch,
+        hardware_discovery_launch,
     ])
