@@ -372,3 +372,59 @@ def test_slot_count_is_the_board_joint_count():
     ]
     for a in enabled:
         assert a['id'] in yaml_text
+
+
+def test_camera_requires_id_field():
+    data = _load_mapping()
+    data['cameras'] = [{'realsense-rgb': None, 'name': 'RGB'}]
+    with pytest.raises(ValueError, match='missing non-empty string id'):
+        validate_hardware_yaml(data)
+
+
+def test_camera_accepts_id_field():
+    data = _load_mapping()
+    data['cameras'] = [
+        {
+            'id': 'realsense-rgb',
+            'name': 'RGB',
+            'topic': '/cam',
+            'compressed_topic': '/cam/compressed',
+            'message_type': 'sensor_msgs/msg/CompressedImage',
+            'external': True,
+            'sim_gz_topic': '/world/default/camera',
+        }
+    ]
+    validate_hardware_yaml(data)
+
+
+def test_gazebo_sensors_skips_disabled():
+    from lucy_config_generator.generate import _gazebo_sensors
+
+    data = _load_mapping()
+    board_id = next(iter(data['boards']))
+    data['sensors'] = [
+        {
+            'id': 'pressure_on',
+            'board': board_id,
+            'associated_actuator': data['actuators'][0]['id'],
+            'physical_pin': 1,
+            'virtual_pin': 0,
+            'enabled': True,
+            'min_value': 0,
+            'max_value': 4095,
+        },
+        {
+            'id': 'pressure_off',
+            'board': board_id,
+            'associated_actuator': data['actuators'][0]['id'],
+            'physical_pin': 2,
+            'virtual_pin': 1,
+            'enabled': False,
+            'min_value': 0,
+            'max_value': 4095,
+        },
+    ]
+    # Only enabled sensors contribute to the gazebo sensor board group.
+    gz = _gazebo_sensors(data)
+    assert len(gz) == 1
+    assert len(gz[0]['sensors']) == 1

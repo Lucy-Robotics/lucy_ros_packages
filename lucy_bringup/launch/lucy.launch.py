@@ -302,7 +302,7 @@ def _real_hardware_stack(context, *args, **kwargs):
                 out.append(
                     LogInfo(
                         msg=(
-                            f'lucy.launch: skip Modbus bridge for {board_id}: '
+                            f'WARNING: lucy.launch: skip Modbus bridge for {board_id}: '
                             'no enabled actuators/sensors in active hardware config'
                         )
                     )
@@ -313,7 +313,7 @@ def _real_hardware_stack(context, *args, **kwargs):
                 out.append(
                     LogInfo(
                         msg=(
-                            f'lucy.launch: skip Modbus bridge for {board_id}: '
+                            f'WARNING: lucy.launch: skip Modbus bridge for {board_id}: '
                             f'no ros2_control node_name={node_name} in robot description'
                         )
                     )
@@ -329,7 +329,7 @@ def _real_hardware_stack(context, *args, **kwargs):
                         {
                             'node_name': node_name,
                             'serial_id': serial,
-                            'slave_address': 1,
+                            'slave_address': int(bdef.get('slave_address', 1) or 1),
                         }
                     ],
                 )

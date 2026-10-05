@@ -127,7 +127,11 @@ def run_flash_phase(
                     detail=f'verifying Modbus on serial {serial} (up to {uptime_wait_seconds}s)',
                     board=board,
                 )
-                if not _wait_modbus_ready(serial, float(uptime_wait_seconds)):
+                if not _wait_modbus_ready(
+                    serial,
+                    float(uptime_wait_seconds),
+                    slave_address=int(boards_entry.get('slave_address', 1) or 1),
+                ):
                     raise TimeoutError(
                         f'Modbus verify failed within {uptime_wait_seconds}s '
                         f'(board {board}, serial {serial})'
@@ -161,18 +165,29 @@ def run_flash_phase(
 
 
 def _modbus_crc(data: bytes) -> bytes:
-    crc = 0xFFFF
-    for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            if crc & 0x0001:
-                crc = (crc >> 1) ^ 0xA001
-            else:
-                crc >>= 1
-    return crc.to_bytes(2, 'little')
+    """CRC16/Modbus (same algorithm as ``lucy_modbus_bridge.shm.modbus_crc``)."""
+    try:
+        from lucy_modbus_bridge.shm import modbus_crc as _shared_crc
+
+        return _shared_crc(data)
+    except ImportError:
+        crc = 0xFFFF
+        for byte in data:
+            crc ^= byte
+            for _ in range(8):
+                if crc & 0x0001:
+                    crc = (crc >> 1) ^ 0xA001
+                else:
+                    crc >>= 1
+        return crc.to_bytes(2, 'little')
 
 
-def _wait_modbus_ready(serial_id: str, timeout_sec: float) -> bool:
+def _wait_modbus_ready(
+    serial_id: str,
+    timeout_sec: float,
+    *,
+    slave_address: int = 1,
+) -> bool:
     """Probe the board with Modbus FC03 read of register 0 after flash."""
     try:
         import serial
@@ -181,6 +196,7 @@ def _wait_modbus_ready(serial_id: str, timeout_sec: float) -> bool:
         # pyserial missing: fall back to USB presence only.
         return True
 
+    slave = max(1, min(247, int(slave_address)))
     needle = serial_id.strip().lower()
     deadline = time.monotonic() + max(0.1, float(timeout_sec))
     port_name = None
@@ -205,8 +221,8 @@ def _wait_modbus_ready(serial_id: str, timeout_sec: float) -> bool:
     if port_name is None:
         return False
 
-    # FC03: slave 1, start 0, qty 1
-    req = bytearray([0x01, 0x03, 0x00, 0x00, 0x00, 0x01])
+    # FC03: configured slave, start 0, qty 1
+    req = bytearray([slave & 0xFF, 0x03, 0x00, 0x00, 0x00, 0x01])
     req.extend(_modbus_crc(req))
 
     perm_denied = False
@@ -216,7 +232,7 @@ def _wait_modbus_ready(serial_id: str, timeout_sec: float) -> bool:
                 ser.reset_input_buffer()
                 ser.write(req)
                 resp = ser.read(7)
-                if len(resp) >= 5 and resp[0] == 0x01 and resp[1] == 0x03:
+                if len(resp) >= 5 and resp[0] == slave and resp[1] == 0x03:
                     return True
         except PermissionError:
             perm_denied = True
@@ -476,6 +492,15 @@ def _flash_uf2_to_board(
 
     # 2) Already in BOOTSEL: load without --ser / without -f (USB serial ≠ flash id).
     if _bootsel_volume_dev() is not None:
+        feedback(
+            phase='flash',
+            progress=stream_progress,
+            detail=(
+                'BOOTSEL fallback: board identity cannot be verified via --ser; '
+                'ensure only one board is in BOOTSEL before continuing'
+            ),
+            board=board,
+        )
         try:
             _run_command(
                 phase='flash',
@@ -525,6 +550,10 @@ def _wait_for_usb_serial(serial_id: str, timeout_seconds: int) -> bool:
     deadline = time.monotonic() + max(0.1, float(timeout_seconds))
     use_by_id = sys.platform.startswith('linux')
     by_id = Path('/dev/serial/by-id') if use_by_id else None
+    try:
+        from serial.tools import list_ports
+    except ImportError:
+        list_ports = None  # type: ignore[assignment]
 
     while time.monotonic() < deadline:
         if by_id is not None and by_id.is_dir():
@@ -538,10 +567,6 @@ def _wait_for_usb_serial(serial_id: str, timeout_seconds: int) -> bool:
                         return True
                 except OSError:
                     continue
-        try:
-            from serial.tools import list_ports
-        except ImportError:
-            list_ports = None  # type: ignore[assignment]
         if list_ports is not None:
             for info in list_ports.comports():
                 if _usb_serial_matches(

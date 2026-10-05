@@ -355,3 +355,57 @@ def test_wait_for_usb_serial_uses_by_id_on_linux(
 
     monkeypatch.setattr(builtins, '__import__', fake_import)
     assert pipeline_flash._wait_for_usb_serial('E6617C93E37A6629', 1) is True
+
+
+def test_wait_modbus_ready_uses_board_slave_address(monkeypatch: pytest.MonkeyPatch):
+    """FC03 probe must address the YAML slave, not hardcoded 1."""
+    written: list[bytes] = []
+
+    class FakeSerial:
+        def __init__(self, *_a, **_k):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def reset_input_buffer(self):
+            return None
+
+        def write(self, data: bytes):
+            written.append(bytes(data))
+
+        def read(self, _n: int):
+            return bytes([0x02, 0x03, 0x02, 0x00, 0x00, 0x00, 0x00])
+
+    class FakeInfo:
+        device = '/dev/ttyACM0'
+        serial_number = 'E6617C93E37A6629'
+        description = ''
+        hwid = ''
+
+    class FakeListPorts:
+        @staticmethod
+        def comports():
+            return [FakeInfo()]
+
+    import sys as _sys
+
+    monkeypatch.setitem(_sys.modules, 'serial', type('S', (), {'Serial': FakeSerial})())
+    monkeypatch.setitem(
+        _sys.modules,
+        'serial.tools',
+        type('T', (), {'list_ports': FakeListPorts})(),
+    )
+    monkeypatch.setitem(_sys.modules, 'serial.tools.list_ports', FakeListPorts)
+    monkeypatch.setattr(pipeline_flash.time, 'monotonic', lambda: 0.0)
+    monkeypatch.setattr(pipeline_flash.time, 'sleep', lambda _s: None)
+
+    assert (
+        pipeline_flash._wait_modbus_ready('E6617C93E37A6629', 1.0, slave_address=2) is True
+    )
+    assert written
+    assert written[0][0] == 0x02
+    assert written[0][1] == 0x03

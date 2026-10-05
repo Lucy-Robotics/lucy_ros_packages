@@ -289,6 +289,8 @@ def _gazebo_sensors(data: dict[str, Any]) -> list[dict[str, Any]]:
 
     tmp_dict = {}
     for sensor in data['sensors']:
+        if not sensor.get('enabled', True):
+            continue
         board_name = sensor['board']
         tmp_dict.setdefault(board_name, []).append({})
 

@@ -278,12 +278,12 @@ def _validate_boards(boards: dict[str, Any], errors: list[str]) -> None:
                 slave = int(board['slave_address'])
             except Exception:
                 errors.append(f'board {board_id}: slave_address must be an integer')
-                slave = -1
-            if slave < 1 or slave > 247:
-                errors.append(
-                    f'board {board_id}: slave_address must be in 1..247, '
-                    f'got {board["slave_address"]!r}'
-                )
+            else:
+                if slave < 1 or slave > 247:
+                    errors.append(
+                        f'board {board_id}: slave_address must be in 1..247, '
+                        f'got {board["slave_address"]!r}'
+                    )
 
         if 'firmware_crate' in board:
             crate = board['firmware_crate']
@@ -610,8 +610,42 @@ def validate_hardware_yaml(data: dict[str, Any]) -> None:
         )
     _validate_sensor_ranges(sensors_by_board, sensor_item_errors_by_board, errors)
 
+    cameras = data.get('cameras')
+    if cameras is not None:
+        _validate_cameras(cameras, errors)
+
     if errors:
         raise ValueError('\n'.join(errors))
+
+
+def _validate_cameras(cameras: Any, errors: list[str]) -> None:
+    """Require each camera mapping to have a non-empty string ``id`` field."""
+    if not isinstance(cameras, list):
+        errors.append('cameras must be a list')
+        return
+    seen: set[str] = set()
+    for i, camera in enumerate(cameras):
+        prefix = f'cameras[{i}]'
+        if not isinstance(camera, dict):
+            errors.append(f'{prefix}: must be a mapping')
+            continue
+        cam_id = camera.get('id')
+        if not isinstance(cam_id, str) or not cam_id.strip():
+            # Common mistake: ``- realsense-rgb: null`` instead of ``- id: realsense-rgb``.
+            bogus = [
+                k
+                for k, v in camera.items()
+                if k != 'id' and v is None and isinstance(k, str)
+            ]
+            hint = ''
+            if bogus:
+                hint = f' (use "id: {bogus[0]}" not "{bogus[0]}: null")'
+            errors.append(f'{prefix}: missing non-empty string id{hint}')
+            continue
+        cam_id = cam_id.strip()
+        if cam_id in seen:
+            errors.append(f'{prefix}: duplicate camera id {cam_id!r}')
+        seen.add(cam_id)
 
 
 def resolve_firmware_crate(board: dict[str, Any]) -> str:

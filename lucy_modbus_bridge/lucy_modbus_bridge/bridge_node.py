@@ -126,43 +126,58 @@ class ModbusBridgeNode(Node):
     def _on_timer(self) -> None:
         if not self._try_open_serial():
             return
-        # Serialize against LucySystemHardware::write via the shared semaphore.
+        # Snapshot dirty regs under the HI semaphore, then release before serial I/O
+        # so LucySystemHardware::write is not blocked on USB latency.
+        pending: list[tuple[int, int]] = []
         try:
             wait_sem(self._shm)
         except OSError as exc:
             self.get_logger().error(f'sem_wait failed: {exc}')
             return
         try:
-            dirty_regs: list[int] = []
             for reg in range(REGISTER_COUNT):
                 if get_dirty(self._shm.header_mm, reg):
-                    dirty_regs.append(reg)
-            if not dirty_regs:
-                return
-
-            for reg in dirty_regs:
-                value = read_register(self._shm.reg_mm, reg)
-                frame = build_write_single(self._slave, reg, value)
-                try:
-                    self._port.write(frame)
-                    # Drain response (echo for FC06) without blocking long.
-                    time.sleep(0.002)
-                    _ = self._port.read(16)
-                except Exception as exc:  # noqa: BLE001
-                    self.get_logger().error(f'Modbus write failed reg={reg}: {exc}')
-                    try:
-                        self._port.close()
-                    except Exception:  # noqa: BLE001
-                        pass
-                    self._port = None
-                    self._warn_missing_serial = True
-                    continue
-                set_clean(self._shm.header_mm, reg)
+                    pending.append((reg, read_register(self._shm.reg_mm, reg)))
         finally:
             try:
                 post_sem(self._shm)
             except OSError as exc:
                 self.get_logger().error(f'sem_post failed: {exc}')
+                return
+
+        if not pending:
+            return
+
+        for reg, value in pending:
+            frame = build_write_single(self._slave, reg, value)
+            try:
+                self._port.write(frame)
+                # Drain response (echo for FC06) without blocking long.
+                time.sleep(0.002)
+                _ = self._port.read(16)
+            except Exception as exc:  # noqa: BLE001
+                self.get_logger().error(f'Modbus write failed reg={reg}: {exc}')
+                try:
+                    self._port.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                self._port = None
+                self._warn_missing_serial = True
+                # Leave remaining regs dirty for the next poll (HI still owns them).
+                break
+            # Clear dirty only after a successful Modbus write.
+            try:
+                wait_sem(self._shm)
+            except OSError as exc:
+                self.get_logger().error(f'sem_wait failed: {exc}')
+                break
+            try:
+                set_clean(self._shm.header_mm, reg)
+            finally:
+                try:
+                    post_sem(self._shm)
+                except OSError as exc:
+                    self.get_logger().error(f'sem_post failed: {exc}')
 
 
 def main(args=None) -> None:
