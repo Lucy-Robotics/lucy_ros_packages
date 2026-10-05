@@ -29,13 +29,20 @@ REQUIRED_ACTUATOR = (
     'virtual_pin',
     'physical_pin',
     'servo_type',
-    'offset_deg',
+    'offset_rad',
     'direction',
     'scale',
+    'servo_min_rad',
+    'servo_max_rad',
+    'servo_default_rad',
+    'enabled',
+)
+# Rejected on robot YAML (degrees only allowed at LCP UI boundary).
+FORBIDDEN_ACTUATOR_DEG_KEYS = (
+    'offset_deg',
     'servo_min_deg',
     'servo_max_deg',
     'servo_default_deg',
-    'enabled',
 )
 REQUIRED_SENSOR = (
     'id',
@@ -88,6 +95,23 @@ BOARD_CLASSES = frozenset(
         BOARD_CLASS_BUS_SERVO_ONLY,
     }
 )
+
+# board_class → Cargo package directory under firmwares/ (relative to firmware.source_dir).
+# Pimoroni Servo2040 is one firmware; board_class selects layout/capabilities in YAML
+# (PWM / UART-bus / I2C-PWM / ADC banks gated by codegen HAS_* flags).
+BOARD_CLASS_TO_CRATE: dict[str, str] = {
+    BOARD_CLASS_INTERNAL_ONLY: 'firmwares/rp2040_servo2040',
+    BOARD_CLASS_INTERNAL_I2C_PWM: 'firmwares/rp2040_servo2040',
+    BOARD_CLASS_BUS_SERVO_ONLY: 'firmwares/rp2040_servo2040',
+}
+
+# Driver / Modbus adapter names emitted into per-board firmware YAML.
+DRIVER_PWM_SERVO = 'PwmServoDriver'
+DRIVER_BUS_SERVO = 'BusServoDriver'
+DRIVER_PRESSURE = 'PressureSensorDriver'
+ADAPTER_PWM_SERVO = 'PwmServoModbusAdapter'
+ADAPTER_BUS_SERVO = 'BusServoModbusAdapter'
+ADAPTER_PRESSURE = 'PressureSensorModbusAdapter'
 
 _BOARD_ID_RE = re.compile(r'^rp2040_[a-z][a-z0-9_]*$')
 _TOPIC_RE = re.compile(r'^[a-z][a-z0-9_/]*$')
@@ -249,6 +273,27 @@ def _validate_boards(boards: dict[str, Any], errors: list[str]) -> None:
                 f'board {board_id}: topic_actuators must not have surrounding whitespace'
             )
 
+        if 'slave_address' in board:
+            try:
+                slave = int(board['slave_address'])
+            except Exception:
+                errors.append(f'board {board_id}: slave_address must be an integer')
+            else:
+                if slave < 1 or slave > 247:
+                    errors.append(
+                        f'board {board_id}: slave_address must be in 1..247, '
+                        f'got {board["slave_address"]!r}'
+                    )
+
+        if 'firmware_crate' in board:
+            crate = board['firmware_crate']
+            if not isinstance(crate, str) or not crate.strip():
+                errors.append(f'board {board_id}: firmware_crate must be a non-empty string')
+            elif not crate.startswith('firmwares/'):
+                errors.append(
+                    f'board {board_id}: firmware_crate must start with firmwares/, got {crate!r}'
+                )
+
 
 def _validate_actuator(
     actuator: dict[str, Any],
@@ -259,6 +304,14 @@ def _validate_actuator(
 ) -> None:
     """Validate one actuator and append it to board bucket when valid."""
     aid = _label(actuator)
+    for deg_key in FORBIDDEN_ACTUATOR_DEG_KEYS:
+        if deg_key in actuator:
+            errors.append(
+                f'actuator {aid}: {deg_key} is forbidden; use radian fields '
+                f'(servo_*_rad / offset_rad)'
+            )
+            return
+
     if not _append_missing_keys(errors, f'actuator {aid}', actuator, REQUIRED_ACTUATOR):
         return
 
@@ -291,6 +344,7 @@ def _validate_actuator(
         pin = 0
 
     board_slots = 0
+    board_class = None
     if board_id in boards:
         try:
             board_slots = int(boards[board_id]['internal_servo_slots'])
@@ -300,7 +354,8 @@ def _validate_actuator(
                 f'board {board_id} internal_servo_slots is invalid'
             )
             valid = False
-    if valid and (pin < 1 or pin > board_slots):
+        board_class = boards[board_id].get('board_class')
+    if valid and board_class != BOARD_CLASS_BUS_SERVO_ONLY and (pin < 1 or pin > board_slots):
         errors.append(
             f'actuator {aid}: physical_pin {pin} out of range 1..{board_slots}'
         )
@@ -312,9 +367,9 @@ def _validate_actuator(
         valid = False
 
     try:
-        float(actuator['offset_deg'])
+        float(actuator['offset_rad'])
     except Exception:
-        errors.append(f'actuator {aid}: offset_deg must be numeric')
+        errors.append(f'actuator {aid}: offset_rad must be numeric')
         valid = False
 
     try:
@@ -373,26 +428,26 @@ def _validate_actuator_ranges(
 
         for actuator in actuators:
             aid = _label(actuator)
-            lo = actuator['servo_min_deg']
-            hi = actuator['servo_max_deg']
-            default = actuator['servo_default_deg']
+            lo = actuator['servo_min_rad']
+            hi = actuator['servo_max_rad']
+            default = actuator['servo_default_rad']
             try:
                 lo_f = float(lo)
                 hi_f = float(hi)
                 default_f = float(default)
             except Exception:
                 errors.append(
-                    f'actuator {aid}: servo_min_deg/servo_max_deg/'
-                    'servo_default_deg must be numeric'
+                    f'actuator {aid}: servo_min_rad/servo_max_rad/'
+                    'servo_default_rad must be numeric'
                 )
                 continue
 
             if lo_f > hi_f:
                 errors.append(
-                    f'actuator {aid}: servo_min_deg {lo} must be <= servo_max_deg {hi}'
+                    f'actuator {aid}: servo_min_rad {lo} must be <= servo_max_rad {hi}'
                 )
             if default_f < lo_f or default_f > hi_f:
-                errors.append(f'actuator {aid}: servo_default_deg out of [{lo}, {hi}]')
+                errors.append(f'actuator {aid}: servo_default_rad out of [{lo}, {hi}]')
 
 
 def _validate_sensor(
@@ -555,5 +610,87 @@ def validate_hardware_yaml(data: dict[str, Any]) -> None:
         )
     _validate_sensor_ranges(sensors_by_board, sensor_item_errors_by_board, errors)
 
+    cameras = data.get('cameras')
+    if cameras is not None:
+        _validate_cameras(cameras, errors)
+
     if errors:
         raise ValueError('\n'.join(errors))
+
+
+def _validate_cameras(cameras: Any, errors: list[str]) -> None:
+    """Require each camera mapping to have a non-empty string ``id`` field."""
+    if not isinstance(cameras, list):
+        errors.append('cameras must be a list')
+        return
+    seen: set[str] = set()
+    for i, camera in enumerate(cameras):
+        prefix = f'cameras[{i}]'
+        if not isinstance(camera, dict):
+            errors.append(f'{prefix}: must be a mapping')
+            continue
+        cam_id = camera.get('id')
+        if not isinstance(cam_id, str) or not cam_id.strip():
+            # Common mistake: ``- realsense-rgb: null`` instead of ``- id: realsense-rgb``.
+            bogus = [
+                k
+                for k, v in camera.items()
+                if k != 'id' and v is None and isinstance(k, str)
+            ]
+            hint = ''
+            if bogus:
+                hint = f' (use "id: {bogus[0]}" not "{bogus[0]}: null")'
+            errors.append(f'{prefix}: missing non-empty string id{hint}')
+            continue
+        cam_id = cam_id.strip()
+        if cam_id in seen:
+            errors.append(f'{prefix}: duplicate camera id {cam_id!r}')
+        seen.add(cam_id)
+
+
+def resolve_firmware_crate(board: dict[str, Any]) -> str:
+    """Return firmwares/<crate> path for a board (override or board_class map)."""
+    override = board.get('firmware_crate')
+    if isinstance(override, str) and override.strip():
+        return override.strip()
+    board_class = board.get('board_class')
+    if board_class not in BOARD_CLASS_TO_CRATE:
+        raise ValueError(f'no firmware crate mapping for board_class {board_class!r}')
+    return BOARD_CLASS_TO_CRATE[board_class]
+
+
+def board_slave_address(board: dict[str, Any]) -> int:
+    """Modbus slave address for a board (default 1)."""
+    if 'slave_address' not in board:
+        return 1
+    return int(board['slave_address'])
+
+
+def channel_for_actuator(actuator: dict[str, Any], board_class: str) -> str:
+    """Named hardware channel for firmware YAML (ServoN / UART bus slot)."""
+    if (
+        'channel' in actuator
+        and isinstance(actuator['channel'], str)
+        and actuator['channel'].strip()
+    ):
+        return actuator['channel'].strip()
+    pin = int(actuator['physical_pin'])
+    if board_class == BOARD_CLASS_BUS_SERVO_ONLY:
+        return f'UART0:{pin}'
+    return f'Servo{pin}'
+
+
+def channel_for_sensor(sensor: dict[str, Any]) -> str:
+    """Named ADC channel for a pressure sensor."""
+    if 'channel' in sensor and isinstance(sensor['channel'], str) and sensor['channel'].strip():
+        return sensor['channel'].strip()
+    pin = int(sensor['physical_pin'])
+    # physical_pin 1 → ADC0 for RP2040-style boards
+    return f'ADC{pin - 1}'
+
+
+def driver_for_board_class(board_class: str) -> tuple[str, str]:
+    """Return (driver, modbus_adapter) for actuators on this board class."""
+    if board_class == BOARD_CLASS_BUS_SERVO_ONLY:
+        return DRIVER_BUS_SERVO, ADAPTER_BUS_SERVO
+    return DRIVER_PWM_SERVO, ADAPTER_PWM_SERVO

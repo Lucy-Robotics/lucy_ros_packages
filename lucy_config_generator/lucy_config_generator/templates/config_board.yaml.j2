@@ -1,0 +1,41 @@
+board_id: {{ board_id }}
+board: {{ board }}
+board_class: {{ board_class }}
+slave_address: {{ slave_address }}
+serial_id: "{{ serial_id }}"
+firmware_crate: {{ firmware_crate }}
+actuators:
+{% for a in actuators %}
+  - id: {{ a.id }}
+    enabled: {{ 'true' if a.enabled else 'false' }}
+    virtual_pin: {{ a.virtual_pin }}
+    urdf:
+      joint: {{ a.urdf_joint }}
+    config:
+      min_angle: {{ a.min_angle }}
+      max_angle: {{ a.max_angle }}
+      default_angle: {{ a.default_angle }}
+      min_pulse: {{ a.min_pulse }}
+      max_pulse: {{ a.max_pulse }}
+    hardware:
+      board: {{ board }}
+      driver: {{ a.driver }}
+      channel: {{ a.channel }}
+{% endfor %}
+sensors:
+{% if sensors %}
+{% for s in sensors %}
+  - id: {{ s.id }}
+    enabled: {{ 'true' if s.enabled else 'false' }}
+    virtual_pin: {{ s.virtual_pin }}
+    config:
+      min_value: {{ s.min_value }}
+      max_value: {{ s.max_value }}
+    hardware:
+      board: {{ board }}
+      driver: {{ s.driver }}
+      channel: {{ s.channel }}
+{% endfor %}
+{% else %}
+  []
+{% endif %}

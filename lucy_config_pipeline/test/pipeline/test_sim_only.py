@@ -14,9 +14,9 @@ import pytest
 
 pytest.importorskip('rclpy')
 
-from src.pipeline.action_server import PipelineActionServer
-from src.pipeline.models import PipelinePaths
-import yaml
+from src.pipeline.action_server import PipelineActionServer  # noqa: E402
+from src.pipeline.models import PipelinePaths  # noqa: E402
+import yaml  # noqa: E402
 
 _FIXTURE = (
     Path(__file__).resolve().parents[2]
@@ -58,7 +58,9 @@ def pipeline_paths(tmp_path: Path) -> PipelinePaths:
     not Path('/opt/ros/jazzy').exists(),
     reason='ROS 2 Jazzy overlay required for lucy_msgs/rclpy',
 )
-def test_simulation_only_skips_build_flash_and_calls_reload(pipeline_paths: PipelinePaths):
+def test_simulation_only_skips_build_flash_and_calls_reload(
+    pipeline_paths: PipelinePaths, rclpy_init_shutdown
+):
     data = yaml.safe_load(_FIXTURE.read_text(encoding='utf-8'))
     config_yaml = yaml.dump(data)
 
@@ -66,46 +68,56 @@ def test_simulation_only_skips_build_flash_and_calls_reload(pipeline_paths: Pipe
     store.get_active_name.return_value = 'default'
 
     node = PipelineActionServer(paths=pipeline_paths, config_store=store)
-    node._reload_client.wait_for_service = MagicMock(return_value=True)  # type: ignore[method-assign]
+    try:
+        node._reload_client.wait_for_service = MagicMock(  # type: ignore[method-assign]
+            return_value=True
+        )
 
-    future = MagicMock()
-    future.done.return_value = True
-    resp = MagicMock()
-    resp.success = True
-    resp.message = 'ok'
-    future.result.return_value = resp
-    # The new wait path uses future.add_done_callback + threading.Event,
-    # not rclpy.spin_until_future_complete. Make the callback fire immediately
-    # so done_event is set before .wait() is reached.
-    future.add_done_callback.side_effect = lambda cb: cb(future)
-    node._reload_client.call_async = MagicMock(return_value=future)  # type: ignore[method-assign]
+        future = MagicMock()
+        future.done.return_value = True
+        resp = MagicMock()
+        resp.success = True
+        resp.message = 'ok'
+        future.result.return_value = resp
+        # The new wait path uses future.add_done_callback + threading.Event,
+        # not rclpy.spin_until_future_complete. Make the callback fire immediately
+        # so done_event is set before .wait() is reached.
+        future.add_done_callback.side_effect = lambda cb: cb(future)
+        node._reload_client.call_async = MagicMock(  # type: ignore[method-assign]
+            return_value=future
+        )
 
-    goal_handle = MagicMock()
-    goal_handle.request.mapping_file = ''
-    goal_handle.request.boards_to_flash = []
-    goal_handle.request.dry_run = False
-    goal_handle.request.build_only = False
-    goal_handle.request.simulation_only = True
-    goal_handle.is_cancel_requested = False
+        goal_handle = MagicMock()
+        goal_handle.request.mapping_file = ''
+        goal_handle.request.boards_to_flash = []
+        goal_handle.request.dry_run = False
+        goal_handle.request.build_only = False
+        goal_handle.request.simulation_only = True
+        goal_handle.is_cancel_requested = False
 
-    with (
-        patch('src.pipeline.action_server.resolve_mapping_input', return_value=('default', config_yaml)),
-        patch('src.pipeline.action_server.validate_schema', return_value=data),
-        patch('src.pipeline.action_server.urdf_crosscheck') as cross,
-        patch('src.pipeline.action_server.generate') as gen,
-        patch('src.pipeline.action_server.run_build_phase') as build,
-        patch('src.pipeline.action_server.run_flash_phase') as flash,
-    ):
-        cross.return_value = MagicMock(errors=[])
-        gen.side_effect = lambda **kwargs: _write_ros2_outputs(kwargs['output_dir'])
+        with (
+            patch(
+                'src.pipeline.action_server.resolve_mapping_input',
+                return_value=('default', config_yaml),
+            ),
+            patch('src.pipeline.action_server.validate_schema', return_value=data),
+            patch('src.pipeline.action_server.urdf_crosscheck') as cross,
+            patch('src.pipeline.action_server.generate') as gen,
+            patch('src.pipeline.action_server.run_build_phase') as build,
+            patch('src.pipeline.action_server.run_flash_phase') as flash,
+        ):
+            cross.return_value = MagicMock(errors=[])
+            gen.side_effect = lambda **kwargs: _write_ros2_outputs(kwargs['output_dir'])
 
-        result = node._execute(goal_handle)
+            result = node._execute(goal_handle)
 
-    assert result.success is True
-    build.assert_not_called()
-    flash.assert_not_called()
-    assert any(c.kwargs.get('simulation_only') is True for c in gen.call_args_list)
-    node._reload_client.call_async.assert_called_once()
+        assert result.success is True
+        build.assert_not_called()
+        flash.assert_not_called()
+        assert any(c.kwargs.get('simulation_only') is True for c in gen.call_args_list)
+        node._reload_client.call_async.assert_called_once()
+    finally:
+        node.destroy_node()
 
 
 def _write_ros2_outputs(out_dir: Path) -> None:

@@ -13,7 +13,7 @@ The generated ``inmoov_ros2_control.xacro`` is consumed by different
   ``gz_ros2_control`` in this workspace).
 * ``lucy_ros2_control/LucySystemHardware`` with ``publish_actuators=false``
   (RViz / mock) — clamps ``hw_commands_`` to ``min``/``max``.
-* ``lucy_ros2_control/LucySystemHardware`` with a micro-ROS publisher (real).
+* ``lucy_ros2_control/LucySystemHardware`` with SHM/Modbus path (real).
 
 These tests assert that ``min``/``max`` are emitted for every actuated joint,
 match the URDF ``<limit>``, and sit **outside** any ``<xacro:if>`` so real and
@@ -186,8 +186,7 @@ def test_lucy_plugin_used_for_both_real_and_mock_hardware():
     assert hw_plugin in xacro
     assert 'mock_components/GenericSystem' not in xacro
 
-    # ``publish_actuators`` is the toggle used to suppress the micro-ROS
-    # actuator publisher in mock mode while keeping the same plugin (and the
-    # same URDF clamping) on both paths.
+    # ``publish_actuators`` suppresses the optional JointState debug publisher
+    # in mock mode while keeping the same plugin (and URDF clamping).
     assert '<param name="publish_actuators">false</param>' in xacro
     assert '<param name="publisher_topic">' in xacro

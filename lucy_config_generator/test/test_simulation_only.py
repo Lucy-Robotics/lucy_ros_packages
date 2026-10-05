@@ -41,7 +41,7 @@ def test_simulation_only_keeps_three_controllers_and_per_board_blocks():
     assert 'use_mock_hardware' in xacro
     # Real and mock hardware now share the LucySystemHardware plugin so URDF
     # limit clamping is exercised on both paths; mock differs only in that
-    # ``publish_actuators=false`` suppresses the micro-ROS actuator publisher.
+    # ``publish_actuators=false`` suppresses the optional JointState debug publisher.
     assert 'lucy_ros2_control/LucySystemHardware' in xacro
     assert 'publish_actuators' in xacro
     assert 'mock_components/GenericSystem' not in xacro

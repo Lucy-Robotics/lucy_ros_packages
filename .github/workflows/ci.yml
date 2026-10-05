@@ -42,10 +42,11 @@ jobs:
       - name: Workspace layout
         run: |
           mkdir -p ws/src
-          cp -r camera_ros lucy_bringup lucy_ros2_control lucy_config_generator ws/src/
+          cp -r camera_ros lucy_bringup lucy_ros2_control lucy_config_generator \
+            lucy_modbus_bridge lucy_msgs lucy_config_pipeline ws/src/
 
       # Do not `rm -rf /var/lib/apt/lists/*` before this: rosdep/apt need indexes for packages.ros.org.
-      # Skip keys: not in this CI tree (thais_urdf), external/third-party (audio_common), or hardware agents not needed to compile/test.
+      # Skip keys: not in this CI tree (thais_urdf), external/third-party (audio_common), or camera stacks not needed to compile/test.
       - name: rosdep install
         working-directory: ws
         shell: bash
@@ -53,7 +54,7 @@ jobs:
           apt-get update
           source /opt/ros/jazzy/setup.bash
           rosdep install --from-paths src --ignore-src -r -y \
-            --skip-keys="audio_common micro_ros_agent realsense2_camera thais_urdf"
+            --skip-keys="audio_common realsense2_camera thais_urdf"
 
       - name: colcon build
         working-directory: ws
@@ -62,6 +63,7 @@ jobs:
           source /opt/ros/jazzy/setup.bash
           colcon build --symlink-install \
             --packages-select camera_ros lucy_bringup lucy_ros2_control lucy_config_generator \
+              lucy_modbus_bridge lucy_msgs lucy_config_pipeline \
             --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
 
       - name: colcon test
@@ -72,6 +74,7 @@ jobs:
           source install/setup.bash
           colcon test \
             --packages-select camera_ros lucy_bringup lucy_ros2_control lucy_config_generator \
+              lucy_modbus_bridge lucy_config_pipeline \
             --event-handlers console_direct+ \
             --pytest-args -vv --tb=short
 
