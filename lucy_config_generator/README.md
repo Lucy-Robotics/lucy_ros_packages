@@ -1,7 +1,7 @@
 # lucy_config_generator
 
-> Architecture (system): [`docs/architecture/overview.md`](../../../docs/architecture/overview.md).  
-> Package charts: [`docs/architecture/pipeline_shm.md`](../docs/architecture/pipeline_shm.md).
+> Package charts: [`docs/architecture/pipeline_shm.md`](../docs/architecture/pipeline_shm.md).  
+> Workspace overview (under `lucy_ws/src/`): [`lucy_control_panel/docs/architecture/overview.md`](../../lucy_control_panel/docs/architecture/overview.md).
 
 Python tool that reads the hardware mapping YAML from an **URDF** (`config/hardware/active.yaml`) and generates:
 
@@ -53,7 +53,7 @@ Jinja2 sources are under the Python package at `lucy_config_generator/lucy_confi
 
 | Template | Output |
 |----------|--------|
-| `config_board.yaml.j2` | **Primary** - architecture-shaped per-board YAML for Rust crates (`rp2040_servo2040` / `rp2040_bus_servo`). Angles in **radians**. |
+| `config_board.yaml.j2` | **Primary** (rad / Rust tips) - architecture-shaped per-board YAML for `rp2040_servo2040`. Angles in **radians**. |
 | `config_internal_only_board.c.j2` | **Legacy** - C `dump_config()` golden fixtures for `internal_servo_only` (migration / tests only). |
 | `config_internal_i2c_board.c.j2` | **Legacy** - C scaffold for `internal_servo_i2c_pwm` (migration / tests only). |
 | `ros2_control.xacro.j2` | One `<ros2_control>` block per board (names derived from board id). Selects `gz_ros2_control/GazeboSimSystem` when `use_gazebo_sim:=true`, otherwise `lucy_ros2_control/LucySystemHardware` for both real and mock (mock sets `<param name="publish_actuators">false</param>` so optional JointState debug traffic is off; URDF clamping and SHM path still apply as configured). |
@@ -65,7 +65,7 @@ Jinja2 sources are under the Python package at `lucy_config_generator/lucy_confi
 |---------------|--------------------------------------------------|
 | `internal_servo_only` | `rp2040_servo2040` |
 | `internal_servo_i2c_pwm` | `rp2040_servo2040` (same binary; I2C/PWM banks gated by YAML) |
-| `bus_servo_only` | `rp2040_bus_servo` |
+| `bus_servo_only` | `rp2040_servo2040` (`HAS_BUS` → UART0 Feetech) |
 
 **Disabled actuators** (`enabled: false`): **omitted from firmware YAML device tables** only (no Modbus row on the Pico for that joint). They **remain** in **`ros2_control`** and in the per-board **trajectory controller** joint list so the stack is uniform; firmware ignores commands at `virtual_pin` indices it does not own. **`extra_joints`** lists only URDF joints that are **not** any actuator row (typically passive links).
 
