@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -32,6 +33,19 @@ namespace lucy_ros2_control
 namespace
 {
 constexpr double kPi = 3.14159265358979323846;
+
+uint16_t parse_required_u16(
+  const hardware_interface::ComponentInfo & joint,
+  const std::string & key)
+{
+  const double v = parse_required_double(joint, key);
+  if (!std::isfinite(v) || v < 0.0 || v > 65535.0 || std::floor(v) != v) {
+    throw std::runtime_error(
+            "joint '" + joint.name + "' parameter '" + key +
+            "' must be an integer in [0, 65535]");
+  }
+  return static_cast<uint16_t>(v);
+}
 }  // namespace
 
 double rad_to_deg(double rad)
@@ -177,6 +191,8 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
   m.servo_min_rad = parse_required_double(joint, "servo_min_rad");
   m.servo_max_rad = parse_required_double(joint, "servo_max_rad");
   m.servo_default_rad = parse_required_double(joint, "servo_default_rad");
+  m.min_pulse = parse_required_u16(joint, "min_pulse");
+  m.max_pulse = parse_required_u16(joint, "max_pulse");
   m.min_rad = min_rad;
   m.max_rad = max_rad;
 
@@ -192,6 +208,10 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
   if (m.servo_min_rad > m.servo_max_rad) {
     throw std::runtime_error(
             "joint '" + joint.name + "' has servo_min_rad > servo_max_rad");
+  }
+  if (m.min_pulse > m.max_pulse) {
+    throw std::runtime_error(
+            "joint '" + joint.name + "' has min_pulse > max_pulse");
   }
   if (std::isfinite(m.min_rad) && std::isfinite(m.max_rad) && m.min_rad > m.max_rad) {
     throw std::runtime_error(
@@ -210,6 +230,35 @@ double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd_
 {
   const double servo_rad = (cmd_rad / (m.direction * m.scale)) + m.offset_rad;
   return clamp_position_command(servo_rad, m.servo_min_rad, m.servo_max_rad);
+}
+
+uint16_t servo_rad_to_pulse(const ActuatedJointMapping & m, double servo_rad)
+{
+  const double lo = std::min(m.servo_min_rad, m.servo_max_rad);
+  const double hi = std::max(m.servo_min_rad, m.servo_max_rad);
+  const double clamped = std::clamp(servo_rad, lo, hi);
+  const double in_span = m.servo_max_rad - m.servo_min_rad;
+  if (std::abs(in_span) < std::numeric_limits<double>::epsilon()) {
+    return m.min_pulse;
+  }
+  const double out_min = static_cast<double>(m.min_pulse);
+  const double out_max = static_cast<double>(m.max_pulse);
+  double pulse = out_min + (clamped - m.servo_min_rad) * (out_max - out_min) / in_span;
+  const double bound_lo = std::min(out_min, out_max);
+  const double bound_hi = std::max(out_min, out_max);
+  pulse = std::clamp(pulse, bound_lo, bound_hi);
+  // Half-up round to match firmware rad_to_pulse (+0.5 cast).
+  pulse = std::floor(pulse + 0.5);
+  if (pulse <= 0.0) {
+    return 0;
+  }
+  constexpr double kMax = static_cast<double>(std::numeric_limits<uint16_t>::max());
+  return static_cast<uint16_t>(pulse > kMax ? kMax : pulse);
+}
+
+uint16_t actuator_command_to_pulse(const ActuatedJointMapping & m, double cmd_rad)
+{
+  return servo_rad_to_pulse(m, actuator_command_to_servo_rad(m, cmd_rad));
 }
 
 std::optional<int> sort_and_find_duplicate_virtual_pin(

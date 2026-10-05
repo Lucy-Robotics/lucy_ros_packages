@@ -64,6 +64,8 @@ ComponentInfo make_valid_joint(const std::string & name = "joint_a")
     {"servo_min_rad", "0"},
     {"servo_max_rad", "3.141592654"},
     {"servo_default_rad", "1.570796327"},
+    {"min_pulse", "1250"},
+    {"max_pulse", "2500"},
   };
   return joint;
 }
@@ -358,6 +360,57 @@ TEST(JointConfigMath, ActuatorCommandHonoursDirection)
   m.servo_max_rad = 3.141592653589793;
   // cmd π/2 -> servo = (π/2)/(-1) + π/2 = 0
   EXPECT_NEAR(lucy_ros2_control::actuator_command_to_servo_rad(m, kPi / 2.0), 0.0, 1e-12);
+}
+
+TEST(JointConfigMath, ServoRadToPulseMidpoint)
+{
+  ActuatedJointMapping m;
+  m.servo_min_rad = 0.0;
+  m.servo_max_rad = kPi;
+  m.min_pulse = 1250;
+  m.max_pulse = 2500;
+  EXPECT_EQ(lucy_ros2_control::servo_rad_to_pulse(m, kPi / 2.0), 1875u);
+}
+
+TEST(JointConfigMath, ServoRadToPulseHalfStepRounds)
+{
+  ActuatedJointMapping m;
+  m.servo_min_rad = 0.0;
+  m.servo_max_rad = 4.0;
+  m.min_pulse = 1250;
+  m.max_pulse = 2500;
+  // 1 of 0..4 rad span → 1562.5 → rounds to 1563
+  EXPECT_EQ(lucy_ros2_control::servo_rad_to_pulse(m, 1.0), 1563u);
+}
+
+TEST(JointConfigMath, ActuatorCommandToPulseUsesCalibration)
+{
+  ActuatedJointMapping m;
+  m.offset_rad = 0.0;
+  m.direction = 1.0;
+  m.scale = 1.0;
+  m.servo_min_rad = 0.0;
+  m.servo_max_rad = kPi;
+  m.min_pulse = 1250;
+  m.max_pulse = 2500;
+  EXPECT_EQ(lucy_ros2_control::actuator_command_to_pulse(m, kPi / 2.0), 1875u);
+}
+
+TEST(JointConfigMapping, InvertedPulseRangeThrows)
+{
+  ComponentInfo joint = make_valid_joint();
+  joint.parameters["min_pulse"] = "2500";
+  joint.parameters["max_pulse"] = "1250";
+  EXPECT_THROW(
+    lucy_ros2_control::build_actuated_joint_mapping(joint, 0, -kInf, kInf), std::runtime_error);
+}
+
+TEST(JointConfigMapping, MissingPulseParamThrows)
+{
+  ComponentInfo joint = make_valid_joint();
+  joint.parameters.erase("min_pulse");
+  EXPECT_THROW(
+    lucy_ros2_control::build_actuated_joint_mapping(joint, 0, -kInf, kInf), std::runtime_error);
 }
 
 // ---------------------------------------------------------------------------

@@ -550,19 +550,6 @@ hardware_interface::return_type LucySystemHardware::read(
 
 namespace
 {
-uint16_t to_register_milliradians(double cmd_rad)
-{
-  double wire_rad = cmd_rad;
-  if (wire_rad < 0.0) {
-    wire_rad += 2.0 * M_PI;
-  }
-  const double milli = std::round(wire_rad * 1000.0);
-  if (!std::isfinite(milli) || milli <= 0.0) {
-    return 0;
-  }
-  constexpr double kMax = static_cast<double>(std::numeric_limits<uint16_t>::max());
-  return static_cast<uint16_t>(milli > kMax ? kMax : milli);
-}
 }  // namespace
 
 hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
@@ -600,10 +587,10 @@ hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
     }
     hw_old_commands_[i] = cmd_rad;
 
-    // Joint space -> servo space: applies offset_rad / direction / scale and
-    // clamps to [servo_min_rad, servo_max_rad]. Sending the raw joint angle
-    // skips the mechanical envelope and wraps negative commands to ~2*pi.
-    const uint16_t wire = to_register_milliradians(actuator_command_to_servo_rad(m, cmd_rad));
+    // Joint space → servo rad → Modbus pulse (PWM duty / STS tick). Sending the
+    // raw joint angle skips the mechanical envelope and the host/MCU rad→pulse
+    // mapping.
+    const uint16_t wire = actuator_command_to_pulse(m, cmd_rad);
     const int reg =
       m.type == Type::BUS_SERVO ? bus_block_base(m.virtual_pin) : pwm_block_base(m.virtual_pin);
 
@@ -611,7 +598,7 @@ hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
     sem_wait(sem_);
     switch (m.type) {
       case Type::PWM_SERVO:
-        // Angle first, opcode last: same ordering rule as the bus block below.
+        // Pulse first, opcode last: same ordering rule as the bus block below.
         shared_registers_->register_table[reg + 1] = wire;
         register_header_->set_dirty(reg + 1);
         shared_registers_->register_table[reg] = 1;
@@ -620,7 +607,7 @@ hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
       case Type::BUS_SERVO:
         // Operands first, opcode last: the bridge ships dirty registers in
         // ascending index order and the firmware clears cmd in the tick that
-        // consumes it, so a cmd sent first fires on the previous id/angle.
+        // consumes it, so a cmd sent first fires on the previous id/pulse.
         shared_registers_->register_table[reg + kBusServoIdOffset] =
           static_cast<uint16_t>(m.bus_id);
         register_header_->set_dirty(reg + kBusServoIdOffset);

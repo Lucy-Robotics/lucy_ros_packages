@@ -198,6 +198,11 @@ def _actuator_joint_for_ros2(
     if board_class == BOARD_CLASS_BUS_SERVO_ONLY:
         row['joint_type'] = 'bus_servo'
         row['bus_id'] = int(actuator['physical_pin'])
+        row['min_pulse'], row['max_pulse'] = _firmware_bus_pulse_limits()
+    else:
+        row['min_pulse'], row['max_pulse'] = _firmware_pulse_limits(
+            str(actuator.get('servo_type', '180'))
+        )
     return row
 
 
@@ -338,7 +343,7 @@ def _firmware_pulse_limits(servo_type: str) -> tuple[int, int]:
 
 
 def _firmware_bus_pulse_limits() -> tuple[int, int]:
-    """STS3215 position tick span used by BusServoDriver millirad→tick mapping."""
+    """STS3215 position tick span used by BusServoDriver host rad→tick mapping."""
     return 0, 4095
 
 

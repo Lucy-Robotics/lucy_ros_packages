@@ -26,6 +26,7 @@
 #define LUCY_ROS2_CONTROL__JOINT_CONFIG_HPP_
 
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <optional>
 #include <string>
@@ -68,6 +69,9 @@ struct ActuatedJointMapping
   double servo_min_rad{0.0};
   double servo_max_rad{0.0};
   double servo_default_rad{0.0};
+  /// PWM duty counts (µs-scaled) or STS3215 position ticks for Modbus wire.
+  uint16_t min_pulse{0};
+  uint16_t max_pulse{0};
   /// URDF joint-space limits from command_interface min/max (rad).
   double min_rad{-std::numeric_limits<double>::infinity()};
   double max_rad{std::numeric_limits<double>::infinity()};
@@ -114,9 +118,16 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
 /// Default joint position (rad) derived from the actuator's ``servo_default_rad``.
 double default_joint_position_rad(const ActuatedJointMapping & m);
 
-/// Servo angle (rad) published to firmware for a joint-space command (rad):
-/// maps joint→servo radians, clamps to ``[servo_min_rad, servo_max_rad]``.
+/// Servo angle (rad) for a joint-space command (rad): maps joint→servo radians,
+/// clamps to ``[servo_min_rad, servo_max_rad]``.
 double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd_rad);
+
+/// Map a servo-space angle (rad) to a Modbus **pulse** (PWM duty / STS tick),
+/// matching firmware ``rad_to_pulse`` (linear + half-up round).
+uint16_t servo_rad_to_pulse(const ActuatedJointMapping & m, double servo_rad);
+
+/// Joint-space command (rad) → Modbus pulse register value.
+uint16_t actuator_command_to_pulse(const ActuatedJointMapping & m, double cmd_rad);
 
 /// Sort ``mappings`` ascending by ``virtual_pin`` and return the first repeated
 /// pin, or ``std::nullopt`` when all pins are unique.

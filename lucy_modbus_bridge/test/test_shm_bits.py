@@ -18,13 +18,13 @@ from lucy_modbus_bridge.shm import (
 )
 
 
-def test_build_write_single_millirad_value():
-    # 90° ≈ π/2 rad → ~1571 millirad (firmware encoding contract).
-    frame = build_write_single(1, 1, 1571)
+def test_build_write_single_pulse_value():
+    # Mid PWM window (1875) used as opaque Modbus FC06 payload (HI encodes pulse).
+    frame = build_write_single(1, 1, 1875)
     assert frame[0] == 1
     assert frame[1] == 0x06
     assert frame[2:4] == (1).to_bytes(2, "big")
-    assert frame[4:6] == (1571).to_bytes(2, "big")
+    assert frame[4:6] == (1875).to_bytes(2, "big")
     assert frame[6:] == modbus_crc(frame[:6])
 
 
@@ -81,6 +81,6 @@ def test_shm_node_name_truncates_like_cpp():
 def test_register_pack_little_endian():
     buf = bytearray(4)
     struct.pack_into("<H", buf, 0, 1)  # cmd
-    struct.pack_into("<H", buf, 2, 1571)  # millirad
+    struct.pack_into("<H", buf, 2, 1875)  # pulse
     assert buf[0:2] == (1).to_bytes(2, "little")
-    assert struct.unpack_from("<H", buf, 2)[0] == 1571
+    assert struct.unpack_from("<H", buf, 2)[0] == 1875

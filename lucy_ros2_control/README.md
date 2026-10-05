@@ -31,6 +31,8 @@ source install/setup.bash
 - `servo_min_rad`
 - `servo_max_rad`
 - `servo_default_rad`
+- `min_pulse`
+- `max_pulse`
 
 Board-level params:
 
@@ -41,17 +43,19 @@ Joints without `virtual_pin` are treated as passive/unmapped for actuator output
 
 ## Conversion math
 
-Internal command/state interface uses joint-space radians. SHM/Modbus registers use
-**servo-space milliradians** (`rad × 1000`) at build-assigned register bases
-(historically `virtual_pin * 2` for PWM cmd / `+1` for angle).
+Internal command/state interface uses joint-space **radians**. SHM/Modbus
+holding registers carry **pulse** (`u16`: PWM duty counts or STS3215 ticks) at
+build-assigned register bases (historically `virtual_pin * 2` for PWM cmd /
+`+1` for pulse).
 
 - default initialization:
   - `joint_rad = (servo_default_rad - offset_rad) * direction * scale`
 - write conversion:
   - `servo_rad = actuator_command_to_servo_rad(...)` (joint → servo rad, clamped)
-  - `angle_millirad = round(servo_rad * 1000)`
-  - firmware maps millirad → PWM using config min/max **milliradians**
+  - `pulse = servo_rad_to_pulse(...)` (linear map over `servo_*_rad` → `min_pulse`/`max_pulse`)
+  - firmware applies the pulse (clamped to the same window)
 
+Hardware params also include `min_pulse` / `max_pulse` (from the generator).
 Degrees are not used in HI / firmware schemas (LCP may convert only for UI display).
 
 ## Robot-specific launch/config

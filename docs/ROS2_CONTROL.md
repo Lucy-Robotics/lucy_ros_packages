@@ -50,11 +50,11 @@ flowchart TB
   C -->|"trajectory"| CM
   CM --> WL
   CM --> JS
-  WL -->|"write() millirad"| SHM --> BR -->|"FC06"| FW
+  WL -->|"write() pulse"| SHM --> BR -->|"FC06"| FW
 ```
 
 - **`/joint_states`**: fused state for **`robot_state_publisher`**, RViz, TF. Comes from **`joint_state_broadcaster`**, not from Modbus.
-- **SHM / Modbus**: `write()` stores `cmd` + **angle milliradians** (`rad × 1000`) at `virtual_pin * 2` / `+1`. Config YAML angles stay in **degrees**.
+- **SHM / Modbus**: `write()` stores `cmd` + **pulse** (`u16` PWM duty / STS tick) at `virtual_pin * 2` / `+1`. Config YAML angles stay in **radians**; HI converts rad → pulse.
 
 ---
 
@@ -79,8 +79,8 @@ Implementation (`lucy_ros2_control/src/lucy_system.cpp`):
 - **`read()`**: no encoders → `hw_positions_` mirrors the last command.
 - **`write()`** (in order):
   1. **URDF clamp** on `hw_commands_` (when enabled in the plugin path).
-  2. **Actuator mapping** — joint rad → servo rad via `actuator_command_to_servo_rad()`.
-  3. **SHM update** — `reg[virtual_pin*2]=1`, `reg[+1]=millirad`, set dirty bits under the board semaphore.
+  2. **Actuator mapping** — joint rad → servo rad via `actuator_command_to_servo_rad()`, then **pulse** via `servo_rad_to_pulse()`.
+  3. **SHM update** — `reg[virtual_pin*2]=1`, `reg[+1]=pulse`, set dirty bits under the board semaphore.
 
 > **Gazebo caveat.** `gz_ros2_control` (upstream `jazzy`) does **not** apply the `<command_interface><param name="min/max">` values inside `write()`. Gazebo may still respect joint limits from the spawned model/physics.
 
@@ -113,7 +113,7 @@ The panel sends trajectories to **`joint_trajectory_controller`** topics. That r
 1. **Arm controllers inactive** — verify with `ros2 control list_controllers`.
 2. **Sim URDF on hardware** — real boards need `use_gazebo_sim:=false`.
 3. **Bridge / SHM name mismatch** — bridge `node_name` must equal HI `node_name` (`lucy_hardware_interface_<board_suffix>`).
-4. **Encoding** — firmware angle registers are **milliradians**, not degrees.
+4. **Encoding** — firmware angle registers are **pulse** (PWM duty / STS ticks), not radians or degrees. HI owns rad → pulse.
 5. **URDF limits invisible at runtime** — run the pipeline **GENERATE** step so min/max land in the installed xacro.
 6. **Gazebo over-travel** — see the caveat at the end of §4.
 
