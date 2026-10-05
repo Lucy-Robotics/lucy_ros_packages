@@ -12,9 +12,9 @@ Conventions follow common packaging practice ([REP-149](https://www.ros.org/reps
 
 | Package | Responsibility |
 |---------|----------------|
-| `lucy_bringup` | Jetson **system bringup**: `lucy_modbus_bridge`, `rosbridge_server`, `camera_ros`, RealSense, control include. |
+| `lucy_bringup` | Jetson **system bringup**: rosbridge, cameras, control include; on the **pipeline tip**, also `lucy_modbus_bridge` per board. |
 | `lucy_ros2_control` | **Hardware** `ros2_control`: `LucySystemHardware` plugin (SHM register table). |
-| `lucy_modbus_bridge` | SHM → Modbus RTU over USB serial (one node per board). |
+| `lucy_modbus_bridge` | SHM millirad dirty bits → Modbus RTU over USB serial (one node per board). On `cma/pipeline-flash` / stacked hardware tips; may be missing on docs-only checkouts. |
 | `lucy_config_generator` | Hardware YAML → RP2040 `config_*.yaml`, `ros2_control` xacro, `controllers.yaml`. |
 | `lucy_config_pipeline` | Config store + `ConfigurePipeline` (validate → generate → Cargo build → flash → reload). |
 | `camera_ros` | MJPEG → `sensor_msgs/msg/CompressedImage`; GStreamer pipeline; pytest. |
