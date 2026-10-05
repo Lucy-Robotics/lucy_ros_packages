@@ -7,7 +7,7 @@
 
 | Doc | Content |
 |-----|---------|
-| [pipeline_shm.md](pipeline_shm.md) | Config pipeline phases, generator outputs, SHM/Modbus |
+| [pipeline_shm.md](pipeline_shm.md) | Pipeline phases, HI f64 `JointTable` contract, dual SO101 / InMoov paths |
 | [../ROS2_CONTROL.md](../ROS2_CONTROL.md) | Plugin behavior + dataflow |
 
 Do not copy the workspace system chart here - link up instead.
