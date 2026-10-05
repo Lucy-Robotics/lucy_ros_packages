@@ -7,7 +7,7 @@ Package-level detail for **`lucy_ros_packages`**.
 **Firmware paths:** [`lucy_embedded_firmware/docs/architecture/firmware.md`](../../../lucy_embedded_firmware/docs/architecture/firmware.md)  
 **Index:** [README.md](README.md)
 
-> **Branch note.** Architecture text here describes **(A)** the working Modbus millirad tip (`cma/pipeline-flash` + firmware `cma/fw-boards`) and **(B)** the WIP HI f64 contract (`mbo/feat-rust-middleware` [#63](https://github.com/Lucy-Robotics/lucy_ros_packages/pull/63), firmware `mbo/feat-protocol`). This docs branch may not contain every package named below.
+> **Branch note.** Architecture text here describes **(A)** the working Modbus **pulse** tip (`cma/pipeline-flash` + firmware `cma/fw-boards`) and **(B)** the WIP HI f64 contract (`mbo/feat-rust-middleware` [#63](https://github.com/Lucy-Robotics/lucy_ros_packages/pull/63), firmware `mbo/feat-protocol`). This docs branch may not contain every package named below.
 
 ## Pipeline phases
 
@@ -39,7 +39,7 @@ flowchart LR
 
 Older tips may still map `bus_servo_only` → `firmwares/rp2040_bus_servo` (removed on current firmware tip). Use the ros + firmware tips that agree on `rp2040_servo2040`.
 
-## A. Current end-to-end path (Modbus millirad)
+## A. Current end-to-end path (Modbus pulse)
 
 **Source of truth for operators today:** ros `cma/pipeline-flash` + firmware `cma/fw-boards`.
 
@@ -49,7 +49,7 @@ flowchart TB
   Clients["Clients"]
   CM["controller_manager"]
   HI["LucySystemHardware"]
-  SHM["POSIX_SHM_millirad"]
+  SHM["POSIX_SHM_pulse"]
   Bridge["lucy_modbus_bridge"]
   FW["rp2040_servo2040"]
   JS["joint_states"]
@@ -57,7 +57,7 @@ flowchart TB
   Clients -->|"trajectory"| CM
   CM --> HI
   CM --> JS
-  HI -->|"u16 millirad + dirty"| SHM
+  HI -->|"u16 pulse + dirty"| SHM
   Bridge -->|"poll"| SHM
   Bridge -->|"FC06 USB CDC"| FW
   linkStyle default stroke:#00FF41,stroke-width:2px
@@ -66,12 +66,12 @@ flowchart TB
 | Item | Value |
 |------|--------|
 | SHM objects | `/{sanitised_node}.lucy_reg_table`, `/{sanitised_node}.lucy_reg_header`, semaphore `/{sanitised_node}` |
-| Angle encoding | milliradians (`rad × 1000`) in holding registers |
+| Angle encoding | **pulse** (`u16`) in holding registers; HI converts rad → pulse |
 | MCU link | Modbus RTU over USB CDC — **MCU does not mmap host SHM** |
 | SO-ARM101 | Servo2040 UART0 Feetech behind that Modbus path (`bus_servo_only`) |
 | InMoov | Servo2040 PWM / I2C / ADC profiles behind the same Modbus path |
 
-YAML angles remain **radians**; only the Modbus SHM register table uses millirad.
+YAML / HI joint space remain **radians**; Modbus SHM holding registers carry **pulse**.
 
 ## B. Target HI f64 contract (WIP — not shipped on this PR)
 

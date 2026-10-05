@@ -37,7 +37,7 @@ Joints without `virtual_pin` are treated as passive/unmapped for actuator output
 ## Conversion math
 
 Internal command/state interface uses joint-space radians. On `write()`, the
-plugin maps to servo-space radians by `virtual_pin`, then stores **milliradians**
+plugin maps to servo-space radians by `virtual_pin`, then stores **pulse** (`u16`)
 in the board’s POSIX SHM register table for **`lucy_modbus_bridge`** (not ROS
 topics / micro-ROS).
 
@@ -46,7 +46,7 @@ topics / micro-ROS).
 - write conversion:
   - `servo_deg = rad_to_deg(joint_rad) / (direction * scale) + offset_deg`
   - `servo_deg` clamped to `[servo_min_deg, servo_max_deg]`
-  - SHM: `reg[virtual_pin*2]=1`, `reg[+1]=millirad`, set dirty bits
+  - SHM: `reg[virtual_pin*2]=1`, `reg[+1]=pulse`, set dirty bits
 
 ## Robot-specific launch/config
 

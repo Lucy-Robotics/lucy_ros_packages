@@ -23,7 +23,7 @@ Clients talk to **controllers**, not microcontrollers. On Lucy today, the plugin
 | Asset | Package / tip | Notes |
 |--------|---------------|--------|
 | **`LucySystemHardware`** | `lucy_ros2_control` | SHM writer for real hardware. |
-| **`lucy_modbus_bridge`** | on **`cma/pipeline-flash`** (and stacked tips) | Polls millirad dirty bits → Modbus FC06. May be absent on pure docs branches. |
+| **`lucy_modbus_bridge`** | on **`cma/pipeline-flash`** (and stacked tips) | Polls pulse dirty bits → Modbus FC06. May be absent on pure docs branches. |
 | **`SharedMemoryChannel` / f64 `ActuatorSharedState`** | WIP [#63](https://github.com/Lucy-Robotics/lucy_ros_packages/pull/63) | Target HI layout — **not** the default on this docs PR. |
 | **`firmwares/linux`** | firmware WIP `mbo/feat-protocol` | Host USB Feetech consumer of f64 SHM. |
 | **`rp2040_servo2040`** | firmware `cma/fw-boards` | InMoov + SO-ARM101 UART Feetech / PWM / I2C. |
@@ -31,7 +31,7 @@ Clients talk to **controllers**, not microcontrollers. On Lucy today, the plugin
 
 ---
 
-## 3. Data flow — current (Modbus millirad)
+## 3. Data flow — current (Modbus pulse)
 
 No micro-ROS; no `/actuators/*` command topics for actuation. Detail in [`architecture/pipeline_shm.md`](architecture/pipeline_shm.md).
 
@@ -41,7 +41,7 @@ flowchart TB
   Clients["Clients"]
   CM["controller_manager"]
   HI["LucySystemHardware"]
-  SHM["POSIX_SHM_millirad"]
+  SHM["POSIX_SHM_pulse"]
   Bridge["lucy_modbus_bridge"]
   FW["rp2040_servo2040"]
   JS["joint_states"]
@@ -49,14 +49,14 @@ flowchart TB
   Clients -->|"trajectory"| CM
   CM --> HI
   CM -->|"joint_state_broadcaster"| JS
-  HI -->|"millirad + dirty"| SHM
+  HI -->|"pulse + dirty"| SHM
   SHM -->|"poll"| Bridge
   Bridge -->|"FC06 USB CDC"| FW
   linkStyle default stroke:#00FF41,stroke-width:2px
 ```
 
 - **`/joint_states`**: from **`joint_state_broadcaster`**.
-- **SHM (current tip):** `cmd` + angle milliradians at register indices; dirty bits; names like `/{node}.lucy_reg_table`.
+- **SHM (current tip):** `cmd` + pulse at register indices; dirty bits; names like `/{node}.lucy_reg_table`.
 - **SO-ARM101 / InMoov:** Servo2040 profiles behind that Modbus link (UART0 Feetech or PWM/I2C).
 - **YAML:** angles in **radians** (degrees only at LCP UI).
 
@@ -75,7 +75,7 @@ HI → `/{node_name}` f64 `ActuatorSharedState` → `firmwares/linux` (USB Feete
 | `true`  | *any*   | `gz_ros2_control/GazeboSimSystem` | n/a |
 
 - `node_name` must match the SHM consumer / bridge.
-- Current `write()` path (pipeline tip): URDF clamp → joint→servo rad → millirad SHM + dirty bits.
+- Current `write()` path (pipeline tip): URDF clamp → joint→servo rad → pulse SHM + dirty bits.
 - WIP f64 path (#63): write `hw_commands[]` as radians + bump `command_seq`.
 
 > **Gazebo caveat.** Upstream `gz_ros2_control` (jazzy) may not apply `<command_interface>` min/max inside `write()`.
@@ -105,7 +105,7 @@ Needs active controllers, `ros2_control_node` with `LucySystemHardware` (or Gaze
 1. Controllers inactive — `ros2 control list_controllers`.
 2. Sim URDF on hardware — `use_gazebo_sim:=false`.
 3. SHM / bridge `node_name` mismatch.
-4. **Encoding today:** millirad in Modbus SHM; radians in YAML. Do not mix tips.
+4. **Encoding today:** pulse in Modbus SHM; radians in YAML/HI. Do not mix tips.
 5. Run GENERATE so URDF min/max land in xacro.
 6. SO-ARM101: Servo2040 UART Feetech (current) vs future host `firmwares/linux` — pick matching tips.
 7. Tip skew: rad YAML + `rp2040_servo2040` need matching generator/firmware branches.
@@ -118,7 +118,7 @@ Needs active controllers, `ros2_control_node` with `LucySystemHardware` (or Gaze
 |------|---------|
 | `lucy_ros2_control/src/lucy_system.cpp` | HI plugin |
 | `lucy_ros2_control/src/include/shared_memory_channel.hpp` | f64 layout on **#63 tip only** |
-| `lucy_modbus_bridge/` | Millirad SHM → Modbus (**pipeline tip**) |
+| `lucy_modbus_bridge/` | Pulse SHM → Modbus (**pipeline tip**) |
 | Generator templates | xacro / board YAML / controllers |
 | `lucy_embedded_firmware/` | RP2040 (+ WIP host Feetech) |
 
