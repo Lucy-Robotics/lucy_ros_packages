@@ -5,7 +5,7 @@
 
 Python tool that reads the hardware mapping YAML from an **URDF** (`config/hardware/active.yaml`) and generates:
 
-1. **Firmware** - one architecture-shaped `config_<board_id>.yaml` per RP2040 board for the Rust builder (`lucy_embedded_firmware`). Actuator angles are **radians (float)**; Modbus holding registers carry **pulse** (`u16`) at runtime (HI converts rad → pulse). Sensors (e.g. pressure) are included. `virtual_pin` for firmware Modbus bases is assigned by the board-crate builder from named channels (`ServoN`, `ADC0`, …), not hand-authored in the generated firmware YAML. Crate selection follows `boards.*.board_class` (`internal_servo_only` / `internal_servo_i2c_pwm` → `rp2040_servo2040`, etc.).
+1. **Firmware** - one architecture-shaped `config_<board_id>.yaml` per RP2040 board for the Rust builder (`lucy_embedded_firmware`). Actuator angles are **radians (float)** end-to-end (YAML, HI, f64 SHM). Sensors (e.g. pressure) are included. Device channels (`ServoN`, `ADC0`, `UART0:N`, …) are assigned by the board-crate builder. Crate selection follows `boards.*.board_class` (`internal_servo_only` / `internal_servo_i2c_pwm` / `bus_servo_only` → `rp2040_servo2040`).
 2. **ros2_control** - `inmoov_ros2_control.xacro` with one `<ros2_control>` block per board in **`boards:`** document order; `hardware_name` / `node_name` / `publisher_topic` are **derived and validated** from each board id and YAML fields (see `schema.py`). Shoulder Y joints stay on whichever board the YAML assigns them to (typically `rp2040_torso_head`). Each actuated joint also gets `<command_interface name="position"><param name="min/max"/></command_interface>` populated from the URDF `<limit lower upper>` (radians) - these are the values `LucySystemHardware` clamps to in `write()`. Calibration params use `offset_rad` / `servo_*_rad` (degrees are rejected by schema).
 3. **Controllers** - `controllers.yaml` with `joint_state_broadcaster` / trajectory controllers and **`extra_joints`** as *URDF joints that are not any YAML actuator* (passive / unmapped only; all actuator rows are trajectory-controlled regardless of `enabled`).
 
@@ -67,7 +67,7 @@ Jinja2 sources are under the Python package at `lucy_config_generator/lucy_confi
 | `internal_servo_i2c_pwm` | `rp2040_servo2040` (same binary; I2C/PWM banks gated by YAML) |
 | `bus_servo_only` | `rp2040_servo2040` (`HAS_BUS` → UART0 Feetech) |
 
-**Disabled actuators** (`enabled: false`): **omitted from firmware YAML device tables** only (no Modbus row on the Pico for that joint). They **remain** in **`ros2_control`** and in the per-board **trajectory controller** joint list so the stack is uniform; firmware ignores commands at `virtual_pin` indices it does not own. **`extra_joints`** lists only URDF joints that are **not** any actuator row (typically passive links).
+**Disabled actuators** (`enabled: false`): **omitted from firmware YAML device tables** only (no device row on the Pico for that joint). They **remain** in **`ros2_control`** and in the per-board **trajectory controller** joint list so the stack is uniform; firmware ignores commands at indices it does not own. **`extra_joints`** lists only URDF joints that are **not** any actuator row (typically passive links).
 
 ## Tests
 

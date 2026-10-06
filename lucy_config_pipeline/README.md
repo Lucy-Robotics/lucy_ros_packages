@@ -41,7 +41,7 @@ After a successful build, each selected board with a non-empty `serial_id` is fl
   set `0` to disable) before polling USB.
 - Wait (default **30 s**, env `LUCY_PIPELINE_FLASH_WAIT_SEC`) until USB CDC whose
   by-id / port metadata contains `serial_id` reappears.
-- Verify the board answers a Modbus FC03 read of holding register 0 (up to **30 s**,
+- Verify the board answers a link health read (up to **30 s**,
   env `LUCY_PIPELINE_FLASH_UPTIME_WAIT_SEC`).
 
 Shell aliases must use a **full path** to the `.uf2` or **`cd`** to the firmware `build/` directory first.

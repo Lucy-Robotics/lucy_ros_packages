@@ -12,9 +12,8 @@ Conventions follow common packaging practice ([REP-149](https://www.ros.org/reps
 
 | Package | Responsibility |
 |---------|----------------|
-| `lucy_bringup` | Jetson **system bringup**: rosbridge, cameras, control include; on the **pipeline tip**, also `lucy_modbus_bridge` per board. |
-| `lucy_ros2_control` | **Hardware** `ros2_control`: `LucySystemHardware` plugin (SHM register table). |
-| `lucy_modbus_bridge` | SHM pulse dirty bits → Modbus RTU over USB serial (one node per board). On `cma/pipeline-flash` / stacked hardware tips; may be missing on docs-only checkouts. |
+| `lucy_bringup` | Jetson **system bringup**: rosbridge, cameras, control include; attaches SHM consumers for real hardware. |
+| `lucy_ros2_control` | **Hardware** `ros2_control`: `LucySystemHardware` plugin (f64 rad POSIX SHM / `ActuatorSharedState`). |
 | `lucy_config_generator` | Hardware YAML → RP2040 `config_*.yaml`, `ros2_control` xacro, `controllers.yaml`. |
 | `lucy_config_pipeline` | Config store + `ConfigurePipeline` (validate → generate → Cargo build → flash → reload). |
 | `camera_ros` | MJPEG → `sensor_msgs/msg/CompressedImage`; GStreamer pipeline; pytest. |
@@ -27,10 +26,10 @@ Conventions follow common packaging practice ([REP-149](https://www.ros.org/reps
 lucy_ros_packages/
 ├── docs/
 │   ├── DEVELOPER.md         # this file
-│   └── ROS2_CONTROL.md      # ros2_control concepts + Lucy implementation
+│   ├── ROS2_CONTROL.md      # ros2_control concepts + Lucy implementation
+│   └── architecture/        # pipeline + f64 SHM schematics
 ├── lucy_bringup/
 ├── lucy_ros2_control/
-├── lucy_modbus_bridge/
 ├── lucy_config_generator/
 ├── lucy_config_pipeline/
 └── camera_ros/
@@ -66,7 +65,7 @@ source install/setup.bash
 | **Launch** | `ros2 launch lucy_bringup lucy.launch.py` |
 | **Args** | `device0`, `device1` (default `/dev/ttyACM0`, `/dev/ttyACM1`); audio args declared but audio nodes are **commented out** in `lucy.launch.py`; RealSense via `realsense.launch.py`. |
 | **Scripts** | `system_scripts/*.sh` → installed under `lib/lucy_bringup`. |
-| **Runtime deps** | `lucy_modbus_bridge`, `lucy_ros2_control`, `rosbridge_server`, `camera_ros`, `audio_common`, `realsense2_camera`, `lucy_config_pipeline`, `launch`, `launch_ros`. |
+| **Runtime deps** | `lucy_ros2_control`, `rosbridge_server`, `camera_ros`, `audio_common`, `realsense2_camera`, `lucy_config_pipeline`, `launch`, `launch_ros`. |
 
 **Developers**
 

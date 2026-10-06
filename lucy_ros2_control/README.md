@@ -2,7 +2,7 @@
 
 ROS 2 Control hardware plugin for Lucy-compatible robots.
 
-**Architecture (repo-level):** [`../docs/ROS2_CONTROL.md`](../docs/ROS2_CONTROL.md) — how ros2_control maps to Lucy (SHM → Modbus), launches, and pitfalls.
+**Architecture (repo-level):** [`../docs/ROS2_CONTROL.md`](../docs/ROS2_CONTROL.md) — how ros2_control maps to Lucy (f64 SHM), launches, and pitfalls.
 
 ## Contents
 
@@ -36,17 +36,13 @@ Joints without `virtual_pin` are treated as passive/unmapped for actuator output
 
 ## Conversion math
 
-Internal command/state interface uses joint-space radians. On `write()`, the
-plugin maps to servo-space radians by `virtual_pin`, then stores **pulse** (`u16`)
-in the board’s POSIX SHM register table for **`lucy_modbus_bridge`** (not ROS
-topics / micro-ROS).
+Internal command/state interface uses joint-space **radians**. On `write()`, the
+plugin updates POSIX SHM (`ActuatorSharedState` / `JointTable`) with **`f64`
+radians** and bumps `command_seq` for host consumers (`firmwares/linux`,
+host↔MCU bridge) — not ROS topics / micro-ROS.
 
-- default initialization:
-  - `joint_rad = deg_to_rad((servo_default_deg - offset_deg) * direction * scale)`
-- write conversion:
-  - `servo_deg = rad_to_deg(joint_rad) / (direction * scale) + offset_deg`
-  - `servo_deg` clamped to `[servo_min_deg, servo_max_deg]`
-  - SHM: `reg[virtual_pin*2]=1`, `reg[+1]=pulse`, set dirty bits
+- default initialization from calibration / `servo_default_*`
+- write: URDF clamp → joint→servo mapping → `hw_commands[i]` (rad) + `command_seq`
 
 ## Robot-specific launch/config
 
