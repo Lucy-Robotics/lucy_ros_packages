@@ -39,6 +39,8 @@ All Servo2040 profiles share one board crate; banks gate on YAML/`GENERATED_HAS_
 
 ## End-to-end path (f64 SHM)
 
+`joint_state_broadcaster` is a **controller** under `controller_manager` (not a child of the HI). It publishes `/joint_states` from HI **state interfaces**; the HI does not publish that topic.
+
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#0d1117", "mainBkg": "#21262d", "primaryColor": "#21262d", "primaryTextColor": "#f0f6fc", "primaryBorderColor": "#00FF41", "secondaryColor": "#161b22", "secondaryTextColor": "#f0f6fc", "secondaryBorderColor": "#00FF41", "tertiaryColor": "#161b22", "tertiaryTextColor": "#f0f6fc", "tertiaryBorderColor": "#00FF41", "lineColor": "#00FF41", "textColor": "#f0f6fc", "nodeTextColor": "#f0f6fc", "edgeLabelBackground": "#161b22", "clusterBkg": "#0d1117", "clusterBorder": "#00FF41", "titleColor": "#f0f6fc"}}}%%
 flowchart TB
@@ -49,15 +51,16 @@ flowchart TB
   LinuxFW["firmwares_linux"]
   Bridge["host_to_MCU_bridge"]
   FW["rp2040_servo2040"]
-  JS["joint_states"]
+  JS["joint_state_broadcaster"]
 
   Clients -->|"trajectory"| CM
-  CM --> HI
+  CM <-->|"cmd / state ifaces"| HI
   CM --> JS
-  HI -->|"f64 rad + seq"| SHM
-  SHM -->|"SO101 USB Feetech"| LinuxFW
-  SHM -->|"not_on_MCU"| Bridge
-  Bridge -->|"CDC_or_serial"| FW
+  JS -->|"/joint_states"| Topic["/joint_states"]
+  HI <-->|"f64 rad + seq"| SHM
+  SHM <-->|"SO101 USB Feetech"| LinuxFW
+  SHM <-->|"not_on_MCU"| Bridge
+  Bridge <-->|"CDC_or_serial"| FW
   linkStyle default stroke:#00FF41,stroke-width:2px
 ```
 

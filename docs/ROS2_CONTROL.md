@@ -34,6 +34,8 @@ Clients talk to **controllers**, not microcontrollers. On Lucy, the plugin write
 
 No micro-ROS; no `/actuators/*` command topics for actuation. Detail in [`architecture/pipeline_shm.md`](architecture/pipeline_shm.md).
 
+`joint_state_broadcaster` is a **controller** under `controller_manager` (not a child of the HI). It publishes `/joint_states` from HI **state interfaces**.
+
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"darkMode": true, "background": "#0d1117", "mainBkg": "#21262d", "primaryColor": "#21262d", "primaryTextColor": "#f0f6fc", "primaryBorderColor": "#00FF41", "secondaryColor": "#161b22", "secondaryTextColor": "#f0f6fc", "secondaryBorderColor": "#00FF41", "tertiaryColor": "#161b22", "tertiaryTextColor": "#f0f6fc", "tertiaryBorderColor": "#00FF41", "lineColor": "#00FF41", "textColor": "#f0f6fc", "nodeTextColor": "#f0f6fc", "edgeLabelBackground": "#161b22", "clusterBkg": "#0d1117", "clusterBorder": "#00FF41", "titleColor": "#f0f6fc"}}}%%
 flowchart TB
@@ -44,19 +46,20 @@ flowchart TB
   LinuxFW["firmwares_linux"]
   Bridge["host_to_MCU_bridge"]
   FW["rp2040_servo2040"]
-  JS["joint_states"]
+  JS["joint_state_broadcaster"]
 
   Clients -->|"trajectory"| CM
-  CM --> HI
-  CM -->|"joint_state_broadcaster"| JS
-  HI -->|"f64 rad + seq"| SHM
-  SHM -->|"SO101 USB Feetech"| LinuxFW
-  SHM -->|"not_on_MCU"| Bridge
-  Bridge -->|"CDC_or_serial"| FW
+  CM <-->|"cmd / state ifaces"| HI
+  CM --> JS
+  JS -->|"/joint_states"| Topic["/joint_states"]
+  HI <-->|"f64 rad + seq"| SHM
+  SHM <-->|"SO101 USB Feetech"| LinuxFW
+  SHM <-->|"not_on_MCU"| Bridge
+  Bridge <-->|"CDC_or_serial"| FW
   linkStyle default stroke:#00FF41,stroke-width:2px
 ```
 
-- **`/joint_states`**: from **`joint_state_broadcaster`**.
+- **`/joint_states`**: from **`joint_state_broadcaster`** (reads HI state interfaces via CM).
 - **SHM:** `/{node_name}` segment; `hw_commands[]` / `hw_positions[]` as **radians**; `command_seq` / `state_seq` / `heartbeat`.
 - **YAML:** angles in **radians** (degrees only at LCP UI).
 
