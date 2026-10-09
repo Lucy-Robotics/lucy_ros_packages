@@ -109,6 +109,7 @@ private:
   std::vector<double> hw_velocities_;
   std::vector<double> hw_accelerations_;
 
+  uint64_t last_state_seq_{0};
   std::vector<double> hw_positions_;
 
   /** Per-joint URDF limits from command_interface min/max (rad); ±inf when unset. */

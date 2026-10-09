@@ -250,9 +250,18 @@ hardware_interface::return_type LucySystemHardware::read(
   }
 
   auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
+  auto state_seq = (*access).state_seq.load(std::memory_order_seq_cst);
+  if (state_seq == last_state_seq_) {
+    return hardware_interface::return_type::OK;
+  }
+  if ((state_seq % 2) != 0) {
+    return hardware_interface::return_type::OK;
+  }
   for (std::size_t i = 0; i < hw_commands_.size(); i++) {
     hw_positions_[i] = (*access).hw_positions[i];
-    hw_positions_[i] = hw_commands_[i]; //TODO Delete when real feedback implemented
+    RCLCPP_DEBUG(
+      get_logger(), "Read position for joint %zu: %f", i, hw_positions_[i]
+    );
   }
 
   return hardware_interface::return_type::OK;
