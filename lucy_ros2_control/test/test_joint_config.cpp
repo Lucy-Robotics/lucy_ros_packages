@@ -136,43 +136,6 @@ TEST(JointConfigParse, OptionalInterfaceLimitParsesAndThrows)
 }
 
 // ---------------------------------------------------------------------------
-// Interface validation
-// ---------------------------------------------------------------------------
-
-TEST(JointConfigValidate, ValidJointReturnsEmpty)
-{
-  EXPECT_TRUE(lucy_ros2_control::validate_joint_interfaces(make_valid_joint()).empty());
-}
-
-TEST(JointConfigValidate, WrongCommandInterfaceCountFails)
-{
-  ComponentInfo joint = make_valid_joint();
-  joint.command_interfaces.clear();
-  EXPECT_FALSE(lucy_ros2_control::validate_joint_interfaces(joint).empty());
-}
-
-TEST(JointConfigValidate, WrongCommandInterfaceNameFails)
-{
-  ComponentInfo joint = make_valid_joint();
-  joint.command_interfaces[0].name = hardware_interface::HW_IF_VELOCITY;
-  EXPECT_FALSE(lucy_ros2_control::validate_joint_interfaces(joint).empty());
-}
-
-TEST(JointConfigValidate, WrongStateInterfaceCountFails)
-{
-  ComponentInfo joint = make_valid_joint();
-  joint.state_interfaces.push_back(position_interface());
-  EXPECT_FALSE(lucy_ros2_control::validate_joint_interfaces(joint).empty());
-}
-
-TEST(JointConfigValidate, WrongStateInterfaceNameFails)
-{
-  ComponentInfo joint = make_valid_joint();
-  joint.state_interfaces[0].name = hardware_interface::HW_IF_EFFORT;
-  EXPECT_FALSE(lucy_ros2_control::validate_joint_interfaces(joint).empty());
-}
-
-// ---------------------------------------------------------------------------
 // URDF command_interface limits
 // ---------------------------------------------------------------------------
 

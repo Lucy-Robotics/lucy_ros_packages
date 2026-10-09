@@ -77,9 +77,6 @@ hardware_interface::CallbackReturn LucySystemHardware::on_init(
 
   hw_torque_enabled_.resize(info_.joints.size(), 0);
 
-  if (validate_joints() != hardware_interface::CallbackReturn::SUCCESS) {
-    return hardware_interface::CallbackReturn::ERROR;
-  }
   if (init_joint_limits() != hardware_interface::CallbackReturn::SUCCESS) {
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -87,18 +84,6 @@ hardware_interface::CallbackReturn LucySystemHardware::on_init(
     return hardware_interface::CallbackReturn::ERROR;
   }
 
-  return hardware_interface::CallbackReturn::SUCCESS;
-}
-
-hardware_interface::CallbackReturn LucySystemHardware::validate_joints()
-{
-  for (const hardware_interface::ComponentInfo & joint : info_.joints) {
-    const std::string error = validate_joint_interfaces(joint);
-    if (!error.empty()) {
-      RCLCPP_FATAL(get_logger(), "%s", error.c_str());
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-  }
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 

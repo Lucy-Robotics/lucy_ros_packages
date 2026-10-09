@@ -94,7 +94,6 @@ public:
   rclcpp::Logger get_logger() const override {return *logger_;}
 
 private:
-  hardware_interface::CallbackReturn validate_joints();
   hardware_interface::CallbackReturn init_joint_limits();
   hardware_interface::CallbackReturn init_actuator_mappings();
 

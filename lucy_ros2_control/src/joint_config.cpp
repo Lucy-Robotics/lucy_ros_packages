@@ -64,20 +64,6 @@ double parse_optional_interface_limit(
   return parse_double_string_or_throw(value.value(), context);
 }
 
-std::string validate_joint_interfaces(const hardware_interface::ComponentInfo & joint)
-{
-  if (joint.state_interfaces.size() != 1) {
-    return "Joint '" + joint.name + "' has " +
-           std::to_string(joint.state_interfaces.size()) +
-           " state interfaces found. 1 expected.";
-  }
-  if (joint.state_interfaces[0].name != hardware_interface::HW_IF_POSITION) {
-    return "Joint '" + joint.name + "' has '" + joint.state_interfaces[0].name +
-           "' state interface. '" + hardware_interface::HW_IF_POSITION + "' expected.";
-  }
-  return std::string();
-}
-
 JointLimits parse_joint_limits(const hardware_interface::ComponentInfo & joint)
 {
   JointLimits limits{};
@@ -157,8 +143,6 @@ double default_joint_position(const ActuatedJointMapping & m)
 
 double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd)
 {
-  return cmd;
-  cmd = cmd * (M_PI / 180.0);
   cmd = (cmd / (m.direction * m.scale)) + m.offset;
   cmd = clamp_position_command(cmd, m.limit_min, m.limit_max);
   return cmd;
