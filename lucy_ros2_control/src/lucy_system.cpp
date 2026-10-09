@@ -192,23 +192,33 @@ std::vector<hardware_interface::CommandInterface> LucySystemHardware::export_com
 {
   std::vector<hardware_interface::CommandInterface> command_interfaces;
   for (auto i = 0u; i < info_.joints.size(); i++) {
-    command_interfaces.emplace_back(hardware_interface::CommandInterface(info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_commands_[i]));
-    command_interfaces.emplace_back(hardware_interface::CommandInterface(info_.joints[i].name, hardware_interface::HW_IF_VELOCITY, &hw_velocities_[i]));
-    command_interfaces.emplace_back(hardware_interface::CommandInterface(info_.joints[i].name, "torque_enable", &hw_torque_enabled_[i]));
+    command_interfaces.emplace_back(
+      hardware_interface::CommandInterface(
+        info_.joints[i].name,
+        hardware_interface::HW_IF_POSITION, &hw_commands_[i]));
+    command_interfaces.emplace_back(
+      hardware_interface::CommandInterface(
+        info_.joints[i].name,
+        hardware_interface::HW_IF_VELOCITY, &hw_velocities_[i]));
+    command_interfaces.emplace_back(
+      hardware_interface::CommandInterface(
+        info_.joints[i].name,
+        "torque_enable", &hw_torque_enabled_[i]));
   }
 
   return command_interfaces;
 }
 
 hardware_interface::CallbackReturn LucySystemHardware::on_error(
-  const rclcpp_lifecycle::State &state)
+  const rclcpp_lifecycle::State & state)
 {
   shared_memory_channel_.reset();
   RCLCPP_ERROR(get_logger(), "LucySystemHardware encountered an error and was cleaned up.");
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-hardware_interface::CallbackReturn LucySystemHardware::on_configure(const rclcpp_lifecycle::State & /*previous_state*/)
+hardware_interface::CallbackReturn LucySystemHardware::on_configure(
+  const rclcpp_lifecycle::State & /*previous_state*/)
 {
   RCLCPP_INFO(get_logger(), "Initializing shm");
   shared_memory_channel_ = SharedMemoryChannel::create(node_name_);
@@ -221,7 +231,8 @@ hardware_interface::CallbackReturn LucySystemHardware::on_configure(const rclcpp
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-hardware_interface::CallbackReturn LucySystemHardware::on_activate(const rclcpp_lifecycle::State & /*previous_state*/)
+hardware_interface::CallbackReturn LucySystemHardware::on_activate(
+  const rclcpp_lifecycle::State & /*previous_state*/)
 {
   RCLCPP_INFO(get_logger(), "Successfully activated!");
 

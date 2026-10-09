@@ -8,7 +8,8 @@
 #include <mutex>
 #include "constant.hpp"
 
-struct alignas(64) ActuatorSharedState {
+struct alignas(64) ActuatorSharedState
+{
   alignas(64)
   std::atomic<uint64_t> command_seq{0};
   double hw_commands[MAX_ACTUATORS]{};
@@ -30,10 +31,11 @@ static_assert(std::atomic<uint64_t>::is_always_lock_free, "uint64_t must be lock
 class SharedMemoryChannel
 {
 public:
-  class Access {
-  public:
+  class Access
+  {
+public:
     Access(SharedMemoryChannel & channel)
-      : channel_(channel)
+    : channel_(channel)
     {
       channel_.lock();
     }
@@ -45,14 +47,14 @@ public:
     Access(const Access &) = delete;
     Access & operator=(const Access &) = delete;
 
-    ActuatorSharedState & operator*() & { return * channel_.actuators_state_; }
+    ActuatorSharedState & operator*() & {return *channel_.actuators_state_;}
     ActuatorSharedState & operator*() && = delete;
 
-  private:
+private:
     SharedMemoryChannel & channel_;
   };
 
- 
+
   ~SharedMemoryChannel();
   SharedMemoryChannel(const SharedMemoryChannel &) = delete;
   SharedMemoryChannel & operator=(const SharedMemoryChannel &) = delete;

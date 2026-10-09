@@ -54,7 +54,8 @@ struct ActuatedJointMapping
   double limit_min{0.0};
   double limit_max{0.0};
   double default_val{0.0};
-  struct Command {
+  struct Command
+  {
     double min{-std::numeric_limits<double>::infinity()};
     double max{std::numeric_limits<double>::infinity()};
   } command;

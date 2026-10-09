@@ -140,7 +140,9 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
     throw std::runtime_error(
             "joint '" + joint.name + "' has limit_min > limit_max");
   }
-  if (std::isfinite(m.command.min) && std::isfinite(m.command.max) && m.command.min > m.command.max) {
+  if (std::isfinite(m.command.min) && std::isfinite(m.command.max) &&
+    m.command.min > m.command.max)
+  {
     throw std::runtime_error(
             "joint '" + joint.name + "' has command_interface min > max");
   }
