@@ -2,7 +2,7 @@
 
 ROS 2 **Jazzy**. For **contributors** who change launch files, nodes, `ros2_control` config, or CI in **this repository only**.
 
-**Sibling robot description / sim launches**: `../thais_urdf/docs/DEVELOPER.md` when both repos live under the same workspace `src/` (e.g. `lucy_ws/src`). On GitHub: [Sentience-Robotics/thais_urdf](https://github.com/Sentience-Robotics/thais_urdf) → `docs/DEVELOPER.md`.
+**Sibling robot description / sim launches**: `../thais_urdf/docs/DEVELOPER.md` when both repos live under the same workspace `src/` (e.g. `lucy_ws/src`). On GitHub: [Lucy-Robotics/thais_urdf](https://github.com/Lucy-Robotics/thais_urdf) → `docs/DEVELOPER.md`.
 
 Conventions follow common packaging practice ([REP-149](https://www.ros.org/reps/rep-0149.html): accurate `package.xml`, install rules, documented launch entry points).
 

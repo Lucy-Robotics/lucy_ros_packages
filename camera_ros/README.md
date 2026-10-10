@@ -172,4 +172,4 @@ GPL-3.0 — see LICENSE in the repository.
 
 ## Maintainer
 
-**Sentience Robotics** — [contact@sentience-robotics.fr](mailto:contact@sentience-robotics.fr)
+**Lucy Robotics** — [contact@lucy-robotics.com](mailto:contact@lucy-robotics.com)

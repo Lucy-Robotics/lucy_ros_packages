@@ -1,5 +1,5 @@
 #!/usr/bin/zsh
-# Copyright 2025 Sentience Robotics Team
+# Copyright 2026 Lucy Robotics Team
 # Launch script for Lucy Robot System using tmux
 
 set -e  # Exit on error

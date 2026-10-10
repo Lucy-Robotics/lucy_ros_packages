@@ -4,7 +4,7 @@
   <name>lucy_config_pipeline</name>
   <version>0.0.0</version>
   <description>Config store services and ConfigurePipeline action server for Lucy hardware YAML pipeline.</description>
-  <maintainer email="contact@sentience-robotics.fr">Sentience Robotics Team</maintainer>
+  <maintainer email="contact@lucy-robotics.com">Lucy Robotics Team</maintainer>
   <license>GPL-3.0</license>
 
   <depend>rclpy</depend>

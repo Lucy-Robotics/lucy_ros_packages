@@ -6,7 +6,7 @@ The core of the Lucy control system is a set of ROS 2 topics and services. By in
 
 The recommended way to interface with Lucy is to use the `lucy_cli.ros_interface.LucyROSInterface` class as a reference. It provides a high-level, well-documented Python API that handles all the underlying ROS 2 complexity. This guide will walk through the key concepts and provide code snippets based on that reference implementation.
 
-> Please note that the LucyROSInterface class is a simple example. You will find that more topics & services are available if needed, with for example a complete configuration workflow. If you need more feature or want to write your interface in another language, please check the differents packages available in this repository. The [Lucy Control Panel](https://github.com/Sentience-Robotics/lucy_control_panel/tree/master/) is a good example of a more in-depth implementation.
+> Please note that the LucyROSInterface class is a simple example. You will find that more topics & services are available if needed, with for example a complete configuration workflow. If you need more feature or want to write your interface in another language, please check the differents packages available in this repository. The [Lucy Control Panel](https://github.com/Lucy-Robotics/lucy_control_panel/tree/master/) is a good example of a more in-depth implementation.
 
 ## 1. Core Concepts
 

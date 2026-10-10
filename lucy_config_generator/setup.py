@@ -15,8 +15,8 @@ setup(
     ],
     install_requires=['setuptools', 'Jinja2', 'PyYAML'],
     zip_safe=True,
-    maintainer='Sentience Robotics Team',
-    maintainer_email='contact@sentience-robotics.fr',
+    maintainer='Lucy Robotics Team',
+    maintainer_email='contact@lucy-robotics.com',
     description='Generate RP2040 and ros2_control artifacts from thais_urdf hardware YAML (#96).',
     license='GPL-3.0',
     extras_require={

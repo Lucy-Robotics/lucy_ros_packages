@@ -14,8 +14,8 @@ setup(
     ],
     install_requires=['setuptools', 'PyYAML', 'Jinja2'],
     zip_safe=True,
-    maintainer='Sentience Robotics Team',
-    maintainer_email='contact@sentience-robotics.fr',
+    maintainer='Lucy Robotics Team',
+    maintainer_email='contact@lucy-robotics.com',
     description='Config store services + pipeline action server for Lucy hardware YAML.',
     license='GPL-3.0',
     entry_points={

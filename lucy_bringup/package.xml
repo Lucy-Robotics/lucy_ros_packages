@@ -5,7 +5,7 @@
   <version>1.0.0</version>
   <description>Launch files for Lucy bringup: lucy.launch.py (Jetson + optional RViz/Gazebo), web_ros_api (rosbridge + lucy_config_pipeline).</description>
   
-  <maintainer email="contact@sentience-robotics.fr">Sentience Robotics Team</maintainer>
+  <maintainer email="contact@lucy-robotics.com">Lucy Robotics Team</maintainer>
   <license>GPL-3.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

@@ -4,7 +4,7 @@
   <name>lucy_cli</name>
   <version>0.0.0</version>
   <description>CLI package for Lucy</description>
-  <maintainer email="contact@sentience-robotics.fr">Mael-RABOT</maintainer>
+  <maintainer email="contact@lucy-robotics.com">Mael-RABOT</maintainer>
   <license>GPL-3.0</license>
 
   <depend>rclpy</depend>
