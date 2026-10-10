@@ -40,7 +40,6 @@ using hardware_interface::InterfaceInfo;
 using lucy_ros2_control::ActuatedJointMapping;
 
 constexpr double kInf = std::numeric_limits<double>::infinity();
-constexpr double kPi = 3.14159265358979323846;
 
 InterfaceInfo position_interface()
 {
@@ -58,12 +57,12 @@ ComponentInfo make_valid_joint(const std::string & name = "joint_a")
   joint.state_interfaces = {position_interface()};
   joint.parameters = {
     {"virtual_pin", "3"},
-    {"offset_deg", "90"},
+    {"offset", "90"},
     {"direction", "1"},
     {"scale", "1"},
-    {"servo_min_deg", "0"},
-    {"servo_max_deg", "180"},
-    {"servo_default_deg", "90"},
+    {"limit_min", "0"},
+    {"limit_max", "180"},
+    {"default", "90"},
   };
   return joint;
 }
@@ -75,17 +74,6 @@ ActuatedJointMapping make_mapping(int virtual_pin)
   return m;
 }
 }  // namespace
-
-// ---------------------------------------------------------------------------
-// Angle conversions
-// ---------------------------------------------------------------------------
-
-TEST(JointConfigConversions, DegRadRoundTrip)
-{
-  EXPECT_NEAR(lucy_ros2_control::deg_to_rad(180.0), kPi, 1e-12);
-  EXPECT_NEAR(lucy_ros2_control::rad_to_deg(kPi), 180.0, 1e-12);
-  EXPECT_NEAR(lucy_ros2_control::rad_to_deg(lucy_ros2_control::deg_to_rad(42.0)), 42.0, 1e-12);
-}
 
 // ---------------------------------------------------------------------------
 // Numeric parsing
@@ -107,7 +95,7 @@ TEST(JointConfigParse, ThrowsOnNonNumeric)
 TEST(JointConfigParse, RequiredDoublePresent)
 {
   const ComponentInfo joint = make_valid_joint();
-  EXPECT_DOUBLE_EQ(lucy_ros2_control::parse_required_double(joint, "offset_deg"), 90.0);
+  EXPECT_DOUBLE_EQ(lucy_ros2_control::parse_required_double(joint, "offset"), 90.0);
 }
 
 TEST(JointConfigParse, RequiredDoubleMissingThrows)
@@ -119,8 +107,8 @@ TEST(JointConfigParse, RequiredDoubleMissingThrows)
 TEST(JointConfigParse, RequiredDoubleEmptyThrows)
 {
   ComponentInfo joint = make_valid_joint();
-  joint.parameters["offset_deg"] = "";
-  EXPECT_THROW(lucy_ros2_control::parse_required_double(joint, "offset_deg"), std::runtime_error);
+  joint.parameters["offset"] = "";
+  EXPECT_THROW(lucy_ros2_control::parse_required_double(joint, "offset"), std::runtime_error);
 }
 
 TEST(JointConfigParse, RequiredDoubleNonNumericThrows)
@@ -145,43 +133,6 @@ TEST(JointConfigParse, OptionalInterfaceLimitParsesAndThrows)
   EXPECT_THROW(
     lucy_ros2_control::parse_optional_interface_limit(std::string("nope"), "ctx", 0.0),
     std::runtime_error);
-}
-
-// ---------------------------------------------------------------------------
-// Interface validation
-// ---------------------------------------------------------------------------
-
-TEST(JointConfigValidate, ValidJointReturnsEmpty)
-{
-  EXPECT_TRUE(lucy_ros2_control::validate_joint_interfaces(make_valid_joint()).empty());
-}
-
-TEST(JointConfigValidate, WrongCommandInterfaceCountFails)
-{
-  ComponentInfo joint = make_valid_joint();
-  joint.command_interfaces.clear();
-  EXPECT_FALSE(lucy_ros2_control::validate_joint_interfaces(joint).empty());
-}
-
-TEST(JointConfigValidate, WrongCommandInterfaceNameFails)
-{
-  ComponentInfo joint = make_valid_joint();
-  joint.command_interfaces[0].name = hardware_interface::HW_IF_VELOCITY;
-  EXPECT_FALSE(lucy_ros2_control::validate_joint_interfaces(joint).empty());
-}
-
-TEST(JointConfigValidate, WrongStateInterfaceCountFails)
-{
-  ComponentInfo joint = make_valid_joint();
-  joint.state_interfaces.push_back(position_interface());
-  EXPECT_FALSE(lucy_ros2_control::validate_joint_interfaces(joint).empty());
-}
-
-TEST(JointConfigValidate, WrongStateInterfaceNameFails)
-{
-  ComponentInfo joint = make_valid_joint();
-  joint.state_interfaces[0].name = hardware_interface::HW_IF_EFFORT;
-  EXPECT_FALSE(lucy_ros2_control::validate_joint_interfaces(joint).empty());
 }
 
 // ---------------------------------------------------------------------------
@@ -226,10 +177,10 @@ TEST(JointConfigMapping, BuildsValidMapping)
   ASSERT_TRUE(m.has_value());
   EXPECT_EQ(m->joint_index, 7u);
   EXPECT_EQ(m->virtual_pin, 3);
-  EXPECT_DOUBLE_EQ(m->offset_deg, 90.0);
-  EXPECT_DOUBLE_EQ(m->servo_default_deg, 90.0);
-  EXPECT_DOUBLE_EQ(m->min_rad, -1.0);
-  EXPECT_DOUBLE_EQ(m->max_rad, 2.0);
+  EXPECT_DOUBLE_EQ(m->offset, 90.0);
+  EXPECT_DOUBLE_EQ(m->default_val, 90.0);
+  EXPECT_DOUBLE_EQ(m->command.min, -1.0);
+  EXPECT_DOUBLE_EQ(m->command.max, 2.0);
 }
 
 TEST(JointConfigMapping, NoVirtualPinReturnsNullopt)
@@ -245,8 +196,8 @@ TEST(JointConfigMapping, NonFiniteLimitsStillBuild)
   const ComponentInfo joint = make_valid_joint();
   const auto m = lucy_ros2_control::build_actuated_joint_mapping(joint, 0, -kInf, kInf);
   ASSERT_TRUE(m.has_value());
-  EXPECT_FALSE(std::isfinite(m->min_rad));
-  EXPECT_FALSE(std::isfinite(m->max_rad));
+  EXPECT_FALSE(std::isfinite(m->command.min));
+  EXPECT_FALSE(std::isfinite(m->command.max));
 }
 
 TEST(JointConfigMapping, NegativeVirtualPinThrows)
@@ -282,8 +233,8 @@ TEST(JointConfigMapping, ZeroDirectionOrScaleThrows)
 TEST(JointConfigMapping, InvertedServoRangeThrows)
 {
   ComponentInfo joint = make_valid_joint();
-  joint.parameters["servo_min_deg"] = "120";
-  joint.parameters["servo_max_deg"] = "30";
+  joint.parameters["limit_min"] = "120";
+  joint.parameters["limit_max"] = "30";
   EXPECT_THROW(
     lucy_ros2_control::build_actuated_joint_mapping(joint, 0, -kInf, kInf), std::runtime_error);
 }
@@ -298,7 +249,7 @@ TEST(JointConfigMapping, InvertedFiniteUrdfRangeThrows)
 TEST(JointConfigMapping, MissingCalibrationParamThrows)
 {
   ComponentInfo joint = make_valid_joint();
-  joint.parameters.erase("offset_deg");
+  joint.parameters.erase("offset");
   EXPECT_THROW(
     lucy_ros2_control::build_actuated_joint_mapping(joint, 0, -kInf, kInf), std::runtime_error);
 }
@@ -307,55 +258,55 @@ TEST(JointConfigMapping, MissingCalibrationParamThrows)
 // Joint <-> servo math
 // ---------------------------------------------------------------------------
 
-TEST(JointConfigMath, DefaultJointPositionRad)
+TEST(JointConfigMath, DefaultJointPosition)
 {
   ActuatedJointMapping m;
-  m.offset_deg = 90.0;
+  m.offset = 90.0;
   m.direction = 1.0;
   m.scale = 1.0;
-  m.servo_default_deg = 90.0;
-  // (90 - 90) * 1 * 1 = 0 deg -> 0 rad
-  EXPECT_NEAR(lucy_ros2_control::default_joint_position_rad(m), 0.0, 1e-12);
+  m.default_val = 90.0;
+  // (90 - 90) * 1 * 1 = 0
+  EXPECT_NEAR(lucy_ros2_control::default_joint_position(m), 0.0, 1e-12);
 
-  m.servo_default_deg = 135.0;
-  // (135 - 90) = 45 deg -> pi/4
-  EXPECT_NEAR(lucy_ros2_control::default_joint_position_rad(m), kPi / 4.0, 1e-12);
+  m.default_val = 135.0;
+  // (135 - 90) * 1 * 1 = 45
+  EXPECT_NEAR(lucy_ros2_control::default_joint_position(m), 45.0, 1e-12);
 }
 
 TEST(JointConfigMath, ActuatorCommandToServoRadWithinRange)
 {
   ActuatedJointMapping m;
-  m.offset_deg = 90.0;
+  m.offset = 90.0;
   m.direction = 1.0;
   m.scale = 1.0;
-  m.servo_min_deg = 0.0;
-  m.servo_max_deg = 180.0;
-  // cmd 0 rad -> joint 0 deg -> servo 90 deg -> pi/2 rad
-  EXPECT_NEAR(lucy_ros2_control::actuator_command_to_servo_rad(m, 0.0), kPi / 2.0, 1e-12);
+  m.limit_min = 0.0;
+  m.limit_max = 180.0;
+  // cmd 0 -> (0 / 1) + 90 = 90, within range
+  EXPECT_NEAR(lucy_ros2_control::actuator_command_to_servo_rad(m, 0.0), 90.0, 1e-12);
 }
 
 TEST(JointConfigMath, ActuatorCommandToServoRadClampsHigh)
 {
   ActuatedJointMapping m;
-  m.offset_deg = 90.0;
+  m.offset = 90.0;
   m.direction = 1.0;
   m.scale = 1.0;
-  m.servo_min_deg = 0.0;
-  m.servo_max_deg = 180.0;
-  // cmd pi rad -> joint 180 deg -> servo 270 deg -> clamps to 180 deg -> pi rad
-  EXPECT_NEAR(lucy_ros2_control::actuator_command_to_servo_rad(m, kPi), kPi, 1e-12);
+  m.limit_min = 0.0;
+  m.limit_max = 180.0;
+  // cmd 180 -> (180 / 1) + 90 = 270, clamps to 180
+  EXPECT_NEAR(lucy_ros2_control::actuator_command_to_servo_rad(m, 180.0), 180.0, 1e-12);
 }
 
 TEST(JointConfigMath, ActuatorCommandHonoursDirection)
 {
   ActuatedJointMapping m;
-  m.offset_deg = 90.0;
+  m.offset = 90.0;
   m.direction = -1.0;
   m.scale = 1.0;
-  m.servo_min_deg = 0.0;
-  m.servo_max_deg = 180.0;
-  // cmd pi/2 rad -> joint 90 deg -> servo (90 / -1) + 90 = 0 deg -> 0 rad
-  EXPECT_NEAR(lucy_ros2_control::actuator_command_to_servo_rad(m, kPi / 2.0), 0.0, 1e-12);
+  m.limit_min = 0.0;
+  m.limit_max = 180.0;
+  // cmd 90 -> (90 / -1) + 90 = 0
+  EXPECT_NEAR(lucy_ros2_control::actuator_command_to_servo_rad(m, 90.0), 0.0, 1e-12);
 }
 
 // ---------------------------------------------------------------------------

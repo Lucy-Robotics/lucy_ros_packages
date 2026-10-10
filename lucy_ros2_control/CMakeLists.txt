@@ -30,6 +30,7 @@ add_library(
   SHARED
   src/lucy_system.cpp
   src/joint_config.cpp
+  src/shared_memory_channel.cpp
 )
 
 target_compile_features(lucy_ros2_control PUBLIC cxx_std_17)

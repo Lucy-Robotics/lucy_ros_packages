@@ -1,4 +1,4 @@
-// Copyright 2025 Sentience Robotics Team
+// Copyright 2026 Lucy Robotics Team
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -36,18 +36,6 @@
 namespace lucy_ros2_control
 {
 
-enum class Type
-{
-  PWM_SERVO,
-  BUS_SERVO
-};
-
-/// Convert radians to degrees.
-double rad_to_deg(double rad);
-
-/// Convert degrees to radians.
-double deg_to_rad(double deg);
-
 /// URDF joint-space command envelope (radians); ``±inf`` means "unbounded".
 struct JointLimits
 {
@@ -59,18 +47,18 @@ struct JointLimits
 struct ActuatedJointMapping
 {
   std::size_t joint_index{0};
-  Type type{0};
   int virtual_pin{0};
-  int bus_id{0};
-  double offset_deg{0.0};
+  double offset{0.0};
   double direction{1.0};
   double scale{1.0};
-  double servo_min_deg{0.0};
-  double servo_max_deg{0.0};
-  double servo_default_deg{0.0};
-  /// URDF joint-space limits from command_interface min/max (rad).
-  double min_rad{-std::numeric_limits<double>::infinity()};
-  double max_rad{std::numeric_limits<double>::infinity()};
+  double limit_min{0.0};
+  double limit_max{0.0};
+  double default_val{0.0};
+  struct Command
+  {
+    double min{-std::numeric_limits<double>::infinity()};
+    double max{std::numeric_limits<double>::infinity()};
+  } command;
 };
 
 /// Parse a numeric string. Throws ``std::runtime_error`` (with ``context``) on
@@ -111,12 +99,11 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
   double min_rad,
   double max_rad);
 
-/// Default joint position (rad) derived from the actuator's ``servo_default_deg``.
-double default_joint_position_rad(const ActuatedJointMapping & m);
+/// Default joint position derived from the actuator's ``default`` parameter.
+double default_joint_position(const ActuatedJointMapping & m);
 
-/// Servo angle (rad) published to firmware for a joint-space command (rad):
-/// maps joint→servo degrees, clamps to ``[servo_min_deg, servo_max_deg]``, then
-/// converts back to radians.
+/// Servo command published to firmware for a joint-space command: maps
+/// joint→servo units and clamps to ``[limit_min, limit_max]``.
 double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd_rad);
 
 /// Sort ``mappings`` ascending by ``virtual_pin`` and return the first repeated

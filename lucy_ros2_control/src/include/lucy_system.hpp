@@ -1,4 +1,4 @@
-// Copyright 2025 Sentience Robotics Team
+// Copyright 2026 Lucy Robotics Team
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -59,79 +59,10 @@
 #include <std_msgs/msg/string.hpp>
 
 #include "joint_config.hpp"
+#include "shared_memory_channel.hpp"
 
 namespace lucy_ros2_control
 {
-
-// Byte-for-byte mirror of the bridge's `#[repr(C)] RegisterHeader`
-// (lucy_embedded_firmware/firmwares/sim/src/main.rs): one dirty bit per
-// register, MSB-first inside each byte. A wider element type here puts every
-// register from 8 upwards on a different byte than the bridge reads.
-struct RegisterHeader
-{
-  uint8_t header[32];
-  uint16_t iterator;
-
-  bool get_register_status(uint16_t reg)
-  {
-    uint16_t index = reg / 8;
-    uint16_t index2 = reg % 8;
-    return ((header[index] >> (7 - index2)) & 0b1) != 0;
-  }
-
-  void switch_register_status(uint16_t reg)
-  {
-    uint16_t index = reg / 8;
-    uint16_t index2 = reg % 8;
-    header[index] = static_cast<uint8_t>(header[index] ^ (1u << (7 - index2)));
-  }
-
-  void set_dirty(uint16_t reg)
-  {
-
-    if (get_register_status(reg)) {
-      return;
-    }
-    switch_register_status(reg);
-  }
-
-  void set_clean(uint16_t reg)
-  {
-    if (!get_register_status(reg)) {
-      return;
-    }
-    switch_register_status(reg);
-  }
-};
-
-struct SharedRegisters
-{
-  uint16_t register_table[256];
-};
-
-// Bus-servo register block layout. The bridge forwards dirty registers in
-// ascending index order and the firmware consumes `cmd` and clears it inside
-// the same tick, so the opcode must sit above its operands.
-constexpr int kBusServoIdOffset = 0;
-constexpr int kBusServoAngleOffset = 1;
-constexpr int kBusServoCmdOffset = 2;
-constexpr int kBusServoRegisterCount = 3;
-
-/// First register of a bus joint's block. virtual_pin is a slot index, not a
-/// register index: a bus servo occupies three registers.
-constexpr int bus_block_base(int virtual_pin)
-{
-  return virtual_pin * kBusServoRegisterCount;
-}
-
-// Firmware bus-servo opcodes (BusServoModbusAdapter::tick).
-constexpr uint16_t kBusServoCmdMove = 1;
-constexpr uint16_t kBusServoCmdEnableTorque = 3;
-constexpr uint16_t kBusServoCmdDisableTorque = 5;
-
-/// Latches the controlling client's id; empty means nobody holds control.
-constexpr const char * kActiveClientTopic = "/lucy/active_client";
-
 
 class LucySystemHardware : public hardware_interface::SystemInterface
 {
@@ -140,60 +71,32 @@ public:
 
   ~LucySystemHardware();
 
-  hardware_interface::CallbackReturn on_init(
-    const hardware_interface::HardwareComponentInterfaceParams & params) override;
 
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
-
   std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
 
+  hardware_interface::CallbackReturn on_error(
+    const rclcpp_lifecycle::State & previous_state) override;
+  hardware_interface::CallbackReturn on_init(
+    const hardware_interface::HardwareComponentInterfaceParams & params) override;
+  hardware_interface::CallbackReturn on_configure(
+    const rclcpp_lifecycle::State & previous_state) override;
   hardware_interface::CallbackReturn on_activate(
     const rclcpp_lifecycle::State & previous_state) override;
-
   hardware_interface::CallbackReturn on_deactivate(
     const rclcpp_lifecycle::State & previous_state) override;
 
   hardware_interface::return_type read(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
-
   hardware_interface::return_type write(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
-  rclcpp::Logger get_logger() const {return *logger_;}
-  // rclcpp::Clock::SharedPtr get_clock() const { return clock_; }
+  rclcpp::Logger get_logger() const override {return *logger_;}
 
 private:
-  /// Validate every joint's command/state interfaces (see on_init step 1).
-  hardware_interface::CallbackReturn validate_joints();
-
-  /// Read publish/topic/node params and create the actuator publisher + node.
-  hardware_interface::CallbackReturn configure_publisher();
-
-  /// Fill joint_min_rad_ / joint_max_rad_ from command_interface min/max.
   hardware_interface::CallbackReturn init_joint_limits();
-
-  /// Build mappings_, seed default positions, sort and reject duplicate pins.
   hardware_interface::CallbackReturn init_actuator_mappings();
 
-  /// Initialising sensors / actuators registers in shared memory
-  hardware_interface::CallbackReturn init_registers();
-
-  /// Unmap the register objects and drop their shm / semaphore names. Idempotent.
-  void release_registers();
-
-  /// Subscribe to the active-client topic and spin node_ on its own thread.
-  void start_active_client_watch();
-
-  /// Stop the spin thread. Idempotent.
-  void stop_active_client_watch();
-
-  /// Write one bus servo's torque opcode. Caller must hold sem_.
-  void write_torque_opcode(const ActuatedJointMapping & m, uint16_t opcode);
-
-  /// Bring every bus servo's torque in line with controlled_. Takes sem_ itself.
-  void apply_torque_state(bool enable);
-
-  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_publisher_;
   rclcpp::Node::SharedPtr node_;
 
   std::string node_name_;
@@ -202,49 +105,24 @@ private:
   std::shared_ptr<rclcpp::Logger> logger_;
   // rclcpp::Clock::SharedPtr clock_;
 
+  std::optional<SharedMemoryChannel> shared_memory_channel_;
+
   // Store the command for the simulated robot
-  std::vector<double> hw_old_commands_;
+  std::vector<double> hw_torque_enabled_;
   std::vector<double> hw_commands_;
+  std::vector<double> hw_velocities_;
+  std::vector<double> hw_accelerations_;
+
+  uint64_t last_state_seq_{0};
   std::vector<double> hw_positions_;
-
-  // Table containing the register values of every sensor and actuator.
-  // One set of objects per hardware component: virtual_pin restarts at 0 in
-  // every <ros2_control> block, so a shared table would alias the left arm's
-  // pin N onto the right arm's pin N.
-  RegisterHeader * register_header_ = nullptr;
-  SharedRegisters * shared_registers_ = nullptr;
-  sem_t * sem_ = nullptr;
-
-  /// node_name_ sanitised and capped to what shm_open() accepts; the name the
-  /// firmware bridge must be given to attach to this component.
-  std::string shm_node_name_;
-
-  // Names of the objects this component actually created. Set only once the
-  // object exists, so every failure path and the destructor unlink exactly
-  // what was created and nothing a peer owns.
-  std::string reg_table_name_;
-  std::string reg_header_name_;
-  std::string sem_name_;
-
-  // std::vector<double> hw_velocities_; // We have no velocity for our servos
 
   /** Per-joint URDF limits from command_interface min/max (rad); ±inf when unset. */
   std::vector<double> joint_min_rad_;
   std::vector<double> joint_max_rad_;
 
-  bool publish_actuators_{true};
-
   std::vector<ActuatedJointMapping> mappings_;
 
-  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr active_client_sub_;
-  rclcpp::executors::SingleThreadedExecutor::UniquePtr client_executor_;
-  std::thread client_spin_thread_;
-
-  /// Written by the subscription thread, read by write().
   std::atomic<bool> controlled_{false};
-
-  /// Only write() may touch this: it keeps the register block single-writer.
-  bool torque_enabled_{false};
 };
 
 }  // namespace lucy_ros2_control
