@@ -4,7 +4,7 @@
   <name>lucy_msgs</name>
   <version>0.1.0</version>
   <description>ROS2 interface definitions for Lucy robot: messages, actions, and services</description>
-  <maintainer email="contact@sentience-robotics.fr">Sentience Robotics Team</maintainer>
+  <maintainer email="contact@lucy-robotics.com">Lucy Robotics Team</maintainer>
   <license>GPL-3.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

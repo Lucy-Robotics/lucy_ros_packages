@@ -401,7 +401,7 @@ For issues and questions:
 - Check the troubleshooting section above
 - Review Intel RealSense documentation
 - Check ROS2 RealSense wrapper issues on GitHub
-- Contact: contact@sentience-robotics.fr
+- Contact: contact@lucy-robotics.com
 
 ---
 

@@ -1,6 +1,6 @@
 # lucy_ros_packages
 
-ROS 2 **Jazzy** repository for **Lucy** (Sentience Robotics): runtime bringup, `ros2_control` hardware integration, and camera tooling. This is a **multi-package** repo; each subdirectory under `src/` in your colcon workspace is one `ament` package.
+ROS 2 **Jazzy** repository for **Lucy** (Lucy Robotics): runtime bringup, `ros2_control` hardware integration, and camera tooling. This is a **multi-package** repo; each subdirectory under `src/` in your colcon workspace is one `ament` package.
 
 ## What lives here
 
@@ -16,7 +16,7 @@ Package names match directories (`<name>` in each `package.xml`).
 
 ## How this repo fits the platform
 
-- **Robot model, RViz, and Gazebo** live in the sibling repo **[thais_urdf](https://github.com/Sentience-Robotics/thais_urdf)** (package name `thais_urdf`). **`lucy_bringup`** owns **rosbridge + hardware config** (**`web_ros_api.launch.py`**) and **`lucy.launch.py`** (composition via **`real`**, **`rviz`**, **`gazebo`**). `lucy_ros2_control` expects URDF/xacro and meshes from **`thais_urdf`** when using default paths.
+- **Robot model, RViz, and Gazebo** live in the sibling repo **[thais_urdf](https://github.com/Lucy-Robotics/thais_urdf)** (package name `thais_urdf`). **`lucy_bringup`** owns **rosbridge + hardware config** (**`web_ros_api.launch.py`**) and **`lucy.launch.py`** (composition via **`real`**, **`rviz`**, **`gazebo`**). `lucy_ros2_control` expects URDF/xacro and meshes from **`thais_urdf`** when using default paths.
 - **Web control panel** and teleop semantics are **not** in this repo; they consume the same topics/controllers documented in lucy_ws docs.
 
 ## Requirements
@@ -129,4 +129,4 @@ Packages in this repository are licensed under **GPL-3.0** unless a subdirectory
 
 ## Maintainer
 
-Sentience Robotics Team — `contact@sentience-robotics.fr` (see `package.xml` files).
+Lucy Robotics Team — `contact@lucy-robotics.com` (see `package.xml` files).

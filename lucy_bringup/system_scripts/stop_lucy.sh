@@ -1,5 +1,5 @@
 #!/usr/bin/zsh
-# Copyright 2024 Sentience Robotics Team
+# Copyright 2024 Lucy Robotics Team
 # Stop script for Lucy Robot System
 
 SESSION_NAME="lucy"

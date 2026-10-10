@@ -1,5 +1,5 @@
 #!/usr/bin/zsh
-# Copyright 2025 Sentience Robotics Team
+# Copyright 2026 Lucy Robotics Team
 # Health check script for Lucy Robot System
 
 SESSION_NAME="lucy"

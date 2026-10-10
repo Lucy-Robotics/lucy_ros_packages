@@ -5,10 +5,10 @@
   <version>1.0.0</version>
   <description>Zero-copy MJPEG camera publisher optimized for NVIDIA Jetson AGX Orin</description>
   
-  <maintainer email="contact@sentience-robotics.fr">Sentience Robotics Team</maintainer>
+  <maintainer email="contact@lucy-robotics.com">Lucy Robotics Team</maintainer>
   <license>GPL-3.0</license>
   
-  <author email="contact@sentience-robotics.fr">Sentience Robotics Team</author>
+  <author email="contact@lucy-robotics.com">Lucy Robotics Team</author>
   
   
   <buildtool_depend>ament_cmake</buildtool_depend>

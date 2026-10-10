@@ -4,7 +4,7 @@
   <name>lucy_control_supervisor</name>
   <version>0.0.0</version>
   <description>Supervises ros2_control stack restart for LCP-driven configuration reload.</description>
-  <maintainer email="contact@sentience-robotics.fr">Sentience Robotics Team</maintainer>
+  <maintainer email="contact@lucy-robotics.com">Lucy Robotics Team</maintainer>
   <license>GPL-3.0</license>
 
   <depend>rclpy</depend>

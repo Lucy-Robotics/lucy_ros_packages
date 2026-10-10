@@ -6,7 +6,7 @@ This package provides a command-line interface for interacting with Lucy.
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/Sentience-Robotics/lucy_ros_packages
+   git clone https://github.com/Lucy-Robotics/lucy_ros_packages
    ```
 2. **Build the package:**
    Navigate to your ROS 2 workspace and build the package using `colcon`:

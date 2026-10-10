@@ -214,5 +214,5 @@ For complete documentation, installation instructions, troubleshooting, and usag
 
 GPL-3.0 - See LICENSE file for details.
 
-Copyright 2025 Sentience Robotics Team
+Copyright 2026 Lucy Robotics Team
 

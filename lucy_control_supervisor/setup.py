@@ -14,8 +14,8 @@ setup(
     ],
     install_requires=['setuptools', 'PyYAML'],
     zip_safe=True,
-    maintainer='Sentience Robotics Team',
-    maintainer_email='contact@sentience-robotics.fr',
+    maintainer='Lucy Robotics Team',
+    maintainer_email='contact@lucy-robotics.com',
     description='Restart RSP + ros2_control_node + spawners after config pipeline reload.',
     license='GPL-3.0',
     entry_points={
