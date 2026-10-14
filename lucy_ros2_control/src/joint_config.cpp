@@ -29,20 +29,6 @@
 
 namespace lucy_ros2_control
 {
-namespace
-{
-constexpr double kPi = 3.14159265358979323846;
-}  // namespace
-
-double rad_to_deg(double rad)
-{
-  return rad * 180.0 / kPi;
-}
-
-double deg_to_rad(double deg)
-{
-  return deg * kPi / 180.0;
-}
 
 double parse_double_string_or_throw(const std::string & raw, const std::string & context)
 {
@@ -78,29 +64,6 @@ double parse_optional_interface_limit(
   return parse_double_string_or_throw(value.value(), context);
 }
 
-std::string validate_joint_interfaces(const hardware_interface::ComponentInfo & joint)
-{
-  if (joint.command_interfaces.size() != 1) {
-    return "Joint '" + joint.name + "' has " +
-           std::to_string(joint.command_interfaces.size()) +
-           " command interfaces found. 1 expected.";
-  }
-  if (joint.command_interfaces[0].name != hardware_interface::HW_IF_POSITION) {
-    return "Joint '" + joint.name + "' has '" + joint.command_interfaces[0].name +
-           "' command interface. '" + hardware_interface::HW_IF_POSITION + "' expected.";
-  }
-  if (joint.state_interfaces.size() != 1) {
-    return "Joint '" + joint.name + "' has " +
-           std::to_string(joint.state_interfaces.size()) +
-           " state interfaces found. 1 expected.";
-  }
-  if (joint.state_interfaces[0].name != hardware_interface::HW_IF_POSITION) {
-    return "Joint '" + joint.name + "' has '" + joint.state_interfaces[0].name +
-           "' state interface. '" + hardware_interface::HW_IF_POSITION + "' expected.";
-  }
-  return std::string();
-}
-
 JointLimits parse_joint_limits(const hardware_interface::ComponentInfo & joint)
 {
   JointLimits limits{};
@@ -128,28 +91,8 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
   double min_rad,
   double max_rad)
 {
-  // `type` selects the servo family, but lucy_config_generator does not emit it:
-  // every generated ros2_control xacro predates the field. Absent means the PWM
-  // path the hardware had before bus servos existed, read like the other optional
-  // params below rather than with at(), which threw on all of them.
-  Type type = Type::PWM_SERVO;
-  const auto it_type = joint.parameters.find("type");
-  if (it_type != joint.parameters.end() && !it_type->second.empty()) {
-    if (it_type->second == "pwm_servo") {
-      type = Type::PWM_SERVO;
-    } else if (it_type->second == "bus_servo") {
-      type = Type::BUS_SERVO;
-    }
-  }
-
-
   const auto it_vpin = joint.parameters.find("virtual_pin");
   if (it_vpin == joint.parameters.end() || it_vpin->second.empty()) {
-    return std::nullopt;
-  }
-
-  const auto it_bus = joint.parameters.find("bus_id");
-  if ((it_bus == joint.parameters.end() || it_bus->second.empty()) && type == Type::BUS_SERVO) {
     return std::nullopt;
   }
 
@@ -161,24 +104,14 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
     throw std::runtime_error(
             "invalid virtual_pin '" + it_vpin->second + "' for joint '" + joint.name + "'");
   }
-  m.bus_id = 0;
-  if (it_bus != joint.parameters.end() && !it_bus->second.empty()) {
-    try {
-      m.bus_id = std::stoi(it_bus->second, nullptr, 10);
-    } catch (const std::exception &) {
-      throw std::runtime_error(
-              "invalid bus_id '" + it_bus->second + "' for joint '" + joint.name + "'");
-    }
-  }
-  m.type = type;
-  m.offset_deg = parse_required_double(joint, "offset_deg");
+  m.offset = parse_required_double(joint, "offset");
   m.direction = parse_required_double(joint, "direction");
   m.scale = parse_required_double(joint, "scale");
-  m.servo_min_deg = parse_required_double(joint, "servo_min_deg");
-  m.servo_max_deg = parse_required_double(joint, "servo_max_deg");
-  m.servo_default_deg = parse_required_double(joint, "servo_default_deg");
-  m.min_rad = min_rad;
-  m.max_rad = max_rad;
+  m.limit_min = parse_required_double(joint, "limit_min");
+  m.limit_max = parse_required_double(joint, "limit_max");
+  m.default_val = parse_required_double(joint, "default");
+  m.command.min = min_rad;
+  m.command.max = max_rad;
 
   if (m.virtual_pin < 0) {
     throw std::runtime_error(
@@ -189,11 +122,13 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
     throw std::runtime_error(
             "joint '" + joint.name + "' has invalid direction/scale (must be non-zero)");
   }
-  if (m.servo_min_deg > m.servo_max_deg) {
+  if (m.limit_min > m.limit_max) {
     throw std::runtime_error(
-            "joint '" + joint.name + "' has servo_min_deg > servo_max_deg");
+            "joint '" + joint.name + "' has limit_min > limit_max");
   }
-  if (std::isfinite(m.min_rad) && std::isfinite(m.max_rad) && m.min_rad > m.max_rad) {
+  if (std::isfinite(m.command.min) && std::isfinite(m.command.max) &&
+    m.command.min > m.command.max)
+  {
     throw std::runtime_error(
             "joint '" + joint.name + "' has command_interface min > max");
   }
@@ -201,17 +136,16 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
   return m;
 }
 
-double default_joint_position_rad(const ActuatedJointMapping & m)
+double default_joint_position(const ActuatedJointMapping & m)
 {
-  return deg_to_rad((m.servo_default_deg - m.offset_deg) * m.direction * m.scale);
+  return (m.default_val - m.offset) * m.direction * m.scale;
 }
 
-double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd_rad)
+double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd)
 {
-  const double joint_deg = rad_to_deg(cmd_rad);
-  const double servo_deg = (joint_deg / (m.direction * m.scale)) + m.offset_deg;
-  const double clamped_deg = clamp_position_command(servo_deg, m.servo_min_deg, m.servo_max_deg);
-  return deg_to_rad(clamped_deg);
+  cmd = (cmd / (m.direction * m.scale)) + m.offset;
+  cmd = clamp_position_command(cmd, m.limit_min, m.limit_max);
+  return cmd;
 }
 
 std::optional<int> sort_and_find_duplicate_virtual_pin(
