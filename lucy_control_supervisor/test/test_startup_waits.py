@@ -14,15 +14,13 @@ def test_no_fixed_sleep_in_startup():
 
 
 def test_controller_manager_is_waited_for_before_handing_off():
-    """Spawners run from each robot package's control.launch.py.
-
-    They contend for one lock file while waiting, so the manager has to answer
-    before they start or each one burns a full 20s lock attempt.
-    """
+    """Supervisor waits for CM before spawning (spawners hold a global lock)."""
     assert '/controller_manager/list_controllers' in SRC
     start_cm = SRC.index('def _start_cm')
     next_method = SRC.index('def _restart_stack')
     assert '_service_available' in SRC[start_cm:next_method]
+    assert '_spawn_controllers' in SRC[start_cm:next_method]
+    assert 'self._spawn_controllers(cfg)' in SRC
 
 
 def test_robot_state_publisher_is_waited_for_by_topic():
