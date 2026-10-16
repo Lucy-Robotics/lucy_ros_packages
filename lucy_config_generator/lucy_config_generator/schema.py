@@ -37,8 +37,8 @@ REQUIRED_ACTUATOR = (
     'default',
     'enabled',
 )
-# Rejected when present: use REQUIRED_ACTUATOR rad keys instead (matches HI #63).
-_DEPRECATED_ACTUATOR_DEG_KEYS = (
+# Rejected when present; use REQUIRED_ACTUATOR keys (radians) instead.
+_REJECTED_ACTUATOR_ANGLE_KEYS = (
     'offset_deg',
     'servo_min_deg',
     'servo_max_deg',
@@ -270,13 +270,13 @@ def _validate_actuator(
 ) -> None:
     """Validate one actuator and append it to board bucket when valid."""
     aid = _label(actuator)
-    deprecated = [k for k in _DEPRECATED_ACTUATOR_DEG_KEYS if k in actuator]
-    for deg_key in deprecated:
+    rejected = [k for k in _REJECTED_ACTUATOR_ANGLE_KEYS if k in actuator]
+    for bad_key in rejected:
         errors.append(
-            f'actuator {aid}: {deg_key} is removed; use offset / '
-            'limit_min / limit_max / default in radians (HI #63)'
+            f'actuator {aid}: {bad_key} is not allowed; use offset / '
+            'limit_min / limit_max / default in radians'
         )
-    if deprecated:
+    if rejected:
         return
     if not _append_missing_keys(errors, f'actuator {aid}', actuator, REQUIRED_ACTUATOR):
         return

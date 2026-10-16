@@ -118,7 +118,7 @@ def test_schema_rejects_non_numeric_offset():
 def test_schema_rejects_deprecated_offset_deg():
     data = _load_mapping()
     data['actuators'][0]['offset_deg'] = 0.0
-    with pytest.raises(ValueError, match='offset_deg is removed'):
+    with pytest.raises(ValueError, match='offset_deg is not allowed'):
         validate_hardware_yaml(data)
 
 
