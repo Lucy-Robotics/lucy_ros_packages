@@ -36,8 +36,8 @@ Arguments:
 
 """
 
-from pathlib import Path
 import os
+from pathlib import Path
 import shutil
 
 from ament_index_python.packages import get_package_share_directory
@@ -65,7 +65,8 @@ _SO101_ROBOT_PACKAGE = 'so_arm101_urdf'
 
 
 def resolve_linux_firmware_binary() -> Path:
-    """Locate the host Feetech SHM consumer binary (``firmwares/linux``).
+    """
+    Locate the host Feetech SHM consumer binary (``firmwares/linux``).
 
     Search order: ``LUCY_EMBEDDED_FIRMWARE_LINUX``, ``PATH``, then
     ``src/lucy_embedded_firmware/target/release/<bin>`` under the workspace
