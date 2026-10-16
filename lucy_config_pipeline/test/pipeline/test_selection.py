@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 from src.config_store import ConfigStore
+from src.pipeline.selection import all_selected_serials_empty
 from src.pipeline.selection import board_build_plan
 from src.pipeline.selection import resolve_firmware_paths
 from src.pipeline.selection import resolve_mapping_input
@@ -80,3 +81,15 @@ def test_board_build_plan_requires_firmware_target():
     data = {'boards': {'rp2040_right_arm': {}}}
     with pytest.raises(ValueError, match='missing firmware_target'):
         board_build_plan(data, {'rp2040_right_arm'})
+
+
+def test_all_selected_serials_empty():
+    data = {
+        'boards': {
+            'rp2040_so_arm': {'serial_id': '', 'firmware_target': 'lucy_so_arm'},
+            'rp2040_left_arm': {'serial_id': 'ABC', 'firmware_target': 'lucy_left'},
+        }
+    }
+    assert all_selected_serials_empty(data, {'rp2040_so_arm'}) is True
+    assert all_selected_serials_empty(data, None) is False
+    assert all_selected_serials_empty(data, {'rp2040_left_arm'}) is False
