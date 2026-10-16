@@ -21,6 +21,18 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+namespace
+{
+/// POSIX shm names must start with ``/``. Xacro may pass a bare node name (``so_arm``).
+std::string posix_shm_name(const std::string & node_name)
+{
+  if (node_name.empty() || node_name.front() == '/') {
+    return node_name;
+  }
+  return "/" + node_name;
+}
+}  // namespace
+
 SharedMemoryChannel::~SharedMemoryChannel()
 {
   release();
@@ -28,15 +40,16 @@ SharedMemoryChannel::~SharedMemoryChannel()
 
 std::optional<SharedMemoryChannel> SharedMemoryChannel::create(const std::string & node_name)
 {
-  int fd = shm_open(node_name.c_str(), O_CREAT | O_RDWR, 0666);
+  const std::string shm_name = posix_shm_name(node_name);
+  int fd = shm_open(shm_name.c_str(), O_CREAT | O_RDWR, 0666);
   if (fd == -1) {
-    shm_unlink(node_name.c_str());
+    shm_unlink(shm_name.c_str());
     return std::nullopt;
   }
 
   if (ftruncate(fd, sizeof(ActuatorSharedState)) == -1) {
     close(fd);
-    shm_unlink(node_name.c_str());
+    shm_unlink(shm_name.c_str());
     return std::nullopt;
   }
 
@@ -45,12 +58,12 @@ std::optional<SharedMemoryChannel> SharedMemoryChannel::create(const std::string
     0);
   close(fd);
   if (addr == MAP_FAILED) {
-    shm_unlink(node_name.c_str());
+    shm_unlink(shm_name.c_str());
     return std::nullopt;
   }
 
   SharedMemoryChannel channel;
-  channel.node_name_ = node_name;
+  channel.node_name_ = shm_name;
   channel.actuators_state_ = new (addr) ActuatorSharedState();
   return channel;
 }
