@@ -137,7 +137,7 @@ def derive_ros2_node_name(board_id: str) -> str:
     Pattern: the bare snake_case suffix after ``rp2040_``.
 
     ``LucySystemHardware`` names its POSIX shm/sem objects after this, and Darwin
-    caps those at 31 chars — 14 once the leading '/' and ``.lucy_reg_header``
+    caps those at 31 chars - 14 once the leading '/' and ``.lucy_reg_header``
     are accounted for.
     """
     return ros2_hardware_suffix(board_id)
