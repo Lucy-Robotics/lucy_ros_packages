@@ -25,12 +25,12 @@ source install/setup.bash
 `<param>` tags in robot-specific `inmoov_ros2_control.xacro` generated from YAML):
 
 - `virtual_pin`
-- `offset_deg`
+- `offset` (radians)
 - `direction`
 - `scale`
-- `servo_min_deg`
-- `servo_max_deg`
-- `servo_default_deg`
+- `limit_min` (radians)
+- `limit_max` (radians)
+- `default` (radians)
 
 Joints without `virtual_pin` are treated as passive/unmapped for actuator output.
 
@@ -41,7 +41,7 @@ plugin updates POSIX SHM (`ActuatorSharedState` / `JointTable`) with **`f64`
 radians** and bumps `command_seq` for host consumers (`firmwares/linux`,
 host↔MCU bridge) — not ROS topics / micro-ROS.
 
-- default initialization from calibration / `servo_default_*`
+- default initialization from calibration / `default`
 - write: URDF clamp → joint→servo mapping → `hw_commands[i]` (rad) + `command_seq`
 
 ## Robot-specific launch/config

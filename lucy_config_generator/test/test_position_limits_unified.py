@@ -8,11 +8,11 @@ URDF position limits in generated ros2_control (real + mock enforcement).
 The generated ``inmoov_ros2_control.xacro`` is consumed by different
 ``<plugin>`` implementations at xacro-expansion time:
 
-* ``gz_ros2_control/GazeboSimSystem`` (Gazebo) — receives the same ``min``/``max``
+* ``gz_ros2_control/GazeboSimSystem`` (Gazebo) - receives the same ``min``/``max``
   params but stock upstream does **not** clamp in ``write()`` (we do not patch
   ``gz_ros2_control`` in this workspace).
 * ``lucy_ros2_control/LucySystemHardware`` with ``publish_actuators=false``
-  (RViz / mock) — clamps ``hw_commands_`` to ``min``/``max``.
+  (RViz / mock) - clamps ``hw_commands_`` to ``min``/``max``.
 * ``lucy_ros2_control/LucySystemHardware`` with a micro-ROS publisher (real).
 
 These tests assert that ``min``/``max`` are emitted for every actuated joint,

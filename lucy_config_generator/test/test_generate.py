@@ -79,10 +79,10 @@ def test_schema_rejects_null_virtual_pin():
 
 def test_schema_rejects_servo_min_greater_than_max():
     data = _load_mapping()
-    data['actuators'][0]['servo_min_deg'] = 10
-    data['actuators'][0]['servo_max_deg'] = 5
-    data['actuators'][0]['servo_default_deg'] = 7
-    with pytest.raises(ValueError, match='servo_min_deg .* must be <= servo_max_deg'):
+    data['actuators'][0]['limit_min'] = 10
+    data['actuators'][0]['limit_max'] = 5
+    data['actuators'][0]['default'] = 7
+    with pytest.raises(ValueError, match='limit_min .* must be <= limit_max'):
         validate_hardware_yaml(data)
 
 
@@ -108,10 +108,17 @@ def test_schema_rejects_non_bool_enabled_sensor():
         validate_hardware_yaml(data)
 
 
-def test_schema_rejects_non_numeric_offset_deg():
+def test_schema_rejects_non_numeric_offset():
     data = _load_mapping()
-    data['actuators'][0]['offset_deg'] = None
-    with pytest.raises(ValueError, match='offset_deg must be numeric'):
+    data['actuators'][0]['offset'] = None
+    with pytest.raises(ValueError, match='offset must be numeric'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_deprecated_offset_deg():
+    data = _load_mapping()
+    data['actuators'][0]['offset_deg'] = 0.0
+    with pytest.raises(ValueError, match='offset_deg is not allowed'):
         validate_hardware_yaml(data)
 
 

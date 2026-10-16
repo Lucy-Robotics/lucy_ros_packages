@@ -29,13 +29,24 @@ REQUIRED_ACTUATOR = (
     'virtual_pin',
     'physical_pin',
     'servo_type',
-    'offset_deg',
+    'offset',
     'direction',
     'scale',
+    'limit_min',
+    'limit_max',
+    'default',
+    'enabled',
+)
+# Rejected when present; use REQUIRED_ACTUATOR keys (radians) instead.
+_REJECTED_ACTUATOR_ANGLE_KEYS = (
+    'offset_deg',
     'servo_min_deg',
     'servo_max_deg',
     'servo_default_deg',
-    'enabled',
+    'offset_rad',
+    'servo_min_rad',
+    'servo_max_rad',
+    'servo_default_rad',
 )
 REQUIRED_SENSOR = (
     'id',
@@ -126,7 +137,7 @@ def derive_ros2_node_name(board_id: str) -> str:
     Pattern: the bare snake_case suffix after ``rp2040_``.
 
     ``LucySystemHardware`` names its POSIX shm/sem objects after this, and Darwin
-    caps those at 31 chars — 14 once the leading '/' and ``.lucy_reg_header``
+    caps those at 31 chars - 14 once the leading '/' and ``.lucy_reg_header``
     are accounted for.
     """
     return ros2_hardware_suffix(board_id)
@@ -259,6 +270,14 @@ def _validate_actuator(
 ) -> None:
     """Validate one actuator and append it to board bucket when valid."""
     aid = _label(actuator)
+    rejected = [k for k in _REJECTED_ACTUATOR_ANGLE_KEYS if k in actuator]
+    for bad_key in rejected:
+        errors.append(
+            f'actuator {aid}: {bad_key} is not allowed; use offset / '
+            'limit_min / limit_max / default in radians'
+        )
+    if rejected:
+        return
     if not _append_missing_keys(errors, f'actuator {aid}', actuator, REQUIRED_ACTUATOR):
         return
 
@@ -312,9 +331,9 @@ def _validate_actuator(
         valid = False
 
     try:
-        float(actuator['offset_deg'])
+        float(actuator['offset'])
     except Exception:
-        errors.append(f'actuator {aid}: offset_deg must be numeric')
+        errors.append(f'actuator {aid}: offset must be numeric')
         valid = False
 
     try:
@@ -373,26 +392,25 @@ def _validate_actuator_ranges(
 
         for actuator in actuators:
             aid = _label(actuator)
-            lo = actuator['servo_min_deg']
-            hi = actuator['servo_max_deg']
-            default = actuator['servo_default_deg']
+            lo = actuator['limit_min']
+            hi = actuator['limit_max']
+            default = actuator['default']
             try:
                 lo_f = float(lo)
                 hi_f = float(hi)
                 default_f = float(default)
             except Exception:
                 errors.append(
-                    f'actuator {aid}: servo_min_deg/servo_max_deg/'
-                    'servo_default_deg must be numeric'
+                    f'actuator {aid}: limit_min/limit_max/default must be numeric'
                 )
                 continue
 
             if lo_f > hi_f:
                 errors.append(
-                    f'actuator {aid}: servo_min_deg {lo} must be <= servo_max_deg {hi}'
+                    f'actuator {aid}: limit_min {lo} must be <= limit_max {hi}'
                 )
             if default_f < lo_f or default_f > hi_f:
-                errors.append(f'actuator {aid}: servo_default_deg out of [{lo}, {hi}]')
+                errors.append(f'actuator {aid}: default out of [{lo}, {hi}]')
 
 
 def _validate_sensor(
