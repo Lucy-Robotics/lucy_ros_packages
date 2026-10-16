@@ -54,3 +54,20 @@ def board_build_plan(data: dict, selected_boards: set[str] | None) -> list[tuple
             raise ValueError(f"missing firmware_target for board '{board}'")
         plan.append((board, firmware_target))
     return plan
+
+
+def all_selected_serials_empty(data: dict, selected_boards: set[str] | None) -> bool:
+    """True when every board in the flash/build set has an empty ``serial_id``.
+
+    Used to skip MCU cmake/cargo build and picotool when nothing can be flashed
+    (e.g. so101 host-linux path with ``serial_id: ''``).
+    """
+    boards_map = data.get('boards', {}) or {}
+    board_ids = sorted(selected_boards) if selected_boards else sorted(boards_map.keys())
+    if not board_ids:
+        return True
+    for board in board_ids:
+        serial = str((boards_map.get(board) or {}).get('serial_id') or '').strip()
+        if serial:
+            return False
+    return True
