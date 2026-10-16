@@ -10,14 +10,13 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <exec_depend>micro_ros_agent</exec_depend>
+  <!-- micro-ROS, RealSense, audio_common: optional Docker hardware plugins (not rosdep). -->
   <exec_depend>lucy_ros2_control</exec_depend>
   <exec_depend>rosbridge_server</exec_depend>
   <exec_depend>camera_ros</exec_depend>
-  <exec_depend>audio_common</exec_depend>
-  <exec_depend>realsense2_camera</exec_depend>
   <exec_depend>lucy_config_pipeline</exec_depend>
-  <exec_depend>thais_urdf</exec_depend>
+  <exec_depend>lucy_hardware_discovery</exec_depend>
+  <exec_depend>inmoov_urdf</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 
