@@ -90,7 +90,11 @@ void SharedMemoryChannel::release()
     munmap(actuators_state_, sizeof(ActuatorSharedState));
     actuators_state_ = nullptr;
   }
-  shm_unlink(node_name_.c_str());
+  // Do not shm_unlink here. Pipeline RELOAD restarts ros2_control while the
+  // host firmware (lucy-embedded-firmware-linux) keeps its mmap; unlinking
+  // would make the next create() a new inode the firmware never sees, so
+  // commands stop until a full stack restart. Re-opening the same name and
+  // placement-new'ing ActuatorSharedState keeps both sides on one object.
 }
 
 void SharedMemoryChannel::lock()

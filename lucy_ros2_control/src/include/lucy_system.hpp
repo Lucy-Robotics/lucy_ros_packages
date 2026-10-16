@@ -24,10 +24,10 @@
 #ifndef LUCY_ROS2_CONTROL__LUCY_SYSTEM_HPP_
 #define LUCY_ROS2_CONTROL__LUCY_SYSTEM_HPP_
 
-#include <memory>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <atomic>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -47,6 +47,7 @@
 #include "hardware_interface/system_interface.hpp"
 #include "hardware_interface/types/hardware_interface_return_values.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp/executors/single_threaded_executor.hpp"
 #include "rclcpp/publisher.hpp"
 #include "rclcpp/clock.hpp"
 #include "rclcpp/logger.hpp"
@@ -63,6 +64,9 @@
 
 namespace lucy_ros2_control
 {
+
+/// Latched by ``lucy_client_registry``; non-empty means LCP/CLI Control Robot ON.
+constexpr const char * kActiveClientTopic = "/lucy/active_client";
 
 class LucySystemHardware : public hardware_interface::SystemInterface
 {
@@ -97,6 +101,12 @@ private:
   hardware_interface::CallbackReturn init_joint_limits();
   hardware_interface::CallbackReturn init_actuator_mappings();
 
+  /// Subscribe to ``/lucy/active_client`` and spin ``node_`` off the CM thread.
+  void start_active_client_watch();
+  void stop_active_client_watch();
+  /// Mirror Control Robot ON/OFF into ``hw_torque_enabled_`` (applied in ``write``).
+  void apply_torque_from_control_state(bool enable);
+
   rclcpp::Node::SharedPtr node_;
 
   std::string node_name_;
@@ -113,7 +123,6 @@ private:
   std::vector<double> hw_velocities_;
   std::vector<double> hw_accelerations_;
 
-  uint64_t last_state_seq_{0};
   std::vector<double> hw_positions_;
 
   /** Per-joint URDF limits from command_interface min/max (rad); ±inf when unset. */
@@ -122,7 +131,12 @@ private:
 
   std::vector<ActuatedJointMapping> mappings_;
 
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr active_client_sub_;
+  std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> client_executor_;
+  std::thread client_spin_thread_;
+
   std::atomic<bool> controlled_{false};
+  bool torque_enabled_{false};
 };
 
 }  // namespace lucy_ros2_control

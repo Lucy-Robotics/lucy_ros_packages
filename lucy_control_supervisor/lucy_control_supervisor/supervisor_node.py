@@ -2,15 +2,12 @@
 #
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""Manage RSP + ros2_control_node; restart on /lucy_control/restart.
-
-Spawners are started by each robot package's control.launch.py, not here."""
+"""Manage RSP + ros2_control_node + spawners; restart on /lucy_control/restart."""
 
 from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from dataclasses import field
 import os
 from pathlib import Path
 import shutil
@@ -29,6 +26,8 @@ from rclpy.qos import ReliabilityPolicy
 from std_msgs.msg import Bool
 from std_srvs.srv import Trigger
 import yaml
+
+from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
 
 
 
@@ -101,6 +100,7 @@ class ControlSupervisorNode(Node):
     CHILD_LOG_TAIL = 50
     DISCOVERY_SETTLE_S = 2.0
     CONTROLLER_MANAGER_NODE = 'controller_manager'
+    SPAWNER_TIMEOUT_S = 60.0
 
     def __init__(self) -> None:
         super().__init__('lucy_control_supervisor')
@@ -346,6 +346,42 @@ class ControlSupervisorNode(Node):
                 f'{self.READY_TIMEOUT_S:.0f}s; spawners may block on the lock'
             )
 
+    def _spawn_controllers(self, cfg: _StackConfig) -> None:
+        """Load and activate controllers after controller_manager is up.
+
+        Must run on every restart (including pipeline RELOAD): launch-file
+        spawners are one-shot and do not re-run when only this node restarts CM.
+        Sequential to avoid the spawner global lock burning 20s per waiter.
+        """
+        names = controllers_to_spawn(cfg.controllers_yaml)
+        if not names:
+            self.get_logger().warning(
+                f'no controllers to spawn in {cfg.controllers_yaml}'
+            )
+            return
+        for name in names:
+            cmd = [
+                *node_argv('controller_manager', 'spawner'),
+                name,
+                '--switch-timeout',
+                '10',
+            ]
+            self.get_logger().info(f'spawning controller {name}')
+            r = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self.SPAWNER_TIMEOUT_S,
+                check=False,
+                env=os.environ.copy(),
+            )
+            if r.returncode != 0:
+                detail = (r.stderr or r.stdout or '').strip()
+                raise RuntimeError(
+                    f'spawner for {name} failed (exit {r.returncode})'
+                    + (f': {detail}' if detail else '')
+                )
+
     def _restart_stack(self) -> tuple[bool, str]:
         if self._restart_lock:
             return False, 'restart already in progress'
@@ -377,6 +413,7 @@ class ControlSupervisorNode(Node):
                 self._start_rsp(cfg, urdf_xml)
                 if not cfg.use_gazebo_sim:
                     self._start_cm(cfg)
+                    self._spawn_controllers(cfg)
 
             note = ''
             if cfg.use_gazebo_sim:
