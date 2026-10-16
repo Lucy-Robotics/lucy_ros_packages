@@ -140,7 +140,7 @@ hardware_interface::CallbackReturn LucySystemHardware::init_actuator_mappings()
       RCLCPP_WARN(
         get_logger(),
         "Joint '%s' has no finite URDF position limits on command interface; "
-        "only servo_min/max_deg will bound output.",
+        "only limit_min/limit_max will bound output.",
         joint.name.c_str());
     }
 

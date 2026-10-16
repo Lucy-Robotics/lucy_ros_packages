@@ -16,9 +16,9 @@ void dump_config(void) {
   joint->config.virtual_pin =         0;
   joint->config.physical_pin =        INTERNAL_SERVO_10;
   joint->config.servo_type =          SERVO_TYPE_270;
-  joint->config.security_min_angle =  DEG_TO_RAD(0.0);
-  joint->config.security_max_angle =  DEG_TO_RAD(270.0);
-  joint->config.default_angle =       DEG_TO_RAD(135.0);
+  joint->config.security_min_angle =  0.0;
+  joint->config.security_max_angle =  4.71238898038;
+  joint->config.default_angle =       2.35619449019;
   joint->config.init_joint =          &internal_joint_init;
   joint->config.move_joint =          &internal_joint_move;
   joint++;
