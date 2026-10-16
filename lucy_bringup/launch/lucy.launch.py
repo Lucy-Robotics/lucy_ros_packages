@@ -35,11 +35,13 @@ Arguments:
 
 """
 
+import shutil
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.actions import ExecuteProcess
 from launch.actions import GroupAction
 from launch.actions import IncludeLaunchDescription
 from launch.actions import LogInfo
@@ -203,12 +205,88 @@ def _validate_lucy_launch(context):
     return []
 
 
+def _find_firmware_sim_dir() -> Path | None:
+    cwd_candidate = Path.cwd() / 'src' / 'lucy_embedded_firmware' / 'firmwares' / 'sim'
+    if (cwd_candidate / 'Cargo.toml').is_file():
+        return cwd_candidate
+    for parent in Path(__file__).resolve().parents:
+        cand = parent / 'src' / 'lucy_embedded_firmware' / 'firmwares' / 'sim'
+        if (cand / 'Cargo.toml').is_file():
+            return cand
+        cand = parent.parent / 'src' / 'lucy_embedded_firmware' / 'firmwares' / 'sim'
+        if (cand / 'Cargo.toml').is_file():
+            return cand
+    return None
+
+
 def _real_hardware_stack(context, *args, **kwargs):
-    """Build micro-ROS / camera / RealSense only when ``real`` is true (lazy package load)."""
+    """Build firmware bridge / micro-ROS / cameras when ``real`` is true."""
     real = LaunchConfiguration('real').perform(context).lower().strip()
     if real not in ('true', '1', 'yes'):
         return []
     out = []
+    status_file = '/tmp/.lucy_real_hardware_status'
+
+    sim_dir = _find_firmware_sim_dir()
+    if sim_dir is None:
+        out.append(
+            ExecuteProcess(
+                cmd=[
+                    'bash',
+                    '-c',
+                    f'echo 126 > {status_file}; echo "[ERROR] lucy_embedded_firmware/firmwares/sim directory not found" >&2; exit 126',
+                ],
+                output='screen',
+                name='embedded_firmware_bridge',
+            )
+        )
+        return out
+
+    if shutil.which('cargo') is None:
+        out.append(
+            ExecuteProcess(
+                cmd=[
+                    'bash',
+                    '-c',
+                    f'echo 127 > {status_file}; echo "[ERROR] cargo (Rust) is not installed or not on PATH" >&2; exit 127',
+                ],
+                output='screen',
+                name='embedded_firmware_bridge',
+            )
+        )
+        return out
+
+    robot_package = LaunchConfiguration('robot_package').perform(context).strip()
+    if 'so_arm' in robot_package:
+        node_name = 'so_arm'
+    elif 'inmoov' in robot_package:
+        node_name = 'left_arm'
+    else:
+        node_name = 'lucy'
+
+    ready_file = '/tmp/.lucy_real_hardware_ready'
+    bridge_cmd = (
+        f'rm -f {ready_file} {status_file}; '
+        f'set -o pipefail; '
+        f'cargo run -- {node_name} 2>&1 | while IFS= read -r line; do '
+        f'  echo "$line"; '
+        f'  case "$line" in '
+        f'    *"Périphérique trouvé"*) touch {ready_file} ;; '
+        f'  esac; '
+        f'done; '
+        f'code=${{PIPESTATUS[0]}}; '
+        f'rm -f {ready_file}; '
+        f'echo $code > {status_file}; '
+        f'exit $code'
+    )
+    out.append(
+        ExecuteProcess(
+            cmd=['bash', '-c', bridge_cmd],
+            cwd=str(sim_dir),
+            output='screen',
+            name='embedded_firmware_bridge',
+        )
+    )
     return out
 
 
