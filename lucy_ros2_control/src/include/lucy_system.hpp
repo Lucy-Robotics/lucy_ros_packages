@@ -47,7 +47,6 @@
 #include "hardware_interface/system_interface.hpp"
 #include "hardware_interface/types/hardware_interface_return_values.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "rclcpp/executors/single_threaded_executor.hpp"
 #include "rclcpp/publisher.hpp"
 #include "rclcpp/clock.hpp"
 #include "rclcpp/logger.hpp"
@@ -64,9 +63,6 @@
 
 namespace lucy_ros2_control
 {
-
-/// Latched by ``lucy_client_registry``; non-empty means LCP/CLI Control Robot ON.
-constexpr const char * kActiveClientTopic = "/lucy/active_client";
 
 class LucySystemHardware : public hardware_interface::SystemInterface
 {
@@ -100,12 +96,8 @@ public:
 private:
   hardware_interface::CallbackReturn init_joint_limits();
   hardware_interface::CallbackReturn init_actuator_mappings();
-
-  /// Subscribe to ``/lucy/active_client`` and spin ``node_`` off the CM thread.
-  void start_active_client_watch();
-  void stop_active_client_watch();
-  /// Mirror Control Robot ON/OFF into ``hw_torque_enabled_`` (applied in ``write``).
-  void apply_torque_from_control_state(bool enable);
+  /// Last SHM write of torque off, then release the channel (error / deactivate).
+  void drop_torque_and_release_shm();
 
   rclcpp::Node::SharedPtr node_;
 
@@ -131,12 +123,7 @@ private:
 
   std::vector<ActuatedJointMapping> mappings_;
 
-  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr active_client_sub_;
-  std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> client_executor_;
-  std::thread client_spin_thread_;
-
   std::atomic<bool> controlled_{false};
-  bool torque_enabled_{false};
 };
 
 }  // namespace lucy_ros2_control

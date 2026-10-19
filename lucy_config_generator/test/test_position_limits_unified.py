@@ -61,11 +61,13 @@ def _parse(xacro_xml: str) -> ET.Element:
     return ET.fromstring(xacro_xml)
 
 
-def _find_joint_command_interface(joint_el: ET.Element) -> ET.Element:
-    cmd = joint_el.find('command_interface')
-    assert cmd is not None, f"joint {joint_el.attrib.get('name')!r} missing command_interface"
-    assert cmd.attrib.get('name') == 'position'
-    return cmd
+def _find_joint_command_interface(joint_el: ET.Element, name: str = 'position') -> ET.Element:
+    for cmd in joint_el.findall('command_interface'):
+        if cmd.attrib.get('name') == name:
+            return cmd
+    raise AssertionError(
+        f"joint {joint_el.attrib.get('name')!r} missing command_interface {name!r}"
+    )
 
 
 def _expected_limits_from_urdf(urdf_xml: str) -> dict[str, tuple[float, float]]:
@@ -166,8 +168,11 @@ def test_position_limits_identical_between_simulation_and_hardware_modes():
         out: dict[str, tuple[str, str]] = {}
         for joint_el in root.iter('joint'):
             name = joint_el.attrib.get('name')
-            cmd = joint_el.find('command_interface')
-            if name is None or cmd is None:
+            if name is None:
+                continue
+            try:
+                cmd = _find_joint_command_interface(joint_el, 'position')
+            except AssertionError:
                 continue
             params = {p.attrib['name']: p.text for p in cmd.findall('param')}
             if 'min' in params and 'max' in params:
