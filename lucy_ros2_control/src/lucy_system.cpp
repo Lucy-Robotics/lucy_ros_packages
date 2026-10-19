@@ -32,14 +32,12 @@
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "include/joint_config.hpp"
 #include "include/position_limit_clamp.hpp"
-#include "rclcpp/qos.hpp"
 
 namespace lucy_ros2_control
 {
 
 LucySystemHardware::~LucySystemHardware()
 {
-  stop_active_client_watch();
 }
 
 hardware_interface::CallbackReturn LucySystemHardware::on_init(
@@ -62,7 +60,6 @@ hardware_interface::CallbackReturn LucySystemHardware::on_init(
   }
 
   logger_ = std::make_shared<rclcpp::Logger>(rclcpp::get_logger(node_name_.c_str()));
-  node_ = std::make_shared<rclcpp::Node>(node_name_ + "_hi");
 
   if (info_.joints.size() > MAX_ACTUATORS) {
     RCLCPP_FATAL(
@@ -77,7 +74,7 @@ hardware_interface::CallbackReturn LucySystemHardware::on_init(
   hw_velocities_.resize(info_.joints.size(), 0);
   hw_accelerations_.resize(info_.joints.size(), 0);
   hw_positions_.resize(info_.joints.size(), 0);
-  // Torque follows LCP/CLI Control Robot via /lucy/active_client (off until ON).
+  // torque_enable is claimed by a forward_command_controller. Stay off until it writes.
   hw_torque_enabled_.resize(info_.joints.size(), 0.0);
 
   if (init_joint_limits() != hardware_interface::CallbackReturn::SUCCESS) {
@@ -197,11 +194,24 @@ std::vector<hardware_interface::CommandInterface> LucySystemHardware::export_com
   return command_interfaces;
 }
 
+void LucySystemHardware::drop_torque_and_release_shm()
+{
+  // Last SHM write before unmap. The forward controller may already be stopped;
+  // the host firmware must still see torque off.
+  if (shared_memory_channel_.has_value()) {
+    auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
+    for (const auto & m : mappings_) {
+      (*access).hw_torque_enabled[m.joint_index] = 0.0;
+    }
+  }
+  std::fill(hw_torque_enabled_.begin(), hw_torque_enabled_.end(), 0.0);
+  shared_memory_channel_.reset();
+}
+
 hardware_interface::CallbackReturn LucySystemHardware::on_error(
   const rclcpp_lifecycle::State & /*state*/)
 {
-  stop_active_client_watch();
-  shared_memory_channel_.reset();
+  drop_torque_and_release_shm();
   RCLCPP_ERROR(get_logger(), "LucySystemHardware encountered an error and was cleaned up.");
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -220,58 +230,9 @@ hardware_interface::CallbackReturn LucySystemHardware::on_configure(
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-void LucySystemHardware::apply_torque_from_control_state(bool enable)
-{
-  const double value = enable ? 1.0 : 0.0;
-  std::fill(hw_torque_enabled_.begin(), hw_torque_enabled_.end(), value);
-  torque_enabled_ = enable;
-  RCLCPP_INFO(
-    get_logger(),
-    "%s torque (Control Robot %s).",
-    enable ? "Enabling" : "Disabling",
-    enable ? "ON" : "OFF");
-}
-
-void LucySystemHardware::start_active_client_watch()
-{
-  if (node_ == nullptr || client_spin_thread_.joinable()) {
-    return;
-  }
-  // Transient-local to match the latched registry publisher: current controller
-  // is delivered on subscribe, not only on the next change.
-  rclcpp::QoS qos(rclcpp::KeepLast(1));
-  qos.reliable().transient_local();
-  active_client_sub_ = node_->create_subscription<std_msgs::msg::String>(
-    kActiveClientTopic, qos,
-    [this](const std_msgs::msg::String::SharedPtr msg) {
-      controlled_.store(!msg->data.empty(), std::memory_order_relaxed);
-    });
-
-  client_executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
-  client_executor_->add_node(node_);
-  client_spin_thread_ = std::thread([this]() {client_executor_->spin();});
-}
-
-void LucySystemHardware::stop_active_client_watch()
-{
-  if (client_executor_ != nullptr) {
-    client_executor_->cancel();
-  }
-  if (client_spin_thread_.joinable()) {
-    client_spin_thread_.join();
-  }
-  if (client_executor_ != nullptr && node_ != nullptr) {
-    client_executor_->remove_node(node_);
-  }
-  client_executor_.reset();
-  active_client_sub_.reset();
-}
-
 hardware_interface::CallbackReturn LucySystemHardware::on_activate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  start_active_client_watch();
-  apply_torque_from_control_state(false);
   RCLCPP_INFO(get_logger(), "Successfully activated!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -280,17 +241,7 @@ hardware_interface::CallbackReturn LucySystemHardware::on_activate(
 hardware_interface::CallbackReturn LucySystemHardware::on_deactivate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  // Drop torque before tearing down SHM so the host firmware sees disable.
-  apply_torque_from_control_state(false);
-  if (shared_memory_channel_.has_value()) {
-    auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
-    for (const auto & m : mappings_) {
-      (*access).hw_torque_enabled[m.joint_index] = 0.0;
-    }
-  }
-  stop_active_client_watch();
-  shared_memory_channel_.reset();
-
+  drop_torque_and_release_shm();
   RCLCPP_INFO(get_logger(), "Successfully deactivated!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -324,12 +275,6 @@ hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
       get_logger(), *get_clock(), 1000, "Shared memory channel is not available."
     );
     return hardware_interface::return_type::ERROR;
-  }
-
-  // Applied here (not in the subscription callback) so SHM stays single-writer.
-  const bool controlled = controlled_.load(std::memory_order_relaxed);
-  if (controlled != torque_enabled_) {
-    apply_torque_from_control_state(controlled);
   }
 
   auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());

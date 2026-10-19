@@ -6,8 +6,8 @@
 Python tool that reads the hardware mapping YAML (`config/hardware/active.yaml`) and generates:
 
 1. **Firmware**: per-board firmware config for `lucy_embedded_firmware`. Actuator angles are **radians** end-to-end (YAML, hardware interface, f64 shared memory). Sensors (e.g. pressure) are included when the selected firmware template emits them. Set `boards.*.firmware_target` to the Cargo package to build (for example `rp2040`).
-2. **ros2_control**: `inmoov_ros2_control.xacro` with one `<ros2_control>` block per board in **`boards:`** document order. `hardware_name` / `node_name` / `publisher_topic` are derived and validated from each board id and YAML fields (see `schema.py`). Shoulder Y joints stay on whichever board the YAML assigns them to (typically `rp2040_torso_head`). Each actuated joint also gets `<command_interface name="position"><param name="min/max"/></command_interface>` from the URDF `<limit lower upper>` (radians); `LucySystemHardware` clamps to those bounds in `write()`. Calibration params on each joint are `offset` / `limit_min` / `limit_max` / `default` in **radians**.
-3. **Controllers**: `controllers.yaml` with `joint_state_broadcaster` / trajectory controllers and **`extra_joints`** as URDF joints that are not any YAML actuator (passive / unmapped only; all actuator rows are trajectory-controlled regardless of `enabled`).
+2. **ros2_control**: `inmoov_ros2_control.xacro` with one `<ros2_control>` block per board in **`boards:`** document order. `hardware_name` / `node_name` / `publisher_topic` are derived and validated from each board id and YAML fields (see `schema.py`). Shoulder Y joints stay on whichever board the YAML assigns them to (typically `rp2040_torso_head`). Each actuated joint also gets `<command_interface name="torque_enable"/>` and `<command_interface name="position"><param name="min/max"/></command_interface>` from the URDF `<limit lower upper>` (radians); `LucySystemHardware` clamps position to those bounds in `write()` and copies `torque_enable` into shared memory. Calibration params on each joint are `offset` / `limit_min` / `limit_max` / `default` in **radians**.
+3. **Controllers**: `controllers.yaml` with `joint_state_broadcaster`, one trajectory controller per board, and a `forward_command_controller/ForwardCommandController` bound to `interface_name: torque_enable` (same joints). **`extra_joints`** are URDF joints that are not any YAML actuator (passive / unmapped only; all actuator rows are trajectory-controlled regardless of `enabled`). Gazebo does not export `torque_enable`; its spawners skip those controllers.
 
 Schema validation lives in `lucy_config_generator/schema.py` for reuse by **`lucy_config_pipeline`**.
 
@@ -69,7 +69,7 @@ Jinja2 sources live under `lucy_config_generator/lucy_config_generator/templates
 | `config_internal_i2c_board.c.j2` | Firmware config for `internal_servo_i2c_pwm` boards (radians) |
 | `config_bus_servo_board.rs.j2` | Rust register layout for `bus_servo_only` boards |
 | `ros2_control.xacro.j2` | One `<ros2_control>` block per board; emits `offset` / `limit_min` / `limit_max` / `default`. Mock hardware sets `<param name="publish_actuators">false</param>` |
-| `controllers.yaml.j2` | `controller_manager` + per-board joint lists + `extra_joints` |
+| `controllers.yaml.j2` | `controller_manager` + per-board trajectory and `torque_enable` forward controllers + `extra_joints` |
 
 ### Board class and firmware target
 

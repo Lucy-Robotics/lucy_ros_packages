@@ -6,10 +6,16 @@ controller_manager:
       type: joint_state_broadcaster/JointStateBroadcaster
     left_arm_controller:
       type: joint_trajectory_controller/JointTrajectoryController
+    left_arm_torque_enable_controller:
+      type: forward_command_controller/ForwardCommandController
     right_arm_controller:
       type: joint_trajectory_controller/JointTrajectoryController
+    right_arm_torque_enable_controller:
+      type: forward_command_controller/ForwardCommandController
     torso_head_controller:
       type: joint_trajectory_controller/JointTrajectoryController
+    torso_head_torque_enable_controller:
+      type: forward_command_controller/ForwardCommandController
 
 joint_state_broadcaster:
   ros__parameters:
@@ -28,6 +34,13 @@ left_arm_controller:
     state_interfaces:
       - position
 
+left_arm_torque_enable_controller:
+  ros__parameters:
+    joints:
+      - left_a_joint
+      - left_disabled_joint
+    interface_name: torque_enable
+
 right_arm_controller:
   ros__parameters:
     interpolate_from_desired_state: true
@@ -38,6 +51,12 @@ right_arm_controller:
       - position
     state_interfaces:
       - position
+
+right_arm_torque_enable_controller:
+  ros__parameters:
+    joints:
+      - right_a_joint
+    interface_name: torque_enable
 
 torso_head_controller:
   ros__parameters:
@@ -50,4 +69,11 @@ torso_head_controller:
       - position
     state_interfaces:
       - position
+
+torso_head_torque_enable_controller:
+  ros__parameters:
+    joints:
+      - left_shoulder_y_link_joint
+      - right_shoulder_y_link_joint
+    interface_name: torque_enable
 

@@ -7,6 +7,8 @@ controller_manager:
 {% for c in controllers %}
     {{ c.name }}:
       type: {{ c.type }}
+    {{ c.torque_name }}:
+      type: forward_command_controller/ForwardCommandController
 {% endfor %}
 
 {% if extra_joints %}
@@ -34,5 +36,13 @@ joint_state_broadcaster:
       - position
     state_interfaces:
       - position
+
+{{ c.torque_name }}:
+  ros__parameters:
+    joints:
+{% for j in c.joints %}
+      - {{ j }}
+{% endfor %}
+    interface_name: torque_enable
 
 {% endfor %}

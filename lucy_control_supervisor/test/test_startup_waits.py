@@ -23,6 +23,13 @@ def test_controller_manager_is_waited_for_before_handing_off():
     assert 'self._spawn_controllers(cfg)' in SRC
 
 
+def test_torque_commands_wait_for_dds_match_after_spawn():
+    """Volatile ~/commands needs a subscriber before the latched Control Robot flag is sent."""
+    assert 'TORQUE_MATCH_TIMEOUT_S' in SRC
+    assert '_publish_torque_after_match' in SRC
+    assert 'wait_for_torque_match' in SRC
+
+
 def test_robot_state_publisher_is_waited_for_by_topic():
     assert "count_publishers('/robot_description')" in SRC
 

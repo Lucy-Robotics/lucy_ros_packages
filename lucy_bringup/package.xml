@@ -12,6 +12,7 @@
 
   <exec_depend>micro_ros_agent</exec_depend>
   <exec_depend>lucy_ros2_control</exec_depend>
+  <exec_depend>forward_command_controller</exec_depend>
   <exec_depend>rosbridge_server</exec_depend>
   <exec_depend>camera_ros</exec_depend>
   <exec_depend>audio_common</exec_depend>

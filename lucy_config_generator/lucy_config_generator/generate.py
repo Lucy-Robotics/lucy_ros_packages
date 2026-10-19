@@ -335,6 +335,19 @@ def _firmware_template_for_board_class(board_class: str) -> str:
 BUS_SERVO_BLOCK = 3
 
 
+def torque_enable_controller_name(trajectory_name: str) -> str:
+    """
+    Name of the forward controller bound to ``torque_enable``.
+
+    ``so_arm_controller`` becomes ``so_arm_torque_enable_controller``.
+    """
+    suffix = '_controller'
+    if trajectory_name.endswith(suffix):
+        stem = trajectory_name[: -len(suffix)]
+        return f'{stem}_torque_enable_controller'
+    return f'{trajectory_name}_torque_enable'
+
+
 def render_firmware_rs(
     data: dict[str, Any],
     board_id: str,
@@ -436,6 +449,7 @@ def render_controllers_yaml(
                 'name': ctrl['name'],
                 'type': ctrl['type'],
                 'joints': joints,
+                'torque_name': torque_enable_controller_name(ctrl['name']),
             }
         )
     return tpl.render(
