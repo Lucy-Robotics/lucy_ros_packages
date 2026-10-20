@@ -29,6 +29,7 @@ from .flash import flash_uptime_wait_seconds
 from .flash import flash_usb_wait_seconds
 from .flash import run_flash_phase
 from .models import PipelinePaths
+from .selection import all_selected_serials_empty
 from .selection import board_build_plan
 from .selection import resolve_mapping_input
 from .selection import select_boards_to_process
@@ -248,8 +249,24 @@ class PipelineActionServer(Node):
                     if not goal.dry_run:
                         self._install_firmware_outputs(out_dir, data)
 
+            plan_boards = [b for b, _ in board_build_plan(data, boards)]
+            plan_set = set(plan_boards)
+            skip_mcu = (
+                not goal.dry_run
+                and not goal.simulation_only
+                and all_selected_serials_empty(data, boards)
+            )
+
             build_failed_boards: list[str] = []
-            if not goal.dry_run and not goal.simulation_only:
+            if skip_mcu:
+                self._feedback(
+                    goal_handle,
+                    phase='build',
+                    progress=0.85,
+                    detail='skip build: all selected boards have empty serial_id',
+                )
+                built_ok = set(plan_boards)
+            elif not goal.dry_run and not goal.simulation_only:
                 build_failed_boards = run_build_phase(
                     data=data,
                     selected_boards=boards,
@@ -258,10 +275,9 @@ class PipelineActionServer(Node):
                     feedback=lambda **kwargs: self._feedback(goal_handle, **kwargs),
                     log_error=lambda msg: self.get_logger().error(msg),
                 )
-
-            plan_boards = [b for b, _ in board_build_plan(data, boards)]
-            plan_set = set(plan_boards)
-            built_ok = {b for b in plan_boards if b not in set(build_failed_boards)}
+                built_ok = {b for b in plan_boards if b not in set(build_failed_boards)}
+            else:
+                built_ok = {b for b in plan_boards if b not in set(build_failed_boards)}
 
             if not goal.dry_run and goal.build_only and build_failed_boards:
                 result.errors.extend(
@@ -291,7 +307,15 @@ class PipelineActionServer(Node):
                 )
 
             flash_failed: list[str] = []
-            if not goal.dry_run and not goal.build_only and not goal.simulation_only:
+            if skip_mcu:
+                self._feedback(
+                    goal_handle,
+                    phase='flash',
+                    progress=0.9,
+                    detail='skip flash: all selected boards have empty serial_id',
+                )
+                result.boards_flashed = []
+            elif not goal.dry_run and not goal.build_only and not goal.simulation_only:
                 flash_failed, flashed_ok = run_flash_phase(
                     data=data,
                     selected_boards=boards,
