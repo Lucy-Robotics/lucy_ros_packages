@@ -24,10 +24,10 @@
 #ifndef LUCY_ROS2_CONTROL__LUCY_SYSTEM_HPP_
 #define LUCY_ROS2_CONTROL__LUCY_SYSTEM_HPP_
 
-#include <memory>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <atomic>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -96,6 +96,8 @@ public:
 private:
   hardware_interface::CallbackReturn init_joint_limits();
   hardware_interface::CallbackReturn init_actuator_mappings();
+  /// Last SHM write of torque off, then release the channel (error / deactivate).
+  void drop_torque_and_release_shm();
 
   rclcpp::Node::SharedPtr node_;
 
@@ -113,7 +115,6 @@ private:
   std::vector<double> hw_velocities_;
   std::vector<double> hw_accelerations_;
 
-  uint64_t last_state_seq_{0};
   std::vector<double> hw_positions_;
 
   /** Per-joint URDF limits from command_interface min/max (rad); ±inf when unset. */

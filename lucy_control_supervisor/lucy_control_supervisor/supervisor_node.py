@@ -2,15 +2,12 @@
 #
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""Manage RSP + ros2_control_node; restart on /lucy_control/restart.
-
-Spawners are started by each robot package's control.launch.py, not here."""
+"""Manage RSP + ros2_control_node + spawners; restart on /lucy_control/restart."""
 
 from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from dataclasses import field
 import os
 from pathlib import Path
 import shutil
@@ -27,10 +24,15 @@ from rclpy.qos import DurabilityPolicy
 from rclpy.qos import QoSProfile
 from rclpy.qos import ReliabilityPolicy
 from std_msgs.msg import Bool
+from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import String
 from std_srvs.srv import Trigger
 import yaml
 
-
+from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
+from lucy_control_supervisor.controllers_spawn import torque_command_values
+from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
+from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
 
 _WINDOWS_EXEC_SUFFIXES = ('.exe', '.bat', '.cmd')
 
@@ -95,12 +97,17 @@ class _StackConfig:
 class ControlSupervisorNode(Node):
     RESTART_SERVICE = '/lucy_control/restart'
     GAZEBO_RUNNING_TOPIC = '/lucy/gazebo_running'
+    # Latched by lucy_client_registry. Non-empty means Control Robot is ON.
+    ACTIVE_CLIENT_TOPIC = '/lucy/active_client'
     TERMINATE_TIMEOUT_S = 10.0
     READY_TIMEOUT_S = 60.0
     CONTROL_READY_FILE = _control_ready_file()
     CHILD_LOG_TAIL = 50
     DISCOVERY_SETTLE_S = 2.0
     CONTROLLER_MANAGER_NODE = 'controller_manager'
+    SPAWNER_TIMEOUT_S = 60.0
+    # ForwardCommandController ~/commands is volatile; wait for DDS match after spawn.
+    TORQUE_MATCH_TIMEOUT_S = 2.0
 
     def __init__(self) -> None:
         super().__init__('lucy_control_supervisor')
@@ -127,6 +134,12 @@ class ControlSupervisorNode(Node):
             Bool, self.GAZEBO_RUNNING_TOPIC, latched_qos
         )
         self._publish_gazebo_running()
+        # name -> (publisher, joint count). Filled after the torque controllers spawn.
+        self._torque_pubs: dict[str, tuple] = {}
+        self._torque_enabled = False
+        self.create_subscription(
+            String, self.ACTIVE_CLIENT_TOPIC, self._on_active_client, latched_qos
+        )
         if self.get_parameter('autostart').value:
             ok, msg = self._restart_stack()
             if not ok:
@@ -346,6 +359,85 @@ class ControlSupervisorNode(Node):
                 f'{self.READY_TIMEOUT_S:.0f}s; spawners may block on the lock'
             )
 
+    def _spawn_controllers(self, cfg: _StackConfig) -> None:
+        """Load and activate controllers after controller_manager is up.
+
+        Must run on every restart (including pipeline RELOAD): launch-file
+        spawners are one-shot and do not re-run when only this node restarts CM.
+        Sequential to avoid the spawner global lock burning 20s per waiter.
+        """
+        names = controllers_to_spawn(
+            cfg.controllers_yaml,
+            include_torque_enable=not cfg.use_gazebo_sim,
+        )
+        if not names:
+            self.get_logger().warning(
+                f'no controllers to spawn in {cfg.controllers_yaml}'
+            )
+            return
+        for name in names:
+            cmd = [
+                *node_argv('controller_manager', 'spawner'),
+                name,
+                '--switch-timeout',
+                '10',
+            ]
+            self.get_logger().info(f'spawning controller {name}')
+            r = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self.SPAWNER_TIMEOUT_S,
+                check=False,
+                env=os.environ.copy(),
+            )
+            if r.returncode != 0:
+                detail = (r.stderr or r.stdout or '').strip()
+                raise RuntimeError(
+                    f'spawner for {name} failed (exit {r.returncode})'
+                    + (f': {detail}' if detail else '')
+                )
+        self._bind_torque_controllers(cfg)
+        self._publish_torque_after_match()
+
+    def _on_active_client(self, msg: String) -> None:
+        """Control Robot ON when the latched client id is non-empty."""
+        self._torque_enabled = bool(msg.data)
+        self._publish_torque_commands()
+
+    def _bind_torque_controllers(self, cfg: _StackConfig) -> None:
+        """Create a commands publisher for each torque_enable forward controller."""
+        if cfg.use_gazebo_sim:
+            return
+        for name, count in torque_enable_controllers(cfg.controllers_yaml):
+            pub, _old = self._torque_pubs.get(name, (None, None))
+            if pub is None:
+                pub = self.create_publisher(Float64MultiArray, f'/{name}/commands', 10)
+            self._torque_pubs[name] = (pub, count)
+
+    def _publish_torque_after_match(self) -> None:
+        """Publish stored Control Robot flag once torque command topics are matched."""
+        if not self._torque_pubs:
+            return
+        matched = wait_for_torque_match(
+            self._torque_pubs,
+            self._wait_for,
+            self.TORQUE_MATCH_TIMEOUT_S,
+        )
+        if not matched:
+            self.get_logger().warning(
+                'torque_enable command publishers unmatched after '
+                f'{self.TORQUE_MATCH_TIMEOUT_S:.0f}s; publishing anyway'
+            )
+        self._publish_torque_commands()
+
+    def _publish_torque_commands(self) -> None:
+        """Write 1.0 or 0.0 on every joint of each torque_enable controller."""
+        for pub, count in self._torque_pubs.values():
+            msg = Float64MultiArray()
+            msg.data = torque_command_values(self._torque_enabled, count)
+            pub.publish(msg)
+
     def _restart_stack(self) -> tuple[bool, str]:
         if self._restart_lock:
             return False, 'restart already in progress'
@@ -377,6 +469,7 @@ class ControlSupervisorNode(Node):
                 self._start_rsp(cfg, urdf_xml)
                 if not cfg.use_gazebo_sim:
                     self._start_cm(cfg)
+                    self._spawn_controllers(cfg)
 
             note = ''
             if cfg.use_gazebo_sim:

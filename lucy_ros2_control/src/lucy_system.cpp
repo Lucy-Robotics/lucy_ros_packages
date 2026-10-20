@@ -15,6 +15,7 @@
 
 #include "include/lucy_system.hpp"
 
+#include <algorithm>
 #include <format>
 #include <cctype>
 #include <cerrno>
@@ -31,7 +32,6 @@
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "include/joint_config.hpp"
 #include "include/position_limit_clamp.hpp"
-#include "rclcpp/qos.hpp"
 
 namespace lucy_ros2_control
 {
@@ -74,8 +74,8 @@ hardware_interface::CallbackReturn LucySystemHardware::on_init(
   hw_velocities_.resize(info_.joints.size(), 0);
   hw_accelerations_.resize(info_.joints.size(), 0);
   hw_positions_.resize(info_.joints.size(), 0);
-
-  hw_torque_enabled_.resize(info_.joints.size(), 0);
+  // torque_enable is claimed by a forward_command_controller. Stay off until it writes.
+  hw_torque_enabled_.resize(info_.joints.size(), 0.0);
 
   if (init_joint_limits() != hardware_interface::CallbackReturn::SUCCESS) {
     return hardware_interface::CallbackReturn::ERROR;
@@ -194,10 +194,24 @@ std::vector<hardware_interface::CommandInterface> LucySystemHardware::export_com
   return command_interfaces;
 }
 
-hardware_interface::CallbackReturn LucySystemHardware::on_error(
-  const rclcpp_lifecycle::State & state)
+void LucySystemHardware::drop_torque_and_release_shm()
 {
+  // Last SHM write before unmap. The forward controller may already be stopped;
+  // the host firmware must still see torque off.
+  if (shared_memory_channel_.has_value()) {
+    auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
+    for (const auto & m : mappings_) {
+      (*access).hw_torque_enabled[m.joint_index] = 0.0;
+    }
+  }
+  std::fill(hw_torque_enabled_.begin(), hw_torque_enabled_.end(), 0.0);
   shared_memory_channel_.reset();
+}
+
+hardware_interface::CallbackReturn LucySystemHardware::on_error(
+  const rclcpp_lifecycle::State & /*state*/)
+{
+  drop_torque_and_release_shm();
   RCLCPP_ERROR(get_logger(), "LucySystemHardware encountered an error and was cleaned up.");
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -227,10 +241,8 @@ hardware_interface::CallbackReturn LucySystemHardware::on_activate(
 hardware_interface::CallbackReturn LucySystemHardware::on_deactivate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  shared_memory_channel_.reset();
-
+  drop_torque_and_release_shm();
   RCLCPP_INFO(get_logger(), "Successfully deactivated!");
-
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -245,19 +257,11 @@ hardware_interface::return_type LucySystemHardware::read(
     return hardware_interface::return_type::ERROR;
   }
 
-  auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
-  auto state_seq = (*access).state_seq.load(std::memory_order_seq_cst);
-  if (state_seq == last_state_seq_) {
-    return hardware_interface::return_type::OK;
-  }
-  if ((state_seq % 2) != 0) {
-    return hardware_interface::return_type::OK;
-  }
-  for (std::size_t i = 0; i < hw_commands_.size(); i++) {
-    hw_positions_[i] = (*access).hw_positions[i];
-    RCLCPP_DEBUG(
-      get_logger(), "Read position for joint %zu: %f", i, hw_positions_[i]
-    );
+  // Open-loop: echo last commanded *joint* positions. Firmware SHM carries
+  // servo-frame radians (0–2π); publishing those as joint_states would rotate
+  // the URDF away from the calibrated centre (offset = π → joint 0).
+  for (std::size_t i = 0; i < hw_commands_.size(); ++i) {
+    hw_positions_[i] = hw_commands_[i];
   }
 
   return hardware_interface::return_type::OK;

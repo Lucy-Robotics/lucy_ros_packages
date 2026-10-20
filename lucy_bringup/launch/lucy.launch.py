@@ -23,8 +23,9 @@ Invalid combinations raise at launch parse time (clear ``RuntimeError``).
 
 Arguments:
 ---------
-- ``real`` (default ``true``): micro-ROS agents, USB webcam, RealSense. When false, those
-  nodes are not constructed (``OpaqueFunction``), so e.g. Docker without ``micro_ros_agent``
+- ``real`` (default ``true``): host SHM consumers (e.g. ``lucy-embedded-firmware-linux`` for
+  ``so_arm101_urdf``), plus optional cameras / RealSense when wired. When false, those
+  nodes are not constructed (``OpaqueFunction``), so e.g. Docker without the host binary
   can run ``real:=false``.
 - ``rviz`` (default ``false``): RViz2 (real/sim time set per mode). With ``gazebo:=true``,
   forwarded as ``start_rviz`` to ``inmoov_urdf/gazebo.launch.py`` (no second RViz).
@@ -35,11 +36,14 @@ Arguments:
 
 """
 
+import os
 from pathlib import Path
+import shutil
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
+from launch.actions import ExecuteProcess
 from launch.actions import GroupAction
 from launch.actions import IncludeLaunchDescription
 from launch.actions import LogInfo
@@ -54,6 +58,59 @@ from launch.substitutions import PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
+
+_LINUX_FIRMWARE_BIN = 'lucy-embedded-firmware-linux'
+_SO101_HOST_NODE = 'so_arm'
+_SO101_ROBOT_PACKAGE = 'so_arm101_urdf'
+
+
+def resolve_linux_firmware_binary() -> Path:
+    """
+    Locate the host Feetech SHM consumer binary (``firmwares/linux``).
+
+    Search order: ``LUCY_EMBEDDED_FIRMWARE_LINUX``, ``PATH``, then
+    ``src/lucy_embedded_firmware/target/release/<bin>`` under the workspace
+    (walk from cwd and from the ``lucy_bringup`` share directory).
+    """
+    env = os.environ.get('LUCY_EMBEDDED_FIRMWARE_LINUX', '').strip()
+    if env:
+        path = Path(env).expanduser()
+        if path.is_file():
+            return path.resolve()
+        raise RuntimeError(
+            f'LUCY_EMBEDDED_FIRMWARE_LINUX={env!r} is not a file'
+        )
+
+    which = shutil.which(_LINUX_FIRMWARE_BIN)
+    if which:
+        return Path(which).resolve()
+
+    rel = Path('src') / 'lucy_embedded_firmware' / 'target' / 'release' / _LINUX_FIRMWARE_BIN
+    search_roots: list[Path] = [Path.cwd(), *Path.cwd().parents]
+    try:
+        share = Path(get_package_share_directory('lucy_bringup'))
+        search_roots.extend([share, *share.parents])
+    except Exception:
+        pass
+    seen: set[Path] = set()
+    for root in search_roots:
+        try:
+            root = root.resolve()
+        except OSError:
+            continue
+        if root in seen:
+            continue
+        seen.add(root)
+        candidate = root / rel
+        if candidate.is_file():
+            return candidate.resolve()
+
+    raise RuntimeError(
+        f'{_LINUX_FIRMWARE_BIN} not found. Build it with '
+        f'`cargo build --release -p lucy-embedded-firmware-linux` '
+        f'(from lucy_embedded_firmware), put it on PATH, or set '
+        f'LUCY_EMBEDDED_FIRMWARE_LINUX to the absolute path.'
+    )
 
 
 def _infer_robot_source_root(robot_package: str, share_dir: str) -> Path:
@@ -204,11 +261,29 @@ def _validate_lucy_launch(context):
 
 
 def _real_hardware_stack(context, *args, **kwargs):
-    """Build micro-ROS / camera / RealSense only when ``real`` is true (lazy package load)."""
+    """Start host SHM consumers when ``real`` is true (lazy package load)."""
     real = LaunchConfiguration('real').perform(context).lower().strip()
     if real not in ('true', '1', 'yes'):
         return []
     out = []
+    robot_package = LaunchConfiguration('robot_package').perform(context).strip()
+    if robot_package == _SO101_ROBOT_PACKAGE:
+        binary = resolve_linux_firmware_binary()
+        out.append(
+            LogInfo(
+                msg=(
+                    f'lucy.launch: starting {_LINUX_FIRMWARE_BIN} '
+                    f'node_name={_SO101_HOST_NODE} ({binary})'
+                )
+            )
+        )
+        out.append(
+            ExecuteProcess(
+                cmd=[str(binary), _SO101_HOST_NODE],
+                name='lucy_embedded_firmware_linux',
+                output='screen',
+            )
+        )
     return out
 
 

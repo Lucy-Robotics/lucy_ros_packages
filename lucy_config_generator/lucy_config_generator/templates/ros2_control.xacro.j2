@@ -31,6 +31,7 @@
           <param name="limit_min">{{ j.limit_min }}</param>
           <param name="limit_max">{{ j.limit_max }}</param>
           <param name="default">{{ j.default }}</param>
+          <command_interface name="torque_enable"/>
           <command_interface name="position">
 {% if j.limit_lower_rad is defined and j.limit_upper_rad is defined %}
             <param name="min">{{ j.limit_lower_rad }}</param>
