@@ -381,6 +381,19 @@ def _edit_joint(ros: LucyROSInterface, state: dict, group_name: str, choice: str
     print('Value updated successfully. Refreshing...')
     time.sleep(1)
 
+def _yaml_angle_deg(actuator: dict, rad_key: str, deg_key: str, default_deg: float) -> float:
+    """Read one actuator angle as degrees.
+
+    Current hardware YAML stores radians (`offset`, `limit_min`, `limit_max`,
+    `default`). Older files used `*_deg` keys. The TUI menu still displays
+    servo degrees.
+    """
+    if actuator.get(rad_key) is not None:
+        return math.degrees(float(actuator[rad_key]))
+    if actuator.get(deg_key) is not None:
+        return float(actuator[deg_key])
+    return default_deg
+
 def parse_actuators_yaml(yaml_string: str) -> dict:
     """Parses the hardware config YAML and builds the ACTUATORS dictionary."""
     if not yaml_string: return {}
@@ -400,12 +413,13 @@ def parse_actuators_yaml(yaml_string: str) -> dict:
                 if not urdf_joint: continue
                 joints.append({
                     'name': urdf_joint,
-                    'min': float(actuator.get('servo_min_deg', 0.0)),
-                    'max': float(actuator.get('servo_max_deg', 180.0)),
-                    'value': float(actuator.get('servo_default_deg', 90.0)),
+                    'min': _yaml_angle_deg(actuator, 'limit_min', 'servo_min_deg', 0.0),
+                    'max': _yaml_angle_deg(actuator, 'limit_max', 'servo_max_deg', 180.0),
+                    'value': _yaml_angle_deg(actuator, 'default', 'servo_default_deg', 90.0),
                     # Servo<->URDF calibration (defaults match LCP: identity map).
+                    # The menu still speaks degrees; hardware YAML stores radians.
                     'mapping': {
-                        'offset_deg': float(actuator.get('offset_deg', 0.0)),
+                        'offset_deg': _yaml_angle_deg(actuator, 'offset', 'offset_deg', 0.0),
                         'direction': float(actuator.get('direction', 1.0)),
                         'scale': float(actuator.get('scale', 1.0)),
                     },
