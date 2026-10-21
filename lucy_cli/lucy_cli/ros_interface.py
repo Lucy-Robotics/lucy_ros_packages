@@ -326,7 +326,10 @@ class LucyROSInterface(Node):
 
         publisher = self._joint_publishers[controller_topic]
         msg = JointTrajectory()
-        msg.header.stamp = self.get_clock().now().to_msg()
+        # Leave the stamp at zero. JointTrajectoryController treats that as
+        # "start now" on its own clock. This process is not started with
+        # use_sim_time, so get_clock() is wall time. Gazebo controllers run on
+        # /clock, and a wall-time stamp schedules the motion far in the future.
         msg.joint_names = joint_names
         point = JointTrajectoryPoint()
         point.positions = positions_rad
