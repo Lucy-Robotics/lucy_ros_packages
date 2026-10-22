@@ -127,8 +127,7 @@ def publish_joint_trajectory(self, controller_topic: str, joint_names: list[str]
     publisher = self._joint_publishers[controller_topic]
     
     msg = JointTrajectory()
-    # Leave stamp at zero so the controller starts the trajectory on its own
-    # clock. A wall-time stamp never elapses while Gazebo is on /clock.
+    # msg.header.stamp = 0  # Empty because get_clock() gives wall time.
     msg.joint_names = joint_names # Must be in the correct order
     
     point = JointTrajectoryPoint()
