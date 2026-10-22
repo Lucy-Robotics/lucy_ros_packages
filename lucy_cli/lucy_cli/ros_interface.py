@@ -326,7 +326,7 @@ class LucyROSInterface(Node):
 
         publisher = self._joint_publishers[controller_topic]
         msg = JointTrajectory()
-        msg.header.stamp = self.get_clock().now().to_msg()
+        # msg.header.stamp = 0  # Empty because get_clock() gives wall time.
         msg.joint_names = joint_names
         point = JointTrajectoryPoint()
         point.positions = positions_rad
