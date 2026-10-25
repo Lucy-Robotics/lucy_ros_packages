@@ -4,6 +4,17 @@
 /// Chained PCA9685s: output N is channel N % 16 of chip N / 16.
 pub const PCA_ADDRESSES: [u8; {{ addresses | length }}] = [{{ addresses | join(', ') }}];
 
+/// Servos straight on Mega pins, outputs 16 * PCA_ADDRESSES.len() + i.
+pub const MEGA_PINS: [u8; {{ mega_pins | length }}] = [{{ mega_pins | join(', ') }}];
+
+/// Claims the MEGA_PINS as outputs from arduino_hal::pins!, in the same order
+/// (in scope through `#[macro_use] mod config`).
+macro_rules! mega_servo_pins {
+    ($pins:ident) => {
+        [{% for p in mega_pins %}$pins.{{ 'd%d' % p if p < 54 else 'a%d' % (p - 54) }}.into_output().downgrade(){% if not loop.last %}, {% endif %}{% endfor %}]
+    };
+}
+
 /// Clamp and rest per slot (virtual_pin), in servo radians.
 pub const JOINTS_CONFIG: [CommandConfig; {{ joints | length }}] = [
 {% for j in joints %}
@@ -11,7 +22,7 @@ pub const JOINTS_CONFIG: [CommandConfig; {{ joints | length }}] = [
 {% endfor %}
 ];
 
-/// (slot, PCA output) per enabled actuator; output = physical_pin - 1.
+/// (slot, output) per enabled actuator; output = physical_pin - 1.
 pub const DRIVEN: [(usize, u8); {{ driven | length }}] = [
 {% for d in driven %}
     ({{ d.slot }}, {{ d.output }}), // {{ d.id }}

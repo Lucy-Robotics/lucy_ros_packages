@@ -379,6 +379,7 @@ def render_firmware_mega(
     return tpl.render(
         board_id=board_id,
         addresses=[f'0x{int(a):02X}' for a in data['boards'][board_id]['pca_addresses']],
+        mega_pins=[int(p) for p in data['boards'][board_id].get('mega_pins', [])],
         joints=[
             {
                 'id': a['id'],

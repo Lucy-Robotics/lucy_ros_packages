@@ -106,6 +106,11 @@ BOARD_CLASSES = frozenset(
     }
 )
 
+# Servos straight on Arduino Mega pins (Nervo ribbons): D0/D1 are the host serial link and
+# D20/D21 the I2C bus; A0..A15 are D54..D69. Timer5 pulses them in turn within a 20 ms frame.
+MEGA_SERVO_PINS = frozenset(range(2, 70)) - {20, 21}
+MEGA_MAX_SERVO_PINS = 8
+
 _BOARD_ID_RE = re.compile(r'^(rp2040|mega)_[a-z][a-z0-9_]*$')
 _TOPIC_RE = re.compile(r'^[a-z][a-z0-9_/]*$')
 _SERIAL_ID_RE = re.compile(r'^[A-Za-z0-9]*$')
@@ -272,7 +277,11 @@ def _validate_boards(boards: dict[str, Any], errors: list[str]) -> None:
 def _validate_pca_addresses(
     board_id: str, board: dict[str, Any], slots: int, errors: list[str]
 ) -> None:
-    """Mega boards list their chained PCA9685s; outputs count across them, 16 each."""
+    """
+    Check a Mega board's chained PCA9685s and direct servo pins.
+
+    physical_pin 1..16*N are the PCA9685 outputs, then N*16+1.. the ``mega_pins`` in order.
+    """
     addresses = board.get('pca_addresses')
     if not isinstance(addresses, list) or not addresses:
         errors.append(
@@ -285,10 +294,27 @@ def _validate_pca_addresses(
         errors.append(f'board {board_id}: pca_addresses must be integers in 0x40..0x7F')
     elif len(set(addresses)) != len(addresses):
         errors.append(f'board {board_id}: duplicate pca_addresses')
-    if slots > 16 * len(addresses):
+    pins = board.get('mega_pins', [])
+    if not isinstance(pins, list) or any(
+        isinstance(p, bool) or not isinstance(p, int) or p not in MEGA_SERVO_PINS for p in pins
+    ):
         errors.append(
-            f'board {board_id}: internal_servo_slots {slots} exceeds the '
-            f'{16 * len(addresses)} outputs of {len(addresses)} PCA9685(s)'
+            f'board {board_id}: mega_pins must be Mega digital pins 2..69 '
+            '(not D20/D21, the I2C bus to the PCA9685s)'
+        )
+        pins = []
+    elif len(set(pins)) != len(pins):
+        errors.append(f'board {board_id}: duplicate mega_pins')
+    elif len(pins) > MEGA_MAX_SERVO_PINS:
+        errors.append(
+            f'board {board_id}: at most {MEGA_MAX_SERVO_PINS} mega_pins '
+            '(their pulses share one 20 ms frame)'
+        )
+    outputs = 16 * len(addresses) + len(pins)
+    if slots > outputs:
+        errors.append(
+            f'board {board_id}: internal_servo_slots {slots} exceeds the {outputs} outputs of '
+            f'{len(addresses)} PCA9685(s) and {len(pins)} mega_pins'
         )
 
 
