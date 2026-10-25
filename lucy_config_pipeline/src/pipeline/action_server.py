@@ -26,6 +26,9 @@ from .flash import run_flash_phase
 from .models import PipelinePaths
 from .selection import all_selected_serials_empty
 from .selection import board_build_plan
+from .selection import is_mega_board
+from .selection import mega_artifact_dir
+from .selection import resolve_firmware_paths
 from .selection import resolve_mapping_input
 from .selection import select_boards_to_process
 from ..config_store import ConfigStore
@@ -387,3 +390,9 @@ class PipelineActionServer(Node):
         fw_cfg_dir.mkdir(parents=True, exist_ok=True)
         for cfile in out_dir.glob('config_*.c'):
             shutil.copy2(cfile, fw_cfg_dir / cfile.name)
+        mega_dir = mega_artifact_dir(resolve_firmware_paths(data, self._paths.workspace_src))
+        for board_id, board in (data.get('boards') or {}).items():
+            generated = out_dir / f'config_{board_id}.rs'
+            if is_mega_board(board) and generated.is_file():
+                mega_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(generated, mega_dir / generated.name)

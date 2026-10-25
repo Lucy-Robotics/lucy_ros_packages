@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
@@ -92,8 +93,9 @@ BOARD_CLASS_INTERNAL_I2C_PWM = 'internal_servo_i2c_pwm'
 # Smart bus servos daisy-chained on one UART, addressed by id rather than each
 # wired to a pin. Firmware config for these is emitted as Rust, not C.
 BOARD_CLASS_BUS_SERVO_ONLY = 'bus_servo_only'
-# Arduino Mega driving PCA9685 outputs only. Its Rust firmware config is written by
-# hand and flashed with `pixi run firmware-flash-mega`: nothing generated or built here.
+# Arduino Mega driving the outputs of its chained PCA9685s (`pca_addresses`). The
+# generator emits its Rust board tables; the pipeline builds them with cargo and
+# flashes the Mega with avrdude.
 BOARD_CLASS_I2C_PWM_ONLY = 'i2c_pwm_only'
 BOARD_CLASSES = frozenset(
     {
@@ -243,6 +245,8 @@ def _validate_boards(boards: dict[str, Any], errors: list[str]) -> None:
             slots = 0
         if slots < 1:
             errors.append(f'board {board_id}: internal_servo_slots must be >= 1')
+        if board_class == BOARD_CLASS_I2C_PWM_ONLY:
+            _validate_pca_addresses(board_id, board, slots, errors)
 
         for key in ('topic_actuators', 'topic_sensors'):
             topic = board[key]
@@ -263,6 +267,59 @@ def _validate_boards(boards: dict[str, Any], errors: list[str]) -> None:
             errors.append(
                 f'board {board_id}: topic_actuators must not have surrounding whitespace'
             )
+
+
+def _validate_pca_addresses(
+    board_id: str, board: dict[str, Any], slots: int, errors: list[str]
+) -> None:
+    """Mega boards list their chained PCA9685s; outputs count across them, 16 each."""
+    addresses = board.get('pca_addresses')
+    if not isinstance(addresses, list) or not addresses:
+        errors.append(
+            f'board {board_id}: pca_addresses must be a non-empty list of PCA9685 '
+            'I2C addresses (i2c_pwm_only)'
+        )
+        return
+    if any(isinstance(a, bool) or not isinstance(a, int) or not 0x40 <= a <= 0x7F
+           for a in addresses):
+        errors.append(f'board {board_id}: pca_addresses must be integers in 0x40..0x7F')
+    elif len(set(addresses)) != len(addresses):
+        errors.append(f'board {board_id}: duplicate pca_addresses')
+    if slots > 16 * len(addresses):
+        errors.append(
+            f'board {board_id}: internal_servo_slots {slots} exceeds the '
+            f'{16 * len(addresses)} outputs of {len(addresses)} PCA9685(s)'
+        )
+
+
+def _validate_pca_board_actuators(
+    by_board: dict[str, list[dict[str, Any]]],
+    boards: dict[str, Any],
+    errors: list[str],
+) -> None:
+    """Mega PWM maps 0..180 deg of servo travel; two driven servos cannot share an output."""
+    for board_id, actuators in by_board.items():
+        if boards.get(board_id, {}).get('board_class') != BOARD_CLASS_I2C_PWM_ONLY:
+            continue
+        driven: dict[int, str] = {}
+        for actuator in actuators:
+            aid = _label(actuator)
+            try:
+                lo, hi = float(actuator['limit_min']), float(actuator['limit_max'])
+            except Exception:
+                continue  # reported by _validate_actuator_ranges
+            if lo < 0.0 or hi > math.pi + 1e-4:
+                errors.append(
+                    f'actuator {aid}: limits [{lo}, {hi}] must stay within 0..pi '
+                    '(0..180 deg servo travel on i2c_pwm_only boards)'
+                )
+            if actuator['enabled']:
+                pin = int(actuator['physical_pin'])
+                if pin in driven:
+                    errors.append(
+                        f'actuator {aid}: physical_pin {pin} already driven by {driven[pin]}'
+                    )
+                driven[pin] = aid
 
 
 def _validate_actuator(
@@ -555,6 +612,7 @@ def validate_hardware_yaml(data: dict[str, Any]) -> None:
             actuator_item_errors_by_board,
         )
     _validate_actuator_ranges(actuators_by_board, actuator_item_errors_by_board, errors)
+    _validate_pca_board_actuators(actuators_by_board, boards, errors)
 
     sensors: list[dict[str, Any]] = data['sensors']
     if not isinstance(sensors, list):
