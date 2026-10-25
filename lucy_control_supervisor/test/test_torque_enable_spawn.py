@@ -85,12 +85,20 @@ def test_real_spawn_includes_torque_enable(tmp_path: Path):
         'so_arm_controller',
         'so_arm_torque_enable_controller',
     ]
-    assert torque_enable_controllers(path) == [('so_arm_torque_enable_controller', 6)]
+    [(name, joints)] = torque_enable_controllers(path)
+    assert name == 'so_arm_torque_enable_controller'
+    assert len(joints) == 6
 
 
 def test_torque_command_is_one_value_per_joint():
-    assert torque_command_values(False, 6) == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    assert torque_command_values(True, 2) == [1.0, 1.0]
+    assert torque_command_values(False, ['a'] * 6) == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    assert torque_command_values(True, ['a', 'b']) == [1.0, 1.0]
+
+
+def test_disabled_joints_stay_limp_with_control_on():
+    joints = ['thumb', 'index', 'pinky']
+    assert torque_command_values(True, joints, frozenset({'index'})) == [1.0, 0.0, 1.0]
+    assert torque_command_values(False, joints, frozenset({'index'})) == [0.0, 0.0, 0.0]
 
 
 def test_post_spawn_waits_for_subscription_count():
@@ -125,7 +133,7 @@ def test_wait_publishes_after_match():
     assert wait_for_torque_match(pubs, appear_then_wait, 1.0)
     assert torque_publishers_matched(pubs)
     # Mimic supervisor: publish stored ON after match.
-    pub.publish(type('M', (), {'data': torque_command_values(True, 2)})())
+    pub.publish(type('M', (), {'data': torque_command_values(True, ['a', 'b'])})())
     assert pub.published == [[1.0, 1.0]]
 
 
@@ -136,7 +144,7 @@ def test_wait_times_out_and_still_allows_publish():
     started = time.time()
     assert wait_for_torque_match(pubs, _wait_for, 0.15) is False
     assert time.time() - started < 1.0
-    pub.publish(type('M', (), {'data': torque_command_values(True, 6)})())
+    pub.publish(type('M', (), {'data': torque_command_values(True, ['a'] * 6)})())
     assert pub.published == [[1.0, 1.0, 1.0, 1.0, 1.0, 1.0]]
 
 

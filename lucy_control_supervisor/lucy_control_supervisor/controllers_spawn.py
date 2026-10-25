@@ -16,9 +16,9 @@ def _load(controllers_yaml_path: Path) -> dict:
     return data
 
 
-def torque_enable_controllers(controllers_yaml_path: Path) -> list[tuple[str, int]]:
-    """Return ``(name, joint count)`` for controllers bound to ``torque_enable``."""
-    found: list[tuple[str, int]] = []
+def torque_enable_controllers(controllers_yaml_path: Path) -> list[tuple[str, list[str]]]:
+    """Return ``(name, joints)`` for controllers bound to ``torque_enable``."""
+    found: list[tuple[str, list[str]]] = []
     for name, body in _load(controllers_yaml_path).items():
         if not isinstance(body, dict):
             continue
@@ -28,14 +28,15 @@ def torque_enable_controllers(controllers_yaml_path: Path) -> list[tuple[str, in
         if params.get('interface_name') != TORQUE_ENABLE_INTERFACE:
             continue
         joints = params.get('joints') or []
-        found.append((str(name), len(joints)))
+        found.append((str(name), [str(j) for j in joints]))
     return found
 
 
-def torque_command_values(enabled: bool, joint_count: int) -> list[float]:
-    """One ``torque_enable`` command per joint: 1.0 when Control Robot is ON."""
-    value = 1.0 if enabled else 0.0
-    return [value] * joint_count
+def torque_command_values(
+    enabled: bool, joints: list[str], disabled: frozenset[str] = frozenset()
+) -> list[float]:
+    """One ``torque_enable`` command per joint: 1.0 when Control Robot is ON, unless disabled."""
+    return [1.0 if enabled and joint not in disabled else 0.0 for joint in joints]
 
 
 def torque_publishers_matched(pubs: dict[str, tuple]) -> bool:
@@ -75,7 +76,7 @@ def controllers_to_spawn(
         return []
     names = [name for name in cm_params.keys() if name != 'update_rate']
     if not include_torque_enable:
-        torque_names = {name for name, _count in torque_enable_controllers(controllers_yaml_path)}
+        torque_names = {name for name, _joints in torque_enable_controllers(controllers_yaml_path)}
         names = [name for name in names if name not in torque_names]
     jsb = 'joint_state_broadcaster'
     if jsb in names:
