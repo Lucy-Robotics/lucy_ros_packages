@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from lucy_config_generator.schema import BOARD_CLASS_I2C_PWM_ONLY
+
 from .models import FirmwarePaths
 from ..config_store import ConfigStore
 
@@ -44,11 +46,18 @@ def resolve_firmware_paths(data: dict, workspace_src: Path) -> FirmwarePaths:
     return FirmwarePaths(source_dir=source_dir, build_dir=build_dir)
 
 
+def _built_by_pipeline(board: dict) -> bool:
+    """Mega (i2c_pwm_only) boards are built and flashed with Pixi, not cmake/picotool."""
+    return board.get('board_class') != BOARD_CLASS_I2C_PWM_ONLY
+
+
 def board_build_plan(data: dict, selected_boards: set[str] | None) -> list[tuple[str, str]]:
     boards_map = data.get('boards', {})
     board_ids = sorted(selected_boards) if selected_boards else sorted(boards_map.keys())
     plan: list[tuple[str, str]] = []
     for board in board_ids:
+        if not _built_by_pipeline(boards_map.get(board, {})):
+            continue
         firmware_target = str(boards_map.get(board, {}).get('firmware_target', '')).strip()
         if not firmware_target:
             raise ValueError(f"missing firmware_target for board '{board}'")
@@ -68,6 +77,8 @@ def all_selected_serials_empty(data: dict, selected_boards: set[str] | None) -> 
     if not board_ids:
         return True
     for board in board_ids:
+        if not _built_by_pipeline(boards_map.get(board) or {}):
+            continue
         serial = str((boards_map.get(board) or {}).get('serial_id') or '').strip()
         if serial:
             return False

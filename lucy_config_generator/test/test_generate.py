@@ -40,6 +40,16 @@ def test_ros2_names_derived_from_board_id():
     assert derive_ros2_node_name('rp2040_left_arm') == 'left_arm'
     assert derive_ros2_hardware_name('rp2040_torso_head') == 'LucyHardwareTorsoHead'
     assert derive_ros2_node_name('rp2040_torso_head') == 'torso_head'
+    assert derive_ros2_hardware_name('mega_torso_head') == 'LucyHardwareTorsoHead'
+    assert derive_ros2_node_name('mega_arms') == 'arms'
+
+
+def test_mega_board_gets_no_generated_firmware():
+    data = _load_mapping()
+    data['boards']['rp2040_left_arm']['board_class'] = 'i2c_pwm_only'
+    out = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)
+    assert 'config_rp2040_left_arm.c' not in out
+    assert 'config_rp2040_right_arm.c' in out
 
 
 def test_schema_rejects_bad_version():
