@@ -58,34 +58,41 @@ from launch.substitutions import PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
+import yaml
 
 _LINUX_FIRMWARE_BIN = 'lucy-embedded-firmware-linux'
+_MCU_BRIDGE_BIN = 'lucy-embedded-firmware-mcu-bridge'
 _SO101_HOST_NODE = 'so_arm'
 _SO101_ROBOT_PACKAGE = 'so_arm101_urdf'
 
 
 def resolve_linux_firmware_binary() -> Path:
-    """
-    Locate the host Feetech SHM consumer binary (``firmwares/linux``).
+    """Locate the host Feetech SHM consumer binary (``firmwares/linux``)."""
+    return _resolve_firmware_binary(_LINUX_FIRMWARE_BIN, 'LUCY_EMBEDDED_FIRMWARE_LINUX')
 
-    Search order: ``LUCY_EMBEDDED_FIRMWARE_LINUX``, ``PATH``, then
+
+def _resolve_firmware_binary(bin_name: str, env_var: str) -> Path:
+    """
+    Locate a host binary of lucy_embedded_firmware.
+
+    Search order: ``env_var``, ``PATH``, then
     ``src/lucy_embedded_firmware/target/release/<bin>`` under the workspace
     (walk from cwd and from the ``lucy_bringup`` share directory).
     """
-    env = os.environ.get('LUCY_EMBEDDED_FIRMWARE_LINUX', '').strip()
+    env = os.environ.get(env_var, '').strip()
     if env:
         path = Path(env).expanduser()
         if path.is_file():
             return path.resolve()
         raise RuntimeError(
-            f'LUCY_EMBEDDED_FIRMWARE_LINUX={env!r} is not a file'
+            f'{env_var}={env!r} is not a file'
         )
 
-    which = shutil.which(_LINUX_FIRMWARE_BIN)
+    which = shutil.which(bin_name)
     if which:
         return Path(which).resolve()
 
-    rel = Path('src') / 'lucy_embedded_firmware' / 'target' / 'release' / _LINUX_FIRMWARE_BIN
+    rel = Path('src') / 'lucy_embedded_firmware' / 'target' / 'release' / bin_name
     search_roots: list[Path] = [Path.cwd(), *Path.cwd().parents]
     try:
         share = Path(get_package_share_directory('lucy_bringup'))
@@ -106,10 +113,9 @@ def resolve_linux_firmware_binary() -> Path:
             return candidate.resolve()
 
     raise RuntimeError(
-        f'{_LINUX_FIRMWARE_BIN} not found. Build it with '
-        f'`cargo build --release -p lucy-embedded-firmware-linux` '
-        f'(from lucy_embedded_firmware), put it on PATH, or set '
-        f'LUCY_EMBEDDED_FIRMWARE_LINUX to the absolute path.'
+        f'{bin_name} not found. Build it with `pixi run firmware-build-linux` '
+        f'(cargo build --release -p {bin_name} in lucy_embedded_firmware), '
+        f'put it on PATH, or set {env_var} to the absolute path.'
     )
 
 
@@ -282,6 +288,44 @@ def _real_hardware_stack(context, *args, **kwargs):
                 cmd=[str(binary), _SO101_HOST_NODE],
                 name='lucy_embedded_firmware_linux',
                 output='screen',
+            )
+        )
+        return out
+    out.extend(_mcu_bridges(robot_package))
+    return out
+
+
+def _mcu_bridges(robot_package: str) -> list:
+    """One mcu_bridge per Arduino Mega board of the active hardware YAML, matched by serial_id."""
+    from lucy_config_generator.schema import BOARD_CLASS_I2C_PWM_ONLY
+    from lucy_config_generator.schema import derive_ros2_node_name
+
+    root = _infer_robot_source_root(robot_package, get_package_share_directory(robot_package))
+    hardware_yaml = root / 'config' / 'hardware' / 'active.yaml'
+    if not hardware_yaml.is_file():
+        return []
+    boards = (yaml.safe_load(hardware_yaml.read_text(encoding='utf-8')) or {}).get('boards') or {}
+    out = []
+    binary = None
+    for board_id, board in boards.items():
+        if (board or {}).get('board_class') != BOARD_CLASS_I2C_PWM_ONLY:
+            continue
+        serial = str(board.get('serial_id') or '').strip()
+        if not serial:
+            out.append(LogInfo(msg=f'lucy.launch: {board_id} has no serial_id, no bridge started'))
+            continue
+        binary = binary or _resolve_firmware_binary(_MCU_BRIDGE_BIN, 'LUCY_MCU_BRIDGE')
+        node_name = derive_ros2_node_name(board_id)
+        out.append(LogInfo(msg=f'lucy.launch: {_MCU_BRIDGE_BIN} {node_name} {serial} ({board_id})'))
+        # Respawn: it exits until the HI has created the SHM table, or while the Mega is
+        # unplugged or being flashed.
+        out.append(
+            ExecuteProcess(
+                cmd=[str(binary), node_name, serial],
+                name=f'mcu_bridge_{node_name}',
+                output='screen',
+                respawn=True,
+                respawn_delay=2.0,
             )
         )
     return out

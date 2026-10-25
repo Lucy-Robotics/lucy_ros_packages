@@ -4,6 +4,7 @@ import pytest
 from src.config_store import ConfigStore
 from src.pipeline.selection import all_selected_serials_empty
 from src.pipeline.selection import board_build_plan
+from src.pipeline.selection import is_mega_board
 from src.pipeline.selection import resolve_firmware_paths
 from src.pipeline.selection import resolve_mapping_input
 from src.pipeline.selection import select_boards_to_process
@@ -95,10 +96,10 @@ def test_all_selected_serials_empty():
     assert all_selected_serials_empty(data, {'rp2040_left_arm'}) is False
 
 
-def test_mega_boards_are_left_to_pixi():
+def test_mega_boards_are_built_and_flashed_by_the_pipeline():
     data = {
         'boards': {
-            'mega_arms': {
+            'mega_left': {
                 'serial_id': 'ABC',
                 'board_class': 'i2c_pwm_only',
                 'firmware_target': 'arduino_mega',
@@ -106,5 +107,10 @@ def test_mega_boards_are_left_to_pixi():
             'rp2040_left_arm': {'serial_id': '', 'firmware_target': 'lucy_left'},
         }
     }
-    assert board_build_plan(data, None) == [('rp2040_left_arm', 'lucy_left')]
-    assert all_selected_serials_empty(data, None) is True
+    assert board_build_plan(data, None) == [
+        ('mega_left', 'arduino_mega'),
+        ('rp2040_left_arm', 'lucy_left'),
+    ]
+    assert all_selected_serials_empty(data, None) is False
+    assert is_mega_board(data['boards']['mega_left'])
+    assert not is_mega_board(data['boards']['rp2040_left_arm'])
