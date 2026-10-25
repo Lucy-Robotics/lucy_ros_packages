@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import deque
 import ctypes
-from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
 import shutil
@@ -109,7 +109,9 @@ class ControlSupervisorNode(Node):
     RESTART_SERVICE = "/lucy_control/restart"
     GAZEBO_RUNNING_TOPIC = "/lucy/gazebo_running"
     # Latched by lucy_client_registry. Non-empty means Control Robot is ON.
-    ACTIVE_CLIENT_TOPIC = "/lucy/active_client"
+    ACTIVE_CLIENT_TOPIC = '/lucy/active_client'
+    # Latched JSON list of joint names the LCP keeps limp while Control Robot is ON.
+    DISABLED_JOINTS_TOPIC = '/lucy/disabled_joints'
     TERMINATE_TIMEOUT_S = 10.0
     BRIDGE_DRAIN_S = 0.2
     READY_TIMEOUT_S = 60.0
@@ -146,13 +148,17 @@ class ControlSupervisorNode(Node):
             Bool, self.GAZEBO_RUNNING_TOPIC, latched_qos
         )
         self._publish_gazebo_running()
-        # name -> (publisher, joint count). Filled after the torque controllers spawn.
+        # name -> (publisher, joint names). Filled after the torque controllers spawn.
         self._torque_pubs: dict[str, tuple] = {}
         self._torque_enabled = False
+        self._disabled_joints: frozenset[str] = frozenset()
         self.create_subscription(
             String, self.ACTIVE_CLIENT_TOPIC, self._on_active_client, latched_qos
         )
-        if self.get_parameter("autostart").value:
+        self.create_subscription(
+            String, self.DISABLED_JOINTS_TOPIC, self._on_disabled_joints, latched_qos
+        )
+        if self.get_parameter('autostart').value:
             ok, msg = self._restart_stack()
             if not ok:
                 self.get_logger().error(msg)
@@ -468,15 +474,32 @@ class ControlSupervisorNode(Node):
         self._torque_enabled = bool(msg.data)
         self._publish_torque_commands()
 
+    def _on_disabled_joints(self, msg: String) -> None:
+        """Keep the listed joints limp (torque 0) even with Control Robot ON."""
+        try:
+            names = json.loads(msg.data or '[]')
+        except ValueError:
+            self.get_logger().warning(
+                f'ignoring malformed {self.DISABLED_JOINTS_TOPIC}: {msg.data!r}'
+            )
+            return
+        if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+            self.get_logger().warning(
+                f'{self.DISABLED_JOINTS_TOPIC} must be a JSON list of joint names'
+            )
+            return
+        self._disabled_joints = frozenset(names)
+        self._publish_torque_commands()
+
     def _bind_torque_controllers(self, cfg: _StackConfig) -> None:
         """Create a commands publisher for each torque_enable forward controller."""
         if cfg.use_gazebo_sim:
             return
-        for name, count in torque_enable_controllers(cfg.controllers_yaml):
+        for name, joints in torque_enable_controllers(cfg.controllers_yaml):
             pub, _old = self._torque_pubs.get(name, (None, None))
             if pub is None:
-                pub = self.create_publisher(Float64MultiArray, f"/{name}/commands", 10)
-            self._torque_pubs[name] = (pub, count)
+                pub = self.create_publisher(Float64MultiArray, f'/{name}/commands', 10)
+            self._torque_pubs[name] = (pub, joints)
 
     def _publish_torque_after_match(self) -> None:
         """Publish stored Control Robot flag once torque command topics are matched."""
@@ -496,9 +519,9 @@ class ControlSupervisorNode(Node):
 
     def _publish_torque_commands(self) -> None:
         """Write 1.0 or 0.0 on every joint of each torque_enable controller."""
-        for pub, count in self._torque_pubs.values():
+        for pub, joints in self._torque_pubs.values():
             msg = Float64MultiArray()
-            msg.data = torque_command_values(self._torque_enabled, count)
+            msg.data = torque_command_values(self._torque_enabled, joints, self._disabled_joints)
             pub.publish(msg)
 
     def _restart_stack(self) -> tuple[bool, str]:
