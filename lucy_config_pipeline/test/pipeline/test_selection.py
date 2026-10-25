@@ -104,3 +104,18 @@ def test_all_selected_serials_empty():
 def test_resolve_firmware_paths_stays_inside_the_workspace(tmp_path: Path, firmware: dict):
     with pytest.raises(ValueError, match='must stay inside'):
         resolve_firmware_paths({'firmware': firmware}, tmp_path)
+
+
+def test_mega_boards_are_left_to_pixi():
+    data = {
+        'boards': {
+            'mega_arms': {
+                'serial_id': 'ABC',
+                'board_class': 'i2c_pwm_only',
+                'firmware_target': 'arduino_mega',
+            },
+            'rp2040_left_arm': {'serial_id': '', 'firmware_target': 'lucy_left'},
+        }
+    }
+    assert board_build_plan(data, None) == [('rp2040_left_arm', 'lucy_left')]
+    assert all_selected_serials_empty(data, None) is True
