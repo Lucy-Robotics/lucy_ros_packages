@@ -15,6 +15,7 @@ import xml.etree.ElementTree as ET
 import jinja2
 
 from lucy_config_generator.schema import BOARD_CLASS_BUS_SERVO_ONLY
+from lucy_config_generator.schema import BOARD_CLASS_I2C_PWM_ONLY
 from lucy_config_generator.schema import BOARD_CLASS_INTERNAL_I2C_PWM
 from lucy_config_generator.schema import BOARD_CLASS_INTERNAL_ONLY
 from lucy_config_generator.schema import derive_ros2_hardware_name
@@ -505,6 +506,8 @@ def generate(
     if targets & {'firmware', 'all'} and not simulation_only:
         fw_boards = _resolve_board_ids(data, boards_filter)
         for bid in fw_boards:
+            if data['boards'][bid]['board_class'] == BOARD_CLASS_I2C_PWM_ONLY:
+                continue
             if data['boards'][bid]['board_class'] == BOARD_CLASS_BUS_SERVO_ONLY:
                 out = output_dir / f'config_{bid}.rs'
                 out.write_text(render_firmware_rs(data, bid, env), encoding='utf-8')
@@ -562,6 +565,8 @@ def generate_from_xacro_string_for_tests(
     out: dict[str, str] = {}
     if targets & {'firmware', 'all'} and not simulation_only:
         for bid in firmware_boards:
+            if data['boards'][bid]['board_class'] == BOARD_CLASS_I2C_PWM_ONLY:
+                continue
             if data['boards'][bid]['board_class'] == BOARD_CLASS_BUS_SERVO_ONLY:
                 out[f'config_{bid}.rs'] = render_firmware_rs(data, bid, env)
                 continue

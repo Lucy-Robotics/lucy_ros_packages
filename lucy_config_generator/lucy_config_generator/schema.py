@@ -92,40 +92,44 @@ BOARD_CLASS_INTERNAL_I2C_PWM = 'internal_servo_i2c_pwm'
 # Smart bus servos daisy-chained on one UART, addressed by id rather than each
 # wired to a pin. Firmware config for these is emitted as Rust, not C.
 BOARD_CLASS_BUS_SERVO_ONLY = 'bus_servo_only'
+# Arduino Mega driving PCA9685 outputs only. Its Rust firmware config is written by
+# hand and flashed with `pixi run firmware-flash-mega`: nothing generated or built here.
+BOARD_CLASS_I2C_PWM_ONLY = 'i2c_pwm_only'
 BOARD_CLASSES = frozenset(
     {
         BOARD_CLASS_INTERNAL_ONLY,
         BOARD_CLASS_INTERNAL_I2C_PWM,
         BOARD_CLASS_BUS_SERVO_ONLY,
+        BOARD_CLASS_I2C_PWM_ONLY,
     }
 )
 
-_BOARD_ID_RE = re.compile(r'^rp2040_[a-z][a-z0-9_]*$')
+_BOARD_ID_RE = re.compile(r'^(rp2040|mega)_[a-z][a-z0-9_]*$')
 _TOPIC_RE = re.compile(r'^[a-z][a-z0-9_/]*$')
 _SERIAL_ID_RE = re.compile(r'^[A-Za-z0-9]*$')
 
 
 def ros2_hardware_suffix(board_id: str) -> str:
-    """Return the snake_case segment after the ``rp2040_`` board id prefix."""
+    """Return the snake_case segment after the ``rp2040_`` / ``mega_`` board id prefix."""
     if not _BOARD_ID_RE.fullmatch(board_id):
         raise ValueError(
             f'board id {board_id!r} must match {_BOARD_ID_RE.pattern} '
-            '(rp2040_ prefix + snake_case suffix)'
+            '(rp2040_ or mega_ prefix + snake_case suffix)'
         )
-    return board_id[7:]  # len("rp2040_") == 7
+    return board_id.split('_', 1)[1]
 
 
 def derive_ros2_hardware_name(board_id: str) -> str:
     """
     Return ``<ros2_control name="…">`` for *board_id*.
 
-    Pattern: ``LucyHardware`` + PascalCase of the segment after ``rp2040_``.
+    Pattern: ``LucyHardware`` + PascalCase of the segment after the board prefix.
     Example: ``rp2040_left_arm`` → ``LucyHardwareLeftArm``.
     """
     suffix = ros2_hardware_suffix(board_id)
     parts = [p for p in suffix.split('_') if p]
     if not parts:
-        raise ValueError(f'board id {board_id!r}: empty suffix after rp2040_')
+        raise ValueError(f'board id {board_id!r}: empty suffix after the board prefix')
     inner = ''.join(p[:1].upper() + p[1:].lower() if p else '' for p in parts)
     return 'LucyHardware' + inner
 
@@ -134,7 +138,7 @@ def derive_ros2_node_name(board_id: str) -> str:
     """
     Return the ``node_name`` hardware parameter for *board_id*.
 
-    Pattern: the bare snake_case suffix after ``rp2040_``.
+    Pattern: the bare snake_case suffix after ``rp2040_`` / ``mega_``.
 
     ``LucySystemHardware`` names its POSIX shm/sem objects after this, and Darwin
     caps those at 31 chars - 14 once the leading '/' and ``.lucy_reg_header``

@@ -93,3 +93,18 @@ def test_all_selected_serials_empty():
     assert all_selected_serials_empty(data, {'rp2040_so_arm'}) is True
     assert all_selected_serials_empty(data, None) is False
     assert all_selected_serials_empty(data, {'rp2040_left_arm'}) is False
+
+
+def test_mega_boards_are_left_to_pixi():
+    data = {
+        'boards': {
+            'mega_arms': {
+                'serial_id': 'ABC',
+                'board_class': 'i2c_pwm_only',
+                'firmware_target': 'arduino_mega',
+            },
+            'rp2040_left_arm': {'serial_id': '', 'firmware_target': 'lucy_left'},
+        }
+    }
+    assert board_build_plan(data, None) == [('rp2040_left_arm', 'lucy_left')]
+    assert all_selected_serials_empty(data, None) is True
