@@ -367,6 +367,35 @@ def render_firmware_rs(
     )
 
 
+def render_firmware_mega(
+    data: dict[str, Any],
+    board_id: str,
+    env: jinja2.Environment | None = None,
+) -> str:
+    """Render the Arduino Mega (PCA9685) board tables; only enabled actuators are driven."""
+    env = env or _jinja_env()
+    actuators = _actuators_for_board(data, board_id, enabled_only=False)
+    tpl = env.get_template('config_i2c_pwm_board.rs.j2')
+    return tpl.render(
+        board_id=board_id,
+        addresses=[f'0x{int(a):02X}' for a in data['boards'][board_id]['pca_addresses']],
+        joints=[
+            {
+                'id': a['id'],
+                'default': repr(float(a['default'])),
+                'limit_min': repr(float(a['limit_min'])),
+                'limit_max': repr(float(a['limit_max'])),
+            }
+            for a in actuators
+        ],
+        driven=[
+            {'id': a['id'], 'slot': int(a['virtual_pin']), 'output': int(a['physical_pin']) - 1}
+            for a in actuators
+            if a.get('enabled', True)
+        ],
+    )
+
+
 def render_firmware_c(
     data: dict[str, Any],
     board_id: str,
@@ -507,6 +536,8 @@ def generate(
         fw_boards = _resolve_board_ids(data, boards_filter)
         for bid in fw_boards:
             if data['boards'][bid]['board_class'] == BOARD_CLASS_I2C_PWM_ONLY:
+                out = output_dir / f'config_{bid}.rs'
+                out.write_text(render_firmware_mega(data, bid, env), encoding='utf-8')
                 continue
             if data['boards'][bid]['board_class'] == BOARD_CLASS_BUS_SERVO_ONLY:
                 out = output_dir / f'config_{bid}.rs'
@@ -566,6 +597,7 @@ def generate_from_xacro_string_for_tests(
     if targets & {'firmware', 'all'} and not simulation_only:
         for bid in firmware_boards:
             if data['boards'][bid]['board_class'] == BOARD_CLASS_I2C_PWM_ONLY:
+                out[f'config_{bid}.rs'] = render_firmware_mega(data, bid, env)
                 continue
             if data['boards'][bid]['board_class'] == BOARD_CLASS_BUS_SERVO_ONLY:
                 out[f'config_{bid}.rs'] = render_firmware_rs(data, bid, env)

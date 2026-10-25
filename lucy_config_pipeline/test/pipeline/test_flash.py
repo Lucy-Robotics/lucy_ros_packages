@@ -160,3 +160,44 @@ def test_run_flash_phase_uptime_timeout_fails_board(
 
     assert failed == ['rp2040_right_arm']
     assert flashed == []
+
+
+def test_mega_board_is_flashed_with_avrdude_on_its_serial_port(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    artifacts = tmp_path / 'fw' / 'firmwares' / 'arduino_mega' / 'target' / 'lucy'
+    artifacts.mkdir(parents=True)
+    (artifacts / 'mega_left.elf').write_bytes(b'elf')
+    calls: list[list[str]] = []
+    monkeypatch.setattr(pipeline_flash, '_run_command', lambda *, cmd, **_k: calls.append(cmd))
+    monkeypatch.setattr(pipeline_flash, 'mega_port', lambda serial: f'/dev/tty-{serial}')
+
+    failed, flashed = pipeline_flash.run_flash_phase(
+        data={
+            'firmware': {'source_dir': 'fw', 'build_dir': 'build'},
+            'boards': {
+                'mega_left': {
+                    'serial_id': 'TESTMEGA0',
+                    'board_class': 'i2c_pwm_only',
+                    'firmware_target': 'arduino_mega',
+                },
+            },
+        },
+        selected_boards=None,
+        boards_built_ok={'mega_left'},
+        workspace_src=tmp_path,
+        picotool_timeout_seconds=30,
+        usb_wait_seconds=1,
+        uptime_wait_seconds=5,
+        node=None,
+        feedback=lambda **_kwargs: None,
+        log_error=lambda _msg: None,
+    )
+
+    assert (failed, flashed) == ([], ['mega_left'])
+    assert calls == [[
+        'avrdude', '-p', 'atmega2560', '-c', 'wiring', '-P', '/dev/tty-TESTMEGA0', '-b', '115200',
+        '-D', '-U', f"flash:w:{artifacts / 'mega_left.elf'}:e",
+    ]]
+    # The bridge lock is released once avrdude is done.
+    assert not Path('/tmp/.lucy_mcu_flashing_TESTMEGA0').exists()
