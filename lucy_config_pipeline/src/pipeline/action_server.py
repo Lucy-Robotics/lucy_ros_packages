@@ -41,6 +41,9 @@ class PipelineActionServer(Node):
     _BUILD_TIMEOUT_SECONDS = int(os.environ.get('LUCY_PIPELINE_BUILD_TIMEOUT_SEC', '300'))
     _RELOAD_SERVICE = '/lucy_control/restart'
     _RELOAD_TIMEOUT_SECONDS = 15.0
+    # The restart itself: stop the stack, start rsp / controller_manager / bridges, then one
+    # spawner per controller in turn (1-4 s each, 5 for two Mega boards: ~20 s measured).
+    _RELOAD_RESTART_TIMEOUT_SECONDS = 90.0
 
     def __init__(self, *, paths: PipelinePaths, config_store: ConfigStore):
         super().__init__('lucy_config_pipeline')
@@ -126,11 +129,11 @@ class PipelineActionServer(Node):
         # while this _execute call stays parked here.
         done_event = threading.Event()
         future.add_done_callback(lambda _f: done_event.set())
-        completed = done_event.wait(timeout=self._RELOAD_TIMEOUT_SECONDS)
+        completed = done_event.wait(timeout=self._RELOAD_RESTART_TIMEOUT_SECONDS)
         if goal_handle.is_cancel_requested:
             return False, 'reload cancelled'
         if not completed or not future.done():
-            return False, f'reload timed out after {self._RELOAD_TIMEOUT_SECONDS}s'
+            return False, f'reload timed out after {self._RELOAD_RESTART_TIMEOUT_SECONDS}s'
         resp = future.result()
         if resp is None:
             return False, 'reload service call failed'
