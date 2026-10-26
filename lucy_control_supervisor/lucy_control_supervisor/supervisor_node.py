@@ -33,6 +33,8 @@ from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
 from lucy_control_supervisor.controllers_spawn import torque_command_values
 from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
 from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
+from lucy_control_supervisor.mcu_bridges import mega_bridges
+from lucy_control_supervisor.mcu_bridges import resolve_bridge_binary
 
 _WINDOWS_EXEC_SUFFIXES = ('.exe', '.bat', '.cmd')
 
@@ -76,7 +78,7 @@ def node_argv(package: str, executable: str) -> list[str]:
 class _ManagedProc:
     name: str
     popen: subprocess.Popen
-    kind: str  # rsp | cm
+    kind: str  # rsp | cm | bridge
     stopping: bool = False  # set when we ask it to stop, so the exit is expected
     # Temp files the child reads while starting. Removed when it is reaped rather
     # than on a graph condition, which another node can satisfy first.
@@ -316,7 +318,10 @@ class ControlSupervisorNode(Node):
                     text = line.decode('utf-8', 'replace').rstrip()
                     if text:
                         tail.append(text)
-                        self.get_logger().debug(f'[{name}] {text}')
+                        # Bridges only print state changes and summaries: worth seeing.
+                        logger = self.get_logger()
+                        log = logger.info if kind == 'bridge' else logger.debug
+                        log(f'[{name}] {text}')
             except (OSError, ValueError):
                 pass
             # poll rather than wait: _terminate_children polls these same handles.
@@ -358,6 +363,33 @@ class ControlSupervisorNode(Node):
                 'controller_manager did not offer list_controllers within '
                 f'{self.READY_TIMEOUT_S:.0f}s; spawners may block on the lock'
             )
+
+    def _start_mcu_bridges(self, cfg: _StackConfig) -> None:
+        """Start one bridge per Mega board of the active YAML (restarted with the stack).
+
+        Being children of this node, they follow every RELOAD: a new serial_id or board
+        layout applies on Activate, not only on a full relaunch. Each bridge waits for its
+        shared memory and board, and lets go of the port while that board is flashed.
+        """
+        hardware_yaml = cfg.controllers_yaml.parent / 'hardware' / 'active.yaml'
+        bridges = mega_bridges(hardware_yaml)
+        if not bridges:
+            return
+        binary = resolve_bridge_binary(cfg.controllers_yaml.parent)
+        if binary is None:
+            self.get_logger().error(
+                'lucy-embedded-firmware-mcu-bridge not found: run `pixi run firmware-build-linux`'
+            )
+            return
+        for node_name, serial in bridges:
+            self.get_logger().info(f'starting mcu_bridge {node_name} {serial}')
+            popen = subprocess.Popen(
+                [str(binary), node_name, serial],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                env=os.environ.copy(),
+            )
+            self._track(f'mcu_bridge_{node_name}', popen, 'bridge')
 
     def _spawn_controllers(self, cfg: _StackConfig) -> None:
         """Load and activate controllers after controller_manager is up.
@@ -469,6 +501,8 @@ class ControlSupervisorNode(Node):
                 self._start_rsp(cfg, urdf_xml)
                 if not cfg.use_gazebo_sim:
                     self._start_cm(cfg)
+                    if not cfg.use_mock_hardware:
+                        self._start_mcu_bridges(cfg)
                     self._spawn_controllers(cfg)
 
             note = ''

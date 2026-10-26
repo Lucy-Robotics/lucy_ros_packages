@@ -237,15 +237,13 @@ def mega_flash_lock(serial: str):
     """
     Keep this Mega's mcu_bridge off the port while avrdude owns it.
 
-    The bridge waits while the lock file exists (mcu_bridge ``wait_while_flashing``);
-    stopping it frees the port, and launch respawns it once the lock is gone.
+    The bridge closes the port within a tick of the lock file appearing and reconnects
+    once it is gone, so it never has to be stopped.
     """
     lock = Path(f'/tmp/.lucy_mcu_flashing_{serial}')
     lock.touch()
     try:
-        bridge = f'lucy-embedded-firmware-mcu-bridge .*{serial}'
-        subprocess.run(['pkill', '-f', bridge], check=False)
-        time.sleep(0.5)
+        time.sleep(1.0)
         yield
     finally:
         lock.unlink(missing_ok=True)
