@@ -102,6 +102,8 @@ class ControlSupervisorNode(Node):
     # Latched by lucy_client_registry. Non-empty means Control Robot is ON.
     ACTIVE_CLIENT_TOPIC = '/lucy/active_client'
     TERMINATE_TIMEOUT_S = 10.0
+    # A few bridge ticks (~31 ms each) for the HI's torque-0 write to reach the boards.
+    BRIDGE_DRAIN_S = 0.2
     READY_TIMEOUT_S = 60.0
     CONTROL_READY_FILE = _control_ready_file()
     CHILD_LOG_TAIL = 50
@@ -201,7 +203,18 @@ class ControlSupervisorNode(Node):
 
     def _terminate_children(self) -> None:
         self._clear_ready_marker()
-        for child in reversed(self._children):
+        # Bridges last: the HI writes torque 0 as it shuts down ("the host firmware must still
+        # see torque off"), and each bridge has to forward that to its board before it goes.
+        stack = [c for c in self._children if c.kind != 'bridge']
+        bridges = [c for c in self._children if c.kind == 'bridge']
+        self._stop_children(stack)
+        if bridges:
+            time.sleep(self.BRIDGE_DRAIN_S)
+            self._stop_children(bridges)
+        self._children.clear()
+
+    def _stop_children(self, children: List[_ManagedProc]) -> None:
+        for child in reversed(children):
             child.stopping = True
             if child.popen.poll() is None:
                 try:
@@ -209,23 +222,22 @@ class ControlSupervisorNode(Node):
                 except OSError:
                     pass
         deadline = time.monotonic() + self.TERMINATE_TIMEOUT_S
-        for child in self._children:
+        for child in children:
             while child.popen.poll() is None and time.monotonic() < deadline:
                 time.sleep(0.1)
-        for child in self._children:
+        for child in children:
             if child.popen.poll() is None:
                 self.get_logger().warning(f'{child.name} ignored terminate; killing')
                 try:
                     child.popen.kill()
                 except OSError:
                     pass
-        for child in self._children:
+        for child in children:
             for path in child.cleanup_paths:
                 try:
                     os.unlink(path)
                 except OSError:
                     pass
-        self._children.clear()
 
     def _foreign_controller_managers(self) -> List[str]:
         """controller_manager nodes running that this supervisor did not start.
