@@ -106,6 +106,10 @@ double default_joint_position(const ActuatedJointMapping & m);
 /// joint→servo units and clamps to ``[limit_min, limit_max]``.
 double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd_rad);
 
+/// Joint-space position for a servo angle read back from firmware: inverse of
+/// ``actuator_command_to_servo_rad`` (without clamping, so feedback stays truthful).
+double servo_rad_to_joint_position(const ActuatedJointMapping & m, double servo_rad);
+
 /// Sort ``mappings`` ascending by ``virtual_pin`` and return the first repeated
 /// pin, or ``std::nullopt`` when all pins are unique.
 std::optional<int> sort_and_find_duplicate_virtual_pin(

@@ -16,6 +16,7 @@
 #include "include/shared_memory_channel.hpp"
 
 #include <sys/mman.h>
+#include <algorithm>
 #include <thread>
 
 #include <fcntl.h>
@@ -38,23 +39,25 @@ SharedMemoryChannel::~SharedMemoryChannel()
   release();
 }
 
-std::optional<SharedMemoryChannel> SharedMemoryChannel::create(const std::string & node_name)
+std::optional<SharedMemoryChannel> SharedMemoryChannel::create(
+  const std::string & node_name, std::size_t max_actuators)
 {
   const std::string shm_name = posix_shm_name(node_name);
+  const std::size_t shm_size = ActuatorSharedState::size_for(max_actuators);
   int fd = shm_open(shm_name.c_str(), O_CREAT | O_RDWR, 0666);
   if (fd == -1) {
     shm_unlink(shm_name.c_str());
     return std::nullopt;
   }
 
-  if (ftruncate(fd, sizeof(ActuatorSharedState)) == -1) {
+  if (ftruncate(fd, shm_size) == -1) {
     close(fd);
     shm_unlink(shm_name.c_str());
     return std::nullopt;
   }
 
   void * addr = mmap(
-    nullptr, sizeof(ActuatorSharedState), PROT_READ | PROT_WRITE, MAP_SHARED, fd,
+    nullptr, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd,
     0);
   close(fd);
   if (addr == MAP_FAILED) {
@@ -65,6 +68,8 @@ std::optional<SharedMemoryChannel> SharedMemoryChannel::create(const std::string
   SharedMemoryChannel channel;
   channel.node_name_ = shm_name;
   channel.actuators_state_ = new (addr) ActuatorSharedState();
+  channel.actuators_state_->max_actuators = static_cast<uint32_t>(max_actuators);
+  std::fill_n(channel.actuators_state_->payload, 5 * max_actuators, 0.0);
   return channel;
 }
 
@@ -87,7 +92,7 @@ SharedMemoryChannel & SharedMemoryChannel::operator=(SharedMemoryChannel && othe
 void SharedMemoryChannel::release()
 {
   if (actuators_state_ != nullptr) {
-    munmap(actuators_state_, sizeof(ActuatorSharedState));
+    munmap(actuators_state_, ActuatorSharedState::size_for(actuators_state_->max_actuators));
     actuators_state_ = nullptr;
   }
 }

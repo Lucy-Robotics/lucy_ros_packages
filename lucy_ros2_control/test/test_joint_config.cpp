@@ -309,6 +309,32 @@ TEST(JointConfigMath, ActuatorCommandHonoursDirection)
   EXPECT_NEAR(lucy_ros2_control::actuator_command_to_servo_rad(m, 90.0), 0.0, 1e-12);
 }
 
+TEST(JointConfigMath, ServoRadToJointPositionInvertsCommand)
+{
+  ActuatedJointMapping m;
+  m.offset = 90.0;
+  m.direction = -1.0;
+  m.scale = 2.0;
+  m.limit_min = 0.0;
+  m.limit_max = 180.0;
+  for (double cmd : {-60.0, 0.0, 30.0, 90.0}) {
+    const double servo = lucy_ros2_control::actuator_command_to_servo_rad(m, cmd);
+    EXPECT_NEAR(lucy_ros2_control::servo_rad_to_joint_position(m, servo), cmd, 1e-12);
+  }
+}
+
+TEST(JointConfigMath, ServoRadToJointPositionDoesNotClamp)
+{
+  ActuatedJointMapping m;
+  m.offset = 90.0;
+  m.direction = 1.0;
+  m.scale = 1.0;
+  m.limit_min = 0.0;
+  m.limit_max = 180.0;
+  // servo 200 is outside [limit_min, limit_max] but is reported as-is: 200 - 90 = 110
+  EXPECT_NEAR(lucy_ros2_control::servo_rad_to_joint_position(m, 200.0), 110.0, 1e-12);
+}
+
 // ---------------------------------------------------------------------------
 // Duplicate virtual_pin detection / sort
 // ---------------------------------------------------------------------------
