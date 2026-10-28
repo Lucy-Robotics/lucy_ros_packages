@@ -237,13 +237,14 @@ def mega_flash_lock(serial: str):
     """
     Keep this Mega's mcu_bridge off the port while avrdude owns it.
 
-    The bridge closes the port within a tick of the lock file appearing and reconnects
-    once it is gone, so it never has to be stopped.
+    The bridge closes the port once it sees the lock file and reconnects once it is gone,
+    so it never has to be stopped. It can hold the port for 2 s after opening it (the Mega
+    resets), so wait longer than that before avrdude opens it.
     """
     lock = Path(f'/tmp/.lucy_mcu_flashing_{serial}')
     lock.touch()
     try:
-        time.sleep(1.0)
+        time.sleep(3.0)
         yield
     finally:
         lock.unlink(missing_ok=True)
