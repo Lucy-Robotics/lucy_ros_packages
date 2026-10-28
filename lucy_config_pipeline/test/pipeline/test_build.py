@@ -34,7 +34,7 @@ def test_run_build_phase_reports_missing_uf2(tmp_path: Path, monkeypatch: pytest
 
     monkeypatch.setattr(pipeline_build, '_run_command', fake_run_command)
 
-    failed = pipeline_build.run_build_phase(
+    failed, built = pipeline_build.run_build_phase(
         data=_sample_data(),
         selected_boards=None,
         workspace_src=tmp_path,
@@ -44,6 +44,7 @@ def test_run_build_phase_reports_missing_uf2(tmp_path: Path, monkeypatch: pytest
     )
 
     assert failed == ['rp2040_right_arm']
+    assert built == set()
     assert errors
 
 
@@ -59,7 +60,7 @@ def test_run_build_phase_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(pipeline_build, '_run_command', fake_run_command)
 
-    failed = pipeline_build.run_build_phase(
+    failed, built = pipeline_build.run_build_phase(
         data=_sample_data(),
         selected_boards=None,
         workspace_src=tmp_path,
@@ -69,3 +70,47 @@ def test_run_build_phase_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     )
 
     assert failed == []
+    assert built == {'rp2040_right_arm'}
+
+
+def test_cargo_build_writes_one_uf2_per_board(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    source = tmp_path / 'lucy_embedded_firmware'
+    (source / 'firmwares' / 'rp2040').mkdir(parents=True)
+    (source / 'firmwares' / 'rp2040' / 'Cargo.toml').write_text('', encoding='utf-8')
+    calls: list[list[str]] = []
+
+    def fake_run_command(*, cmd: list[str], **_kwargs):
+        calls.append(cmd)
+        if cmd[0] == 'elf2uf2-rs':
+            Path(cmd[2]).write_text('uf2', encoding='utf-8')
+
+    monkeypatch.setattr(pipeline_build, '_run_command', fake_run_command)
+    data = {
+        'firmware': {'source_dir': 'lucy_embedded_firmware', 'build_dir': 'build'},
+        'boards': {
+            'rp2040_left_arm': {
+                'firmware_target': 'pico_left_arm',
+                'serial_id': 'ABC',
+                'board_class': 'internal_servo_only',
+            },
+            'rp2040_so_arm': {
+                'firmware_target': 'so_arm',
+                'serial_id': '',
+                'board_class': 'bus_servo_only',
+            },
+        },
+        'actuators': [],
+    }
+    failed, built = pipeline_build.run_build_phase(
+        data=data,
+        selected_boards=None,
+        workspace_src=tmp_path,
+        timeout_seconds=10,
+        feedback=lambda **_kwargs: None,
+        log_error=lambda _msg: None,
+    )
+    assert failed == []
+    assert built == {'rp2040_left_arm'}
+    assert calls[0][0] == 'cargo'
+    assert calls[1][0] == 'elf2uf2-rs'
+    assert calls[1][2].endswith('rp2040_left_arm.uf2')
