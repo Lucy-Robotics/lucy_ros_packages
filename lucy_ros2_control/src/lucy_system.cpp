@@ -253,7 +253,6 @@ hardware_interface::return_type LucySystemHardware::read(
     hw_positions_[i] = hw_commands_[i];
   }
 
-  // Firmware SHM carries servo-frame radians; map them back to joint space.
   auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
   for (const auto & m : mappings_) {
     const std::size_t i = m.joint_index;

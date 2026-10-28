@@ -31,18 +31,27 @@ struct ActuatorSharedState
   uint32_t max_actuators{0};
   double payload[0];
 
-  std::span<double> hw_commands() { return {payload, max_actuators}; }
-  std::span<double> hw_velocities() { return {payload + max_actuators, max_actuators}; }
-  std::span<double> hw_accelerations() { return {payload + 2 * max_actuators, max_actuators}; }
-  std::span<double> hw_torque_enabled() { return {payload + 3 * max_actuators, max_actuators}; }
-  std::span<double> hw_positions() { return {payload + 4 * max_actuators, max_actuators}; }
+  std::span<double> hw_commands() {return {payload, max_actuators};}
+  std::span<double> hw_velocities() {return {payload + max_actuators, max_actuators};}
+  std::span<double> hw_accelerations() {return {payload + 2 * max_actuators, max_actuators};}
+  std::span<double> hw_torque_enabled() {return {payload + 3 * max_actuators, max_actuators};}
+  std::span<double> hw_positions() {return {payload + 4 * max_actuators, max_actuators};}
 
 
-  std::span<const double> hw_commands() const { return {payload, max_actuators}; }
-  std::span<const double> hw_velocities() const { return {payload + max_actuators, max_actuators}; }
-  std::span<const double> hw_accelerations() const { return {payload + 2 * max_actuators, max_actuators}; }
-  std::span<const double> hw_torque_enabled() const { return {payload + 3 * max_actuators, max_actuators}; }
-  std::span<const double> hw_positions() const { return {payload + 4 * max_actuators, max_actuators}; }
+  std::span<const double> hw_commands() const {return {payload, max_actuators};}
+  std::span<const double> hw_velocities() const {return {payload + max_actuators, max_actuators};}
+  std::span<const double> hw_accelerations() const
+  {
+    return {payload + 2 * max_actuators, max_actuators};
+  }
+  std::span<const double> hw_torque_enabled() const
+  {
+    return {payload + 3 * max_actuators, max_actuators};
+  }
+  std::span<const double> hw_positions() const
+  {
+    return {payload + 4 * max_actuators, max_actuators};
+  }
 
   static constexpr std::size_t size_for(std::size_t max_actuators)
   {
@@ -86,7 +95,9 @@ private:
   SharedMemoryChannel(SharedMemoryChannel &&) noexcept;
   SharedMemoryChannel & operator=(SharedMemoryChannel &&) noexcept;
 
-  static std::optional<SharedMemoryChannel> create(const std::string & node_name, std::size_t max_actuators);
+  static std::optional<SharedMemoryChannel> create(
+    const std::string & node_name,
+    std::size_t max_actuators);
   void release();
 
 private:
