@@ -80,6 +80,237 @@ class PipelineActionServer(Node):
                 build_timeout_seconds=self._BUILD_TIMEOUT_SECONDS,
                 log_error=self.get_logger().error,
             )
+
+            self._feedback(
+                goal_handle, phase="validate", progress=0.1, detail="schema validation"
+            )
+            data = validate_schema(config_yaml)
+
+            for path in (
+                self._paths.urdf_xacro,
+                self._paths.base_path,
+                self._paths.controller_config,
+            ):
+                if not path.exists():
+                    raise FileNotFoundError(path)
+
+            self._feedback(
+                goal_handle, phase="validate", progress=0.6, detail="urdf cross-check"
+            )
+            report = urdf_crosscheck(
+                data,
+                self._paths.urdf_xacro,
+                self._paths.base_path,
+                self._paths.controller_config,
+            )
+            if report.errors:
+                result.errors.extend(format_error_lines(report.errors))
+                result.message = "validation failed"
+                goal_handle.abort()
+                return result
+
+            boards = select_boards_to_process(data, list(goal.boards_to_flash))
+            boards_set = set(boards) if boards else None
+
+            with tempfile.TemporaryDirectory(prefix="lucy_config_pipeline_") as tmp:
+                out_dir = Path(tmp)
+
+                # ros2_control + controllers are always regenerated, regardless of
+                # simulation_only / build_only / dry_run
+                self._feedback(
+                    goal_handle,
+                    phase="generate",
+                    progress=0.3,
+                    detail=(
+                        "rendering simulation ros2_control"
+                        if goal.simulation_only
+                        else "rendering ros2_control"
+                    ),
+                )
+                self._generate_to_dir(
+                    out_dir=out_dir,
+                    config_yaml=config_yaml,
+                    boards_filter=None if goal.simulation_only else boards_set,
+                    targets={"ros2_control", "controllers"},
+                    simulation_only=goal.simulation_only,
+                )
+                if not goal.dry_run:
+                    self._feedback(
+                        goal_handle,
+                        phase="generate",
+                        progress=0.5,
+                        detail="installing ros2_control outputs",
+                    )
+                    self._install_ros2_control_outputs(out_dir, data)
+
+                if not goal.simulation_only:
+                    self._feedback(
+                        goal_handle,
+                        phase="generate",
+                        progress=0.7,
+                        detail="rendering firmware",
+                    )
+                    self._generate_to_dir(
+                        out_dir=out_dir,
+                        config_yaml=config_yaml,
+                        boards_filter=boards_set,
+                        targets={"firmware"},
+                        simulation_only=False,
+                    )
+                    if not goal.dry_run:
+                        self._install_firmware_outputs(out_dir, data)
+
+            plan_boards = [b for b, _ in board_build_plan(data, boards)]
+            plan_set = set(plan_boards)
+            skip_mcu = (
+                not goal.dry_run
+                and not goal.simulation_only
+                and all_selected_serials_empty(data, boards)
+            )
+
+            build_failed_boards: list[str] = []
+            if skip_mcu:
+                self._feedback(
+                    goal_handle,
+                    phase="build",
+                    progress=0.85,
+                    detail=f"skip build: {skip_mcu_reason(data, boards)}",
+                )
+                built_ok = set(plan_boards)
+            elif not goal.dry_run and not goal.simulation_only:
+                build_failed_boards, built_ok = run_build_phase(
+                    data=data,
+                    selected_boards=boards,
+                    workspace_src=self._paths.workspace_src,
+                    timeout_seconds=self._BUILD_TIMEOUT_SECONDS,
+                    feedback=lambda **kwargs: self._feedback(goal_handle, **kwargs),
+                    log_error=lambda msg: self.get_logger().error(msg),
+                )
+            else:
+                built_ok = {b for b in plan_boards if b not in set(build_failed_boards)}
+
+            if not goal.dry_run and goal.build_only and build_failed_boards:
+                result.errors.extend(
+                    format_error_lines(
+                        [
+                            f"build failed for boards: {', '.join(sorted(build_failed_boards))}"
+                        ]
+                    )
+                )
+                result.message = "build failed"
+                goal_handle.abort()
+                return result
+
+            if (
+                not goal.dry_run
+                and plan_set
+                and not built_ok
+                and build_failed_boards
+                and not goal.simulation_only
+            ):
+                result.errors.extend(
+                    format_error_lines(
+                        [
+                            f"build failed for boards: {', '.join(sorted(build_failed_boards))}"
+                        ]
+                    )
+                )
+                result.message = "build failed"
+                goal_handle.abort()
+                return result
+
+            if build_failed_boards:
+                result.errors.extend(
+                    format_error_lines(
+                        [
+                            f"build failed for boards: {', '.join(sorted(build_failed_boards))}"
+                        ]
+                    )
+                )
+
+            flash_failed: list[str] = []
+            if skip_mcu:
+                self._feedback(
+                    goal_handle,
+                    phase="flash",
+                    progress=0.9,
+                    detail=f"skip flash: {skip_mcu_reason(data, boards)}",
+                )
+                result.boards_flashed = []
+            elif not goal.dry_run and not goal.build_only and not goal.simulation_only:
+                flash_failed, flashed_ok = run_flash_phase(
+                    data=data,
+                    selected_boards=boards,
+                    boards_built_ok=built_ok,
+                    workspace_src=self._paths.workspace_src,
+                    picotool_timeout_seconds=flash_picotool_timeout_seconds(),
+                    usb_wait_seconds=flash_usb_wait_seconds(),
+                    uptime_wait_seconds=flash_uptime_wait_seconds(),
+                    node=self,
+                    feedback=lambda **kwargs: self._feedback(goal_handle, **kwargs),
+                    log_error=lambda msg: self.get_logger().error(msg),
+                    locks=mega_flash_locks,
+                )
+                result.boards_flashed = flashed_ok
+                if flash_failed:
+                    result.errors.extend(
+                        format_error_lines(
+                            [
+                                f"flash failed for boards: {', '.join(sorted(flash_failed))}"
+                            ]
+                        )
+                    )
+                    result.message = "flash failed"
+                    goal_handle.abort()
+                    return result
+                if flashed_ok:
+                    self._store.record_flashed_preset(result.config_name)
+
+            if not goal.dry_run:
+                ok, reload_msg = self._call_reload_service(goal_handle)
+                if not ok:
+                    result.errors.extend(format_error_lines([reload_msg]))
+                    result.message = reload_msg
+                    goal_handle.abort()
+                    return result
+
+            result.success = True
+            if build_failed_boards:
+                result.message = "pipeline completed with partial build failure"
+            else:
+                result.message = "pipeline completed"
+            goal_handle.succeed()
+            return result
+        except Exception as e:  # pragma: no cover - top-level action guard
+            lines = [line for line in str(e).splitlines() if line.strip()]
+            raw = lines if lines else [str(e)]
+            result.errors.extend(format_error_lines(raw))
+            result.message = f"pipeline failed: {e}"
+            goal_handle.abort()
+            return result
         finally:
             with self._busy_lock:
                 self._busy = False
+
+    def _install_ros2_control_outputs(self, out_dir: Path, data: dict) -> None:
+        names = resolve_generated_files(data)
+        xacro_name = names["ros2_control_xacro"]
+        ctrl_name = names["controllers_yaml"]
+        xacro_dst = self._paths.robot_root / "description" / "ros2_control" / xacro_name
+        ctrl_dst = self._paths.robot_root / "config" / ctrl_name
+        xacro_dst.parent.mkdir(parents=True, exist_ok=True)
+        ctrl_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(out_dir / xacro_name, xacro_dst)
+        shutil.copy2(out_dir / ctrl_name, ctrl_dst)
+
+    def _install_firmware_outputs(self, out_dir: Path, data: dict) -> None:
+        if not str(data.get("firmware", {}).get("source_dir", "")).strip():
+            return
+        fw_cfg_dir = (
+            resolve_firmware_paths(data, self._paths.workspace_src).source_dir
+            / "config"
+        )
+        fw_cfg_dir.mkdir(parents=True, exist_ok=True)
+        for pattern in ('config_*.c', 'config_*.yaml'):
+            for cfile in out_dir.glob(pattern):
+                shutil.copy2(cfile, fw_cfg_dir / cfile.name)
