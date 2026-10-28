@@ -252,7 +252,8 @@ hardware_interface::return_type LucySystemHardware::read(
     return hardware_interface::return_type::ERROR;
   }
 
-  // Passive/unmapped joints have no feedback: echo their last command.
+  // Passive/unmapped joints, and servos that report no position (NaN, e.g. PWM servos on a
+  // Mega, or before the first state frame), have no feedback: echo their last command.
   for (std::size_t i = 0; i < hw_commands_.size(); ++i) {
     hw_positions_[i] = hw_commands_[i];
   }
@@ -263,7 +264,10 @@ hardware_interface::return_type LucySystemHardware::read(
     if (loopback_encoders_) {
       (*access).hw_positions()[i] = actuator_command_to_servo_rad(m, hw_commands_[i]);
     }
-    hw_positions_[i] = servo_rad_to_joint_position(m, (*access).hw_positions()[i]);
+    const double servo_rad = (*access).hw_positions()[i];
+    if (std::isfinite(servo_rad)) {
+      hw_positions_[i] = servo_rad_to_joint_position(m, servo_rad);
+    }
   }
 
   return hardware_interface::return_type::OK;
