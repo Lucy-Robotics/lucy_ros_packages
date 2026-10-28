@@ -36,6 +36,7 @@ Arguments:
 
 """
 
+import importlib.util
 import os
 from pathlib import Path
 import shutil
@@ -59,33 +60,41 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
+def _load_host_firmware():
+    path = Path(__file__).resolve().parent / 'host_firmware.py'
+    spec = importlib.util.spec_from_file_location('lucy_host_firmware', path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f'cannot load {path}')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+host_firmware = _load_host_firmware()
+
 _LINUX_FIRMWARE_BIN = 'lucy-embedded-firmware-linux'
-_SO101_HOST_NODE = 'so_arm'
-_SO101_ROBOT_PACKAGE = 'so_arm101_urdf'
+_MCU_BRIDGE_BIN = 'lucy-embedded-firmware-mcu-bridge'
 
 
-def resolve_linux_firmware_binary() -> Path:
-    """
-    Locate the host Feetech SHM consumer binary (``firmwares/linux``).
-
-    Search order: ``LUCY_EMBEDDED_FIRMWARE_LINUX``, ``PATH``, then
-    ``src/lucy_embedded_firmware/target/release/<bin>`` under the workspace
-    (walk from cwd and from the ``lucy_bringup`` share directory).
-    """
-    env = os.environ.get('LUCY_EMBEDDED_FIRMWARE_LINUX', '').strip()
+def _resolve_workspace_firmware_binary(
+    *,
+    bin_name: str,
+    env_var: str,
+    cargo_package: str,
+) -> Path:
+    """Locate a release binary under ``lucy_embedded_firmware``."""
+    env = os.environ.get(env_var, '').strip()
     if env:
         path = Path(env).expanduser()
         if path.is_file():
             return path.resolve()
-        raise RuntimeError(
-            f'LUCY_EMBEDDED_FIRMWARE_LINUX={env!r} is not a file'
-        )
+        raise RuntimeError(f'{env_var}={env!r} is not a file')
 
-    which = shutil.which(_LINUX_FIRMWARE_BIN)
+    which = shutil.which(bin_name)
     if which:
         return Path(which).resolve()
 
-    rel = Path('src') / 'lucy_embedded_firmware' / 'target' / 'release' / _LINUX_FIRMWARE_BIN
+    rel = Path('src') / 'lucy_embedded_firmware' / 'target' / 'release' / bin_name
     search_roots: list[Path] = [Path.cwd(), *Path.cwd().parents]
     try:
         share = Path(get_package_share_directory('lucy_bringup'))
@@ -106,11 +115,57 @@ def resolve_linux_firmware_binary() -> Path:
             return candidate.resolve()
 
     raise RuntimeError(
-        f'{_LINUX_FIRMWARE_BIN} not found. Build it with '
-        f'`cargo build --release -p lucy-embedded-firmware-linux` '
+        f'{bin_name} not found. Build it with '
+        f'`cargo build --release -p {cargo_package}` '
         f'(from lucy_embedded_firmware), put it on PATH, or set '
-        f'LUCY_EMBEDDED_FIRMWARE_LINUX to the absolute path.'
+        f'{env_var} to the absolute path.'
     )
+
+
+def resolve_linux_firmware_binary() -> Path:
+    """Locate the host Feetech SHM consumer binary (``firmwares/linux``)."""
+    return _resolve_workspace_firmware_binary(
+        bin_name=_LINUX_FIRMWARE_BIN,
+        env_var='LUCY_EMBEDDED_FIRMWARE_LINUX',
+        cargo_package='lucy-embedded-firmware-linux',
+    )
+
+
+def resolve_mcu_bridge_binary() -> Path:
+    """Locate ``mcu_bridge``. Same search order as the host Feetech binary."""
+    return _resolve_workspace_firmware_binary(
+        bin_name=_MCU_BRIDGE_BIN,
+        env_var='LUCY_MCU_BRIDGE',
+        cargo_package='lucy-embedded-firmware-mcu-bridge',
+    )
+
+
+def _boards_with_serial(robot_package: str) -> list[tuple[str, str]]:
+    """``(node_name, serial)`` for boards whose ``serial_id`` is non-empty."""
+    import yaml
+    from lucy_config_generator.schema import derive_ros2_node_name
+
+    share = get_package_share_directory(robot_package)
+    root = _infer_robot_source_root(robot_package, share)
+    active = root / 'config' / 'hardware' / 'active.yaml'
+    if not active.is_file():
+        return []
+    data = yaml.safe_load(active.read_text(encoding='utf-8'))
+    if not isinstance(data, dict):
+        return []
+    found: list[tuple[str, str]] = []
+    for board_id, board in (data.get('boards') or {}).items():
+        if not isinstance(board, dict):
+            continue
+        serial = str(board.get('serial_id') or '').strip()
+        if not serial:
+            continue
+        try:
+            node_name = derive_ros2_node_name(str(board_id))
+        except ValueError:
+            continue
+        found.append((node_name, serial))
+    return found
 
 
 def _infer_robot_source_root(robot_package: str, share_dir: str) -> Path:
@@ -260,30 +315,128 @@ def _validate_lucy_launch(context):
     return []
 
 
+def _write_real_hardware_expectation(lines: list[str]) -> None:
+    """Tell the launcher readiness probe which host consumers to wait for."""
+    path = Path('/tmp/.lucy_real_hardware_expected')
+    path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+
+def _write_real_hardware_crash(message: str) -> None:
+    """Surface a config problem on the Real Hardware row before any process starts."""
+    Path('/tmp/.lucy_real_hardware_status').write_text('1\n', encoding='utf-8')
+    Path('/tmp/.lucy_real_hardware_error').write_text(message + '\n', encoding='utf-8')
+
+
+def _clear_real_hardware_expectation() -> None:
+    Path('/tmp/.lucy_real_hardware_expected').unlink(missing_ok=True)
+
+
+def _active_boards(robot_package: str) -> dict:
+    import yaml
+
+    share = get_package_share_directory(robot_package)
+    root = _infer_robot_source_root(robot_package, share)
+    active = root / 'config' / 'hardware' / 'active.yaml'
+    if not active.is_file():
+        return {}
+    data = yaml.safe_load(active.read_text(encoding='utf-8'))
+    if not isinstance(data, dict):
+        return {}
+    boards = data.get('boards')
+    return boards if isinstance(boards, dict) else {}
+
+
 def _real_hardware_stack(context, *args, **kwargs):
-    """Start host SHM consumers when ``real`` is true (lazy package load)."""
+    """Start one host program per board in the activated hardware file."""
     real = LaunchConfiguration('real').perform(context).lower().strip()
     if real not in ('true', '1', 'yes'):
         return []
     out = []
     robot_package = LaunchConfiguration('robot_package').perform(context).strip()
-    if robot_package == _SO101_ROBOT_PACKAGE:
-        binary = resolve_linux_firmware_binary()
+    try:
+        targets, problems = host_firmware.host_plan(_active_boards(robot_package))
+    except Exception as exc:
+        _clear_real_hardware_expectation()
+        out.append(LogInfo(msg=f'lucy.launch: cannot read hardware config: {exc}'))
+        return out
+    if problems and not targets:
+        _clear_real_hardware_expectation()
+        _write_real_hardware_crash(problems[0])
+        out.append(LogInfo(msg=problems[0]))
+        return out
+    if not targets:
+        _clear_real_hardware_expectation()
         out.append(
             LogInfo(
                 msg=(
-                    f'lucy.launch: starting {_LINUX_FIRMWARE_BIN} '
-                    f'node_name={_SO101_HOST_NODE} ({binary})'
+                    'lucy.launch: active.yaml has no host firmware to start; '
+                    'skipping real hardware'
                 )
             )
         )
-        out.append(
-            ExecuteProcess(
-                cmd=[str(binary), _SO101_HOST_NODE],
-                name='lucy_embedded_firmware_linux',
-                output='screen',
+        return out
+    linux_targets = [item for item in targets if item['firmware'] == host_firmware.LINUX]
+    bridge_targets = [
+        item for item in targets if item['firmware'] == host_firmware.MCU_BRIDGE
+    ]
+    expectation: list[str] = []
+    if linux_targets:
+        try:
+            binary = resolve_linux_firmware_binary()
+        except Exception as exc:
+            _clear_real_hardware_expectation()
+            out.append(LogInfo(msg=f'lucy.launch: cannot start linux firmware: {exc}'))
+            return out
+        for item in linux_targets:
+            expectation.append(f"linux {item['node']}")
+            out.append(
+                LogInfo(
+                    msg=(
+                        f"lucy.launch: starting {_LINUX_FIRMWARE_BIN} "
+                        f"node_name={item['node']} device={item['device']} ({binary})"
+                    )
+                )
             )
-        )
+            out.append(
+                ExecuteProcess(
+                    cmd=[
+                        str(binary),
+                        item['node'],
+                        item['device'],
+                        str(item['vid']),
+                        str(item['pid']),
+                    ],
+                    name='lucy_embedded_firmware_linux',
+                    output='screen',
+                )
+            )
+    if bridge_targets:
+        try:
+            binary = resolve_mcu_bridge_binary()
+        except Exception as exc:
+            _clear_real_hardware_expectation()
+            out.append(LogInfo(msg=f'lucy.launch: cannot start mcu_bridge: {exc}'))
+            return out
+        for item in bridge_targets:
+            expectation.append(f"mcu-bridge {item['node']} {item['serial']}")
+            out.append(
+                LogInfo(
+                    msg=(
+                        f"lucy.launch: mcu_bridge {item['node']} "
+                        f"serial={item['serial']} device={item['device']}"
+                    )
+                )
+            )
+            out.append(
+                ExecuteProcess(
+                    cmd=[str(binary), item['node'], item['serial'], item['device']],
+                    name=f"mcu_bridge_{item['node']}",
+                    output='screen',
+                )
+            )
+    for problem in problems:
+        out.append(LogInfo(msg=problem))
+    _write_real_hardware_expectation(expectation)
     return out
 
 
@@ -537,9 +690,10 @@ def generate_launch_description():
             LogInfo(msg='Starting lucy_bringup lucy.launch.py'),
             LogInfo(msg='========================================'),
             web_ros_api_launch,
-            real_hardware,
             robot_state_publisher,
+            # Start ros2_control (creates SHM) before mcu_bridge attaches to it.
             ros2_control_launch,
+            real_hardware,
             rviz,
             gazebo,
             LogInfo(msg='========================================'),
