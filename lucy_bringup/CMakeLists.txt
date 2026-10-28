@@ -44,11 +44,8 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_launch_syntax test/test_launch_syntax.py
     TIMEOUT 120
   )
-  ament_add_pytest_test(test_lucy_launch_args test/test_lucy_launch_args.py
-    TIMEOUT 120
-  )
-  ament_add_pytest_test(test_rosbridge_port test/test_rosbridge_port.py
-    TIMEOUT 120
+  ament_add_pytest_test(test_mcu_bridge_bringup test/test_mcu_bridge_bringup.py
+    TIMEOUT 60
   )
 endif()
 
