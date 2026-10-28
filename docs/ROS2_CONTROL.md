@@ -25,7 +25,7 @@ Clients talk to **controllers**, not microcontrollers. On Lucy, the plugin write
 | **`LucySystemHardware`** | `lucy_ros2_control` | SHM writer for real hardware (`f64` rad + seq). |
 | **`SharedMemoryChannel` / `ActuatorSharedState`** | `lucy_ros2_control` | HI ↔ host consumers layout. |
 | **`firmwares/linux`** | `lucy_embedded_firmware` | Host USB Feetech consumer of f64 SHM (SO-ARM101). |
-| **`rp2040_servo2040`** | `lucy_embedded_firmware` | InMoov + SO-ARM101 UART Feetech / PWM / I2C via host↔MCU bridge. |
+| **`firmwares/rp2040`** | `lucy_embedded_firmware` | One UF2 per Servo2040 board. Header PWM and PCA9685. One `mcu_bridge` per board. |
 | Controllers YAML / xacro | robot package | From `lucy_config_generator` / pipeline. |
 
 ---
@@ -45,7 +45,7 @@ flowchart TB
   SHM["POSIX_SHM_f64"]
   LinuxFW["firmwares_linux"]
   Bridge["host_to_MCU_bridge"]
-  FW["rp2040_servo2040"]
+  FW["firmwares_rp2040"]
   JS["joint_state_broadcaster"]
 
   Clients -->|"trajectory"| CM
@@ -92,7 +92,7 @@ flowchart TB
 
 ## 6. Web control panel
 
-Needs active controllers, `ros2_control_node` with `LucySystemHardware` (or Gazebo), and the selected SHM consumer (`firmwares/linux` and/or host↔MCU bridge).
+Needs active controllers, `ros2_control_node` with one `LucySystemHardware` per board (or Gazebo), and the matching SHM consumer: `firmwares/linux` for SO-ARM101, or one `mcu_bridge <node_name> <serial_id>` per Servo2040 whose `serial_id` is set. The bridge does not interpret plugs.
 
 ---
 
