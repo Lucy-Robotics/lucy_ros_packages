@@ -21,24 +21,42 @@
 #include <string>
 #include <cstdint>
 #include <mutex>
-#include "constant.hpp"
+#include <span>
 
-struct alignas(64) ActuatorSharedState
+struct ActuatorSharedState
 {
-  alignas(64)
-  std::atomic<uint64_t> command_seq{0};
-  double hw_commands[MAX_ACTUATORS]{};
-  double hw_velocities[MAX_ACTUATORS]{};
-  double hw_accelerations[MAX_ACTUATORS]{};
+  alignas(64) std::atomic<uint64_t> command_seq{0};
+  alignas(64) std::atomic<uint64_t> state_seq{0};
+  alignas(64) std::atomic<uint64_t> heartbeat{0};
+  uint32_t max_actuators{0};
+  double payload[0];
 
-  double hw_torque_enabled[MAX_ACTUATORS]{};
+  std::span<double> hw_commands() {return {payload, max_actuators};}
+  std::span<double> hw_velocities() {return {payload + max_actuators, max_actuators};}
+  std::span<double> hw_accelerations() {return {payload + 2 * max_actuators, max_actuators};}
+  std::span<double> hw_torque_enabled() {return {payload + 3 * max_actuators, max_actuators};}
+  std::span<double> hw_positions() {return {payload + 4 * max_actuators, max_actuators};}
 
-  alignas(64)
-  std::atomic<uint64_t> state_seq{0};
-  double hw_positions[MAX_ACTUATORS]{};
 
-  alignas(64)
-  std::atomic<uint64_t> heartbeat{0};
+  std::span<const double> hw_commands() const {return {payload, max_actuators};}
+  std::span<const double> hw_velocities() const {return {payload + max_actuators, max_actuators};}
+  std::span<const double> hw_accelerations() const
+  {
+    return {payload + 2 * max_actuators, max_actuators};
+  }
+  std::span<const double> hw_torque_enabled() const
+  {
+    return {payload + 3 * max_actuators, max_actuators};
+  }
+  std::span<const double> hw_positions() const
+  {
+    return {payload + 4 * max_actuators, max_actuators};
+  }
+
+  static constexpr std::size_t size_for(std::size_t max_actuators)
+  {
+    return sizeof(ActuatorSharedState) + 5 * max_actuators * sizeof(double);
+  }
 };
 
 static_assert(std::atomic<uint64_t>::is_always_lock_free, "uint64_t must be lock-free");
@@ -77,7 +95,9 @@ private:
   SharedMemoryChannel(SharedMemoryChannel &&) noexcept;
   SharedMemoryChannel & operator=(SharedMemoryChannel &&) noexcept;
 
-  static std::optional<SharedMemoryChannel> create(const std::string & node_name);
+  static std::optional<SharedMemoryChannel> create(
+    const std::string & node_name,
+    std::size_t max_actuators);
   void release();
 
 private:

@@ -61,15 +61,6 @@ hardware_interface::CallbackReturn LucySystemHardware::on_init(
 
   logger_ = std::make_shared<rclcpp::Logger>(rclcpp::get_logger(node_name_.c_str()));
 
-  if (info_.joints.size() > MAX_ACTUATORS) {
-    RCLCPP_FATAL(
-      get_logger(),
-      "LucySystemHardware supports a maximum of %d joints, but %zu were provided.",
-      MAX_ACTUATORS, info_.joints.size()
-    );
-    return hardware_interface::CallbackReturn::ERROR;
-  }
-
   hw_commands_.resize(info_.joints.size(), 0);
   hw_velocities_.resize(info_.joints.size(), 0);
   hw_accelerations_.resize(info_.joints.size(), 0);
@@ -201,7 +192,7 @@ void LucySystemHardware::drop_torque_and_release_shm()
   if (shared_memory_channel_.has_value()) {
     auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
     for (const auto & m : mappings_) {
-      (*access).hw_torque_enabled[m.joint_index] = 0.0;
+      (*access).hw_torque_enabled()[m.joint_index] = 0.0;
     }
   }
   std::fill(hw_torque_enabled_.begin(), hw_torque_enabled_.end(), 0.0);
@@ -220,7 +211,7 @@ hardware_interface::CallbackReturn LucySystemHardware::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
   RCLCPP_INFO(get_logger(), "Initializing shm");
-  shared_memory_channel_ = SharedMemoryChannel::create(node_name_);
+  shared_memory_channel_ = SharedMemoryChannel::create(node_name_, info_.joints.size());
   if (!shared_memory_channel_.has_value()) {
     RCLCPP_FATAL(get_logger(), "Failed to create shared memory channel");
     return hardware_interface::CallbackReturn::ERROR;
@@ -257,11 +248,15 @@ hardware_interface::return_type LucySystemHardware::read(
     return hardware_interface::return_type::ERROR;
   }
 
-  // Open-loop: echo last commanded *joint* positions. Firmware SHM carries
-  // servo-frame radians (0–2π); publishing those as joint_states would rotate
-  // the URDF away from the calibrated centre (offset = π → joint 0).
+  // Passive/unmapped joints have no feedback: echo their last command.
   for (std::size_t i = 0; i < hw_commands_.size(); ++i) {
     hw_positions_[i] = hw_commands_[i];
+  }
+
+  auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
+  for (const auto & m : mappings_) {
+    const std::size_t i = m.joint_index;
+    hw_positions_[i] = servo_rad_to_joint_position(m, (*access).hw_positions()[i]);
   }
 
   return hardware_interface::return_type::OK;
@@ -280,10 +275,10 @@ hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
   auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
   for (const auto & m : mappings_) {
     const std::size_t i = m.joint_index;
-    (*access).hw_commands[i] = actuator_command_to_servo_rad(m, hw_commands_[i]);
-    (*access).hw_velocities[i] = hw_velocities_[i];
-    (*access).hw_accelerations[i] = hw_accelerations_[i];
-    (*access).hw_torque_enabled[i] = hw_torque_enabled_[i];
+    (*access).hw_commands()[i] = actuator_command_to_servo_rad(m, hw_commands_[i]);
+    (*access).hw_velocities()[i] = hw_velocities_[i];
+    (*access).hw_accelerations()[i] = hw_accelerations_[i];
+    (*access).hw_torque_enabled()[i] = hw_torque_enabled_[i];
   }
 
   return hardware_interface::return_type::OK;

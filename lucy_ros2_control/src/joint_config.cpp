@@ -138,7 +138,7 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
 
 double default_joint_position(const ActuatedJointMapping & m)
 {
-  return (m.default_val - m.offset) * m.direction * m.scale;
+  return servo_rad_to_joint_position(m, m.default_val);
 }
 
 double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd)
@@ -146,6 +146,11 @@ double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd)
   cmd = (cmd / (m.direction * m.scale)) + m.offset;
   cmd = clamp_position_command(cmd, m.limit_min, m.limit_max);
   return cmd;
+}
+
+double servo_rad_to_joint_position(const ActuatedJointMapping & m, double servo_rad)
+{
+  return (servo_rad - m.offset) * m.direction * m.scale;
 }
 
 std::optional<int> sort_and_find_duplicate_virtual_pin(
