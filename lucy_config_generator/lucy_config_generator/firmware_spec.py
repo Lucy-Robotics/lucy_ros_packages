@@ -10,6 +10,7 @@ from typing import Any
 
 from lucy_config_generator.plug import HeaderPlug
 from lucy_config_generator.plug import resolve_plug
+from lucy_config_generator.schema import assign_virtual_pins
 from lucy_config_generator.schema import derive_ros2_node_name
 from lucy_config_generator.servo_profile import amplitude_rad
 from lucy_config_generator.servo_profile import MAX_PULSE_US
@@ -25,6 +26,7 @@ def project_firmware_spec(data: dict[str, Any], board_id: str) -> dict[str, Any]
     :param data: Validated hardware YAML.
     :param board_id: Board whose actuators are projected.
     """
+    assign_virtual_pins(data)
     board = data['boards'][board_id]
     pwm: list[dict[str, Any]] = []
     i2c_pwm: list[dict[str, Any]] = []
