@@ -149,6 +149,13 @@ def test_schema_rejects_more_joints_than_a_mega_holds():
         validate_hardware_yaml(data)
 
 
+def test_schema_rejects_boards_sharing_a_node_name():
+    data = _load_mapping()
+    data['boards']['mega_left_arm'] = dict(data['boards']['rp2040_left_arm'])
+    with pytest.raises(ValueError, match="share the node_name 'left_arm'"):
+        validate_hardware_yaml(data)
+
+
 def test_schema_rejects_two_driven_servos_on_one_mega_output():
     data = _mega_mapping()
     left = [a for a in data['actuators'] if a['board'] == 'rp2040_left_arm']

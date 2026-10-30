@@ -275,6 +275,18 @@ def _validate_boards(boards: dict[str, Any], errors: list[str]) -> None:
                 f'board {board_id}: topic_actuators must not have surrounding whitespace'
             )
 
+    node_boards: dict[str, str] = {}
+    for board_id in boards:
+        try:
+            node = derive_ros2_node_name(board_id)
+        except ValueError:
+            continue
+        if node in node_boards:
+            errors.append(
+                f'boards {node_boards[node]} and {board_id} share the node_name {node!r}'
+            )
+        node_boards[node] = board_id
+
 
 def _validate_pca_addresses(
     board_id: str, board: dict[str, Any], slots: int, errors: list[str]
