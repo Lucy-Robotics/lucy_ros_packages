@@ -102,6 +102,7 @@ private:
   rclcpp::Node::SharedPtr node_;
 
   std::string node_name_;
+  bool loopback_encoders_{false};
 
   // Objects for logging
   std::shared_ptr<rclcpp::Logger> logger_;
