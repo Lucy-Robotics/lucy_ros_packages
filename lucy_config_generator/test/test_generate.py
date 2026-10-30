@@ -67,13 +67,14 @@ def test_mega_board_gets_rust_board_tables():
     out = generate_from_xacro_string_for_tests(
         _mega_mapping(), _fixture_urdf_xml(), {"firmware"}, None
     )
-    assert "config_rp2040_left_arm.c" not in out
-    assert "config_rp2040_right_arm.c" in out
-    rs = out["config_rp2040_left_arm.rs"]
-    assert "PCA_ADDRESSES: [u8; 2] = [0x40, 0x41];" in rs
-    assert "JOINTS_CONFIG: [CommandConfig; 2]" in rs
-    assert "limit_max: 3.14159 }, // left_disabled" in rs
-    assert "DRIVEN: [(usize, u8); 1] = [\n    (0, 9), // left_a\n];" in rs
+    assert 'config_rp2040_left_arm.yaml' not in out
+    assert 'config_rp2040_right_arm.yaml' in out
+    rs = out['config_rp2040_left_arm.rs']
+    assert 'PCA_ADDRESSES: [u8; 2] = [0x40, 0x41];' in rs
+    # Both slots are clamped, only the enabled one (left_a, physical_pin 10) is driven.
+    assert 'JOINTS_CONFIG: [CommandConfig; 2]' in rs
+    assert 'limit_max: 3.14159 }, // left_disabled' in rs
+    assert 'DRIVEN: [(usize, u8); 1] = [\n    (0, 9), // left_a\n];' in rs
 
 
 def test_mega_pins_come_after_the_pca_outputs():
@@ -215,11 +216,18 @@ def test_schema_rejects_invalid_internal_servo_slots():
         validate_hardware_yaml(data)
 
 
-def test_schema_rejects_null_virtual_pin():
+def test_schema_assigns_virtual_pin_from_board_list_order():
     data = _load_mapping()
-    data["actuators"][0]["virtual_pin"] = None
-    with pytest.raises(ValueError, match="virtual_pin must be an integer"):
-        validate_hardware_yaml(data)
+    for actuator in data['actuators']:
+        actuator.pop('virtual_pin', None)
+    for sensor in data['sensors']:
+        sensor.pop('virtual_pin', None)
+    validate_hardware_yaml(data)
+    by_board: dict[str, list[int]] = {}
+    for actuator in data['actuators']:
+        by_board.setdefault(actuator['board'], []).append(int(actuator['virtual_pin']))
+    for pins in by_board.values():
+        assert pins == list(range(len(pins)))
 
 
 def test_schema_rejects_servo_min_greater_than_max():
@@ -305,24 +313,14 @@ def test_schema_rejects_sensor_min_value_greater_than_max_value():
         validate_hardware_yaml(data)
 
 
-def test_schema_reports_missing_virtual_pin_when_gap_exists():
-    data = _load_mapping()
-    data["actuators"][2]["virtual_pin"] = 3
-    with pytest.raises(
-        ValueError, match=r"board .*: missing virtual_pin indices \[[0-9, ]+\]"
-    ):
-        validate_hardware_yaml(data)
-
-
-def test_schema_suppresses_sensor_contiguity_when_sensor_has_item_error():
+def test_schema_suppresses_sensor_physical_pin_dup_when_sensor_has_item_error():
     data = _load_mapping()
     data["sensors"][0]["associated_actuator"] = "does_not_exist"
     with pytest.raises(ValueError) as exc:
         validate_hardware_yaml(data)
     msg = str(exc.value)
-    assert "associated_actuator does_not_exist not found" in msg
-    assert "sensor virtual_pin must be contiguous" not in msg
-    assert "missing sensor virtual_pin indices" not in msg
+    assert 'associated_actuator does_not_exist not found' in msg
+    assert 'duplicate sensor physical_pin' not in msg
 
 
 def test_firmware_spec_replaces_internal_c():
@@ -495,14 +493,14 @@ def test_bus_servo_board_generates_rust_layout():
     assert f"config_{board_id}.c" not in out
     rust = out[f"config_{board_id}.rs"]
 
-    actuators = [a for a in data["actuators"] if a["board"] == board_id]
-    expected = max(int(a["virtual_pin"]) for a in actuators) + 1
-    assert f"pub const BUS_SERVO_SLOTS: u16 = {expected};" in rust
-    assert "pub const BUS_SERVO_BLOCK: u16 = 3;" in rust
+    actuators = [a for a in data['actuators'] if a['board'] == board_id]
+    expected = len(actuators)
+    assert f'pub const BUS_SERVO_SLOTS: u16 = {expected};' in rust
+    assert 'pub const BUS_SERVO_BLOCK: u16 = 3;' in rust
 
 
 def test_slot_count_is_the_board_joint_count():
-    """virtual_pin is validated contiguous from 0, so slots == joints on the board."""
+    """Derived virtual_pin is 0..N-1 by board list order, so slots == joints on the board."""
     data, board_id = _bus_servo_mapping()
     out = generate_from_xacro_string_for_tests(
         data, _fixture_urdf_xml(), targets={"firmware"}
