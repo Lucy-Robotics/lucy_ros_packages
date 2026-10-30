@@ -159,6 +159,16 @@ TEST(JointConfigLimits, ParsesProvidedLimits)
   EXPECT_DOUBLE_EQ(limits.max_rad, 1.5708);
 }
 
+TEST(JointConfigLimits, FindsThePositionInterfaceAfterOthers)
+{
+  ComponentInfo joint = make_valid_joint();
+  InterfaceInfo torque;
+  torque.name = "torque_enable";
+  joint.command_interfaces.insert(joint.command_interfaces.begin(), torque);
+  joint.command_interfaces[1].max = "1.5708";
+  EXPECT_DOUBLE_EQ(lucy_ros2_control::parse_joint_limits(joint).max_rad, 1.5708);
+}
+
 TEST(JointConfigLimits, NonNumericLimitThrows)
 {
   ComponentInfo joint = make_valid_joint();
