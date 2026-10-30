@@ -143,6 +143,7 @@ double default_joint_position(const ActuatedJointMapping & m)
 
 double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd)
 {
+  cmd = clamp_position_command(cmd, m.command.min, m.command.max);
   cmd = (cmd / (m.direction * m.scale)) + m.offset;
   cmd = clamp_position_command(cmd, m.limit_min, m.limit_max);
   return cmd;
