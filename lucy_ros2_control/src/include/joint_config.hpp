@@ -102,8 +102,8 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
 /// Default joint position derived from the actuator's ``default`` parameter.
 double default_joint_position(const ActuatedJointMapping & m);
 
-/// Servo command published to firmware for a joint-space command: maps
-/// joint→servo units and clamps to ``[limit_min, limit_max]``.
+/// Servo command published to firmware for a joint-space command: clamps to the URDF
+/// ``command`` limits, maps joint→servo units, then clamps to ``[limit_min, limit_max]``.
 double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd_rad);
 
 /// Joint-space position for a servo angle read back from firmware: inverse of
