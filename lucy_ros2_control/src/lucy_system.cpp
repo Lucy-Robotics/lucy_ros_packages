@@ -58,6 +58,10 @@ hardware_interface::CallbackReturn LucySystemHardware::on_init(
       node_name_ = "lucy";
     }
   }
+  {
+    auto it = info_.hardware_parameters.find("publish_actuators");
+    loopback_encoders_ = it != info_.hardware_parameters.end() && it->second == "false";
+  }
 
   logger_ = std::make_shared<rclcpp::Logger>(rclcpp::get_logger(node_name_.c_str()));
 
@@ -256,6 +260,9 @@ hardware_interface::return_type LucySystemHardware::read(
   auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
   for (const auto & m : mappings_) {
     const std::size_t i = m.joint_index;
+    if (loopback_encoders_) {
+      (*access).hw_positions()[i] = actuator_command_to_servo_rad(m, hw_commands_[i]);
+    }
     hw_positions_[i] = servo_rad_to_joint_position(m, (*access).hw_positions()[i]);
   }
 
