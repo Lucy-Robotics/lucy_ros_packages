@@ -67,13 +67,13 @@ double parse_optional_interface_limit(
 JointLimits parse_joint_limits(const hardware_interface::ComponentInfo & joint)
 {
   JointLimits limits{};
-  if (joint.command_interfaces.empty()) {
+  const auto it = std::find_if(
+    joint.command_interfaces.begin(), joint.command_interfaces.end(),
+    [](const auto & i) {return i.name == hardware_interface::HW_IF_POSITION;});
+  if (it == joint.command_interfaces.end()) {
     return limits;
   }
-  const auto & cmd_if = joint.command_interfaces[0];
-  if (cmd_if.name != hardware_interface::HW_IF_POSITION) {
-    return limits;
-  }
+  const auto & cmd_if = *it;
   limits.min_rad = parse_optional_interface_limit(
     cmd_if.min,
     "joint '" + joint.name + "' command_interface min",
