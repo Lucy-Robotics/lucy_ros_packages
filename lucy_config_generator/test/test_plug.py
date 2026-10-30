@@ -9,14 +9,15 @@ from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
 
-from lucy_config_generator.plug import HeaderPlug
-from lucy_config_generator.plug import PcaPlug
-from lucy_config_generator.plug import assign_pca_plug
-from lucy_config_generator.plug import assign_plug
-from lucy_config_generator.plug import resolve_plug
-from lucy_config_generator.schema import validate_hardware_yaml
 import pytest
 import yaml
+
+from lucy_config_generator.plug import HeaderPlug
+from lucy_config_generator.plug import assign_pca_plug
+from lucy_config_generator.plug import assign_plug
+from lucy_config_generator.plug import PcaPlug
+from lucy_config_generator.plug import resolve_plug
+from lucy_config_generator.schema import validate_hardware_yaml
 
 _FIXTURES = Path(__file__).resolve().parent / 'fixtures'
 _THAIS = (
