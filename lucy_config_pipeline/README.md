@@ -77,12 +77,6 @@ picotool info -a
 ls /dev/serial/by-id/
 ```
 
-NixOS / read-only `/etc`: the installer writes the same rules to
-**`/run/udev/rules.d/99-lucy-pico.rules`** (tmpfs - lasts until reboot). No
-`configuration.nix` change required; re-run `python scripts/install_pico_usb_access.py`
-after reboot (one sudo). Optional persistent Nix snippet is printed by the script
-if you later want `services.udev.extraRules`.
-
 Env: `LUCY_PIPELINE_FLASH_TIMEOUT_SEC` (default **120**) caps each `picotool …` subprocess.
 `LUCY_FIRMWARE_SETUP_SKIP_UDEV=1` skips udev during firmware-setup (CI).
 `LUCY_FIRMWARE_SETUP_INSTALL_UDEV=1` forces udev install in non-interactive shells.
