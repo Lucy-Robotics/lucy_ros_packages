@@ -335,12 +335,13 @@ class ControlSupervisorNode(Node):
             try:
                 for line in iter(popen.stdout.readline, b''):
                     text = line.decode('utf-8', 'replace').rstrip()
-                    if text:
-                        tail.append(text)
-                        # Bridges only print state changes and summaries: worth seeing.
-                        logger = self.get_logger()
-                        log = logger.info if kind == 'bridge' else logger.debug
-                        log(f'[{name}] {text}')
+                    if not text:
+                        continue
+                    tail.append(text)
+                    if kind == 'bridge':
+                        self.get_logger().info(f'[{name}] {text}')
+                    else:
+                        self.get_logger().debug(f'[{name}] {text}')
             except (OSError, ValueError):
                 pass
             # poll rather than wait: _terminate_children polls these same handles.
