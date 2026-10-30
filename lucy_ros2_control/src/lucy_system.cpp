@@ -265,9 +265,8 @@ hardware_interface::return_type LucySystemHardware::read(
       (*access).hw_positions()[i] = actuator_command_to_servo_rad(m, hw_commands_[i]);
     }
     const double servo_rad = (*access).hw_positions()[i];
-    if (std::isfinite(servo_rad)) {
-      hw_positions_[i] = servo_rad_to_joint_position(m, servo_rad);
-    }
+    hw_positions_[i] = servo_rad_to_joint_position(
+      m, std::isfinite(servo_rad) ? servo_rad : actuator_command_to_servo_rad(m, hw_commands_[i]));
   }
 
   return hardware_interface::return_type::OK;
