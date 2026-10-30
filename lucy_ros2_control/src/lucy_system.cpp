@@ -280,9 +280,8 @@ hardware_interface::return_type LucySystemHardware::read(
         static_cast<float>(actuator_command_to_servo_rad(m, hw_commands_[i]));
     }
     const double servo_rad = (*access).hw_positions()[i];
-    if (std::isfinite(servo_rad)) {
-      hw_positions_[i] = servo_rad_to_joint_position(m, servo_rad);
-    }
+    hw_positions_[i] = servo_rad_to_joint_position(
+      m, std::isfinite(servo_rad) ? servo_rad : actuator_command_to_servo_rad(m, hw_commands_[i]));
     hw_temperatures_[i] = (*access).hw_temperatures()[i];
     hw_efforts_[i] = (*access).hw_efforts()[i];
     hw_currents_[i] = (*access).hw_currents()[i];
