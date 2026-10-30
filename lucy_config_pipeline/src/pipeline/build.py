@@ -151,6 +151,7 @@ def _run_cargo_builds(
         spec_path = build_dir / f'config_{board}.yaml'
         uf2 = build_dir / f'{board}.uf2'
         try:
+            # Empty pwm/i2c_pwm is fine — board still builds/flashes/runs as CDC.
             spec_path.write_text(render_firmware_spec(data, board), encoding='utf-8')
             env = dict(tool_env)
             env['LUCY_FIRMWARE_CONFIG'] = str(spec_path)
@@ -163,6 +164,9 @@ def _run_cargo_builds(
                 detail=f'cargo build {board}',
                 board=board,
             )
+            # Drop a stale/broken ELF so elf2uf2 never converts a previous failure.
+            if elf.is_file():
+                elf.unlink()
             _run_command(
                 phase='build',
                 board=board,
@@ -175,6 +179,18 @@ def _run_cargo_builds(
                 feedback=feedback,
                 stream_progress=index / total,
                 env=env,
+            )
+            if not elf.is_file() or elf.stat().st_size < 10_000:
+                size = elf.stat().st_size if elf.is_file() else 0
+                raise RuntimeError(
+                    f'cargo produced no usable ELF for {board} '
+                    f'(path={elf}, size={size}); check build log above'
+                )
+            feedback(
+                phase='build',
+                progress=(index + 0.45) / total,
+                detail=f'elf2uf2-rs {board}',
+                board=board,
             )
             _run_command(
                 phase='build',
@@ -226,11 +242,15 @@ def _run_command(
     watchdog = threading.Timer(timeout_seconds, process.kill)
     watchdog.start()
     emitted = 0
+    tail: list[str] = []
     try:
         for line in process.stdout:
             text = line.strip()
             if not text:
                 continue
+            tail.append(text)
+            if len(tail) > 40:
+                tail = tail[-40:]
             if emitted < 200:
                 feedback(phase=phase, progress=stream_progress, detail=text, board=board)
             emitted += 1
@@ -241,4 +261,7 @@ def _run_command(
     if timed_out:
         raise TimeoutError(f"command timed out after {timeout_seconds}s: {' '.join(cmd)}")
     if return_code != 0:
-        raise RuntimeError(f"command failed ({return_code}): {' '.join(cmd)}")
+        hint = '\n'.join(tail[-12:]) if tail else '(no output)'
+        raise RuntimeError(
+            f"command failed ({return_code}): {' '.join(cmd)}\n{hint}"
+        )
