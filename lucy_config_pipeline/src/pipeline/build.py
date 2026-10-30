@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -12,6 +11,9 @@ from .selection import is_mega_board
 from .selection import mega_artifact_dir
 from .selection import mega_crate_dir
 from .selection import resolve_firmware_paths
+from .toolchain import FirmwareToolchainError
+from .toolchain import firmware_tool_env
+from .toolchain import resolve_firmware_tool
 
 MEGA_ELF = Path("target/avr-none/release/lucy-embedded-firmware-arduino-mega.elf")
 
@@ -142,6 +144,15 @@ def _run_cargo_builds(
         / 'release'
         / 'lucy-embedded-firmware-rp2040'
     )
+    try:
+        tool_env = firmware_tool_env()
+        cargo = resolve_firmware_tool('cargo', env=tool_env)
+        elf2uf2 = resolve_firmware_tool('elf2uf2-rs', env=tool_env)
+    except FirmwareToolchainError as exc:
+        log_error(str(exc))
+        feedback(phase='build', progress=0.0, detail=str(exc), board='')
+        raise
+
     for index, (board, _target) in enumerate(plan):
         board_def = (data.get('boards') or {}).get(board) or {}
         if str(board_def.get('board_class') or '') == 'bus_servo_only':
@@ -156,7 +167,7 @@ def _run_cargo_builds(
         uf2 = build_dir / f'{board}.uf2'
         try:
             spec_path.write_text(render_firmware_spec(data, board), encoding='utf-8')
-            env = os.environ.copy()
+            env = dict(tool_env)
             env['LUCY_FIRMWARE_CONFIG'] = str(spec_path)
             serial = str((data.get('boards') or {}).get(board, {}).get('serial_id') or '').strip()
             if serial:
@@ -171,7 +182,7 @@ def _run_cargo_builds(
                 phase='build',
                 board=board,
                 cmd=[
-                    'cargo', 'build', '--release', '--target', 'thumbv6m-none-eabi',
+                    str(cargo), 'build', '--release', '--target', 'thumbv6m-none-eabi',
                     '-p', 'lucy-embedded-firmware-rp2040',
                 ],
                 cwd=source_dir,
@@ -183,11 +194,12 @@ def _run_cargo_builds(
             _run_command(
                 phase='build',
                 board=board,
-                cmd=['elf2uf2-rs', str(elf), str(uf2)],
+                cmd=[str(elf2uf2), str(elf), str(uf2)],
                 cwd=source_dir,
                 timeout_seconds=timeout_seconds,
                 feedback=feedback,
                 stream_progress=(index + 0.5) / total,
+                env=env,
             )
             if not uf2.is_file():
                 raise RuntimeError(f'missing build artifact: {uf2}')
@@ -268,9 +280,6 @@ def _run_command(
         env=env,
     )
     assert process.stdout is not None
-    # The timeout has to arm before the read loop: that loop runs until the pipe
-    # closes, so a child that hangs without exiting never reaches process.wait().
-    # Killing closes the pipe, which ends the loop.
     watchdog = threading.Timer(timeout_seconds, process.kill)
     watchdog.start()
     emitted = 0
