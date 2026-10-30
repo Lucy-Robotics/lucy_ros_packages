@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import contextmanager
+from contextlib import ExitStack
 import os
 from pathlib import Path
 import subprocess
@@ -30,6 +31,7 @@ def run_flash_phase(
     node: Node | None,
     feedback: Callable[..., None],
     log_error: Callable[[str], None],
+    locks: ExitStack | None = None,
 ) -> tuple[list[str], list[str]]:
     """
     Flash built UF2 images with picotool.
@@ -70,7 +72,7 @@ def run_flash_phase(
 
         if is_mega_board(boards_entry):
             try:
-                _flash_mega(board, serial, paths, picotool_timeout_seconds, feedback, row)
+                _flash_mega(board, serial, paths, picotool_timeout_seconds, feedback, row, locks)
                 flashed.append(board)
                 feedback(
                     phase='flash',
@@ -211,6 +213,7 @@ def _flash_mega(
     timeout_seconds: int,
     feedback: Callable[..., None],
     progress: float,
+    locks: ExitStack | None,
 ) -> None:
     """Flash the board's ELF with avrdude onto the Mega whose USB serial is ``serial``."""
     elf = mega_artifact_dir(paths) / f'{board}.elf'
@@ -219,7 +222,8 @@ def _flash_mega(
     port = mega_port(serial)
     feedback(phase='flash', progress=progress, detail=f'avrdude {elf.name} -> {port}', board=board)
     # Same programmer settings ravedude uses for mega2560 (stk500v2 bootloader at 115200).
-    with mega_flash_lock(serial):
+    with ExitStack() as own:
+        (locks or own).enter_context(mega_flash_lock(serial))
         _run_command(
             phase='flash',
             board=board,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -174,6 +175,7 @@ class PipelineActionServer(Node):
         result.config_name = self._store.get_active_name()
         result.boards_flashed = []
         result.errors = []
+        mega_flash_locks = ExitStack()
 
         try:
             goal = goal_handle.request
@@ -332,6 +334,7 @@ class PipelineActionServer(Node):
                     node=self,
                     feedback=lambda **kwargs: self._feedback(goal_handle, **kwargs),
                     log_error=lambda msg: self.get_logger().error(msg),
+                    locks=mega_flash_locks,
                 )
                 result.boards_flashed = flashed_ok
                 if flash_failed:
@@ -369,6 +372,7 @@ class PipelineActionServer(Node):
             goal_handle.abort()
             return result
         finally:
+            mega_flash_locks.close()
             with self._busy_lock:
                 self._busy = False
 

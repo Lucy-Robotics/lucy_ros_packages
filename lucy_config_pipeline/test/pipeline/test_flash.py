@@ -1,3 +1,4 @@
+from contextlib import ExitStack
 from pathlib import Path
 
 import pytest
@@ -168,9 +169,18 @@ def test_mega_board_is_flashed_with_avrdude_on_its_serial_port(
     artifacts = tmp_path / 'fw' / 'firmwares' / 'arduino_mega' / 'target' / 'lucy'
     artifacts.mkdir(parents=True)
     (artifacts / 'mega_left.elf').write_bytes(b'elf')
+    lock = Path('/tmp/.lucy_mcu_flashing_TESTMEGA0')
     calls: list[list[str]] = []
-    monkeypatch.setattr(pipeline_flash, '_run_command', lambda *, cmd, **_k: calls.append(cmd))
+    locked: list[bool] = []
+
+    def run(*, cmd, **_k):
+        calls.append(cmd)
+        locked.append(lock.exists())
+
+    monkeypatch.setattr(pipeline_flash, '_run_command', run)
     monkeypatch.setattr(pipeline_flash, 'mega_port', lambda serial: f'/dev/tty-{serial}')
+    monkeypatch.setattr(pipeline_flash.time, 'sleep', lambda _s: None)
+    locks = ExitStack()
 
     failed, flashed = pipeline_flash.run_flash_phase(
         data={
@@ -192,6 +202,7 @@ def test_mega_board_is_flashed_with_avrdude_on_its_serial_port(
         node=None,
         feedback=lambda **_kwargs: None,
         log_error=lambda _msg: None,
+        locks=locks,
     )
 
     assert (failed, flashed) == ([], ['mega_left'])
@@ -199,5 +210,7 @@ def test_mega_board_is_flashed_with_avrdude_on_its_serial_port(
         'avrdude', '-p', 'atmega2560', '-c', 'wiring', '-P', '/dev/tty-TESTMEGA0', '-b', '115200',
         '-D', '-U', f"flash:w:{artifacts / 'mega_left.elf'}:e",
     ]]
-    # The bridge lock is released once avrdude is done.
-    assert not Path('/tmp/.lucy_mcu_flashing_TESTMEGA0').exists()
+    assert locked == [True]
+    assert lock.exists()
+    locks.close()
+    assert not lock.exists()
