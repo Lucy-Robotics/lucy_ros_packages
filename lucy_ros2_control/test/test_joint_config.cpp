@@ -307,6 +307,16 @@ TEST(JointConfigMath, ActuatorCommandToServoRadClampsHigh)
   EXPECT_NEAR(lucy_ros2_control::actuator_command_to_servo_rad(m, 180.0), 180.0, 1e-12);
 }
 
+TEST(JointConfigMath, ActuatorCommandToServoRadClampsToUrdfLimits)
+{
+  ActuatedJointMapping m;
+  m.offset = 90.0;
+  m.limit_min = 0.0;
+  m.limit_max = 180.0;
+  m.command.max = 45.0;
+  EXPECT_NEAR(lucy_ros2_control::actuator_command_to_servo_rad(m, 60.0), 135.0, 1e-12);
+}
+
 TEST(JointConfigMath, ActuatorCommandHonoursDirection)
 {
   ActuatedJointMapping m;
