@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+import ctypes
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -37,6 +39,11 @@ from lucy_control_supervisor.mcu_bridges import mega_bridges
 from lucy_control_supervisor.mcu_bridges import resolve_bridge_binary
 
 _WINDOWS_EXEC_SUFFIXES = ('.exe', '.bat', '.cmd')
+_PR_SET_PDEATHSIG = 1
+
+
+def _die_with_parent() -> None:
+    ctypes.CDLL(None).prctl(_PR_SET_PDEATHSIG, signal.SIGTERM)
 
 
 def _control_ready_file() -> Path:
@@ -400,6 +407,8 @@ class ControlSupervisorNode(Node):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=os.environ.copy(),
+                start_new_session=True,
+                preexec_fn=_die_with_parent if sys.platform == 'linux' else None,
             )
             self._track(f'mcu_bridge_{node_name}', popen, 'bridge')
 
