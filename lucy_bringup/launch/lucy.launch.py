@@ -60,6 +60,7 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
+
 def _load_host_firmware():
     path = Path(__file__).resolve().parent / 'host_firmware.py'
     spec = importlib.util.spec_from_file_location('lucy_host_firmware', path)
@@ -392,7 +393,7 @@ def _real_hardware_stack(context, *args, **kwargs):
             out.append(
                 LogInfo(
                     msg=(
-                        f"lucy.launch: starting {_LINUX_FIRMWARE_BIN} "
+                        f'lucy.launch: starting {_LINUX_FIRMWARE_BIN} '
                         f"node_name={item['node']} device={item['device']} ({binary})"
                     )
                 )

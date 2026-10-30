@@ -1,4 +1,20 @@
-"""Which host program an activated hardware file starts.
+# Copyright 2026 Lucy Robotics Team
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+"""
+Which host program an activated hardware file starts.
 
 Launch reads the robot package's ``config/hardware/active.yaml`` and asks this
 module. A board names its own program (``host.firmware``) and the device label
@@ -65,7 +81,8 @@ def _usb_ids(host: dict[str, Any]) -> tuple[int, int] | None:
 
 
 def host_plan(boards: Any) -> tuple[list[dict[str, Any]], list[str]]:
-    """Return ``(targets, problems)`` for the boards in an activated config.
+    """
+    Return ``(targets, problems)`` for the boards in an activated config.
 
     A target carries ``firmware``, ``node``, ``device``, and for linux also
     ``vid`` and ``pid``. A problem is a sentence the TUI can show as-is.
