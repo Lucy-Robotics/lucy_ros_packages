@@ -11,10 +11,6 @@ _LINE_COL_RE = re.compile(r'line\s+(\d+),\s+column\s+(\d+)')
 
 
 def _pick_field_from_tail(tail: str) -> str:
-    if tail.startswith('missing virtual_pin'):
-        return 'virtual_pin'
-    if tail.startswith('missing sensor virtual_pin'):
-        return 'virtual_pin'
     first = tail.split(' ', 1)[0]
     if '.' in first:
         return first
