@@ -78,13 +78,23 @@ def test_cargo_build_writes_one_uf2_per_board(tmp_path: Path, monkeypatch: pytes
     (source / 'firmwares' / 'rp2040').mkdir(parents=True)
     (source / 'firmwares' / 'rp2040' / 'Cargo.toml').write_text('', encoding='utf-8')
     calls: list[list[str]] = []
+    cargo = tmp_path / 'cargo'
+    elf2uf2 = tmp_path / 'elf2uf2-rs'
+    cargo.write_text('', encoding='utf-8')
+    elf2uf2.write_text('', encoding='utf-8')
 
     def fake_run_command(*, cmd: list[str], **_kwargs):
         calls.append(cmd)
-        if cmd[0] == 'elf2uf2-rs':
+        if Path(cmd[0]).name in ('elf2uf2-rs', 'elf2uf2-rs.exe'):
             Path(cmd[2]).write_text('uf2', encoding='utf-8')
 
     monkeypatch.setattr(pipeline_build, '_run_command', fake_run_command)
+    monkeypatch.setattr(
+        pipeline_build,
+        'resolve_firmware_tool',
+        lambda name, env=None: cargo if name == 'cargo' else elf2uf2,
+    )
+    monkeypatch.setattr(pipeline_build, 'firmware_tool_env', lambda base=None: {'PATH': '/tmp'})
     data = {
         'firmware': {'source_dir': 'lucy_embedded_firmware', 'build_dir': 'build'},
         'boards': {
@@ -111,6 +121,54 @@ def test_cargo_build_writes_one_uf2_per_board(tmp_path: Path, monkeypatch: pytes
     )
     assert failed == []
     assert built == {'rp2040_left_arm'}
-    assert calls[0][0] == 'cargo'
-    assert calls[1][0] == 'elf2uf2-rs'
+    assert Path(calls[0][0]) == cargo
+    assert Path(calls[1][0]) == elf2uf2
     assert calls[1][2].endswith('rp2040_left_arm.uf2')
+
+
+def test_cargo_build_fails_before_cargo_when_elf2uf2_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+):
+    """Regression: bare elf2uf2-rs on PATH used to fail mid-board with Errno 2."""
+    source = tmp_path / 'lucy_embedded_firmware'
+    (source / 'firmwares' / 'rp2040').mkdir(parents=True)
+    (source / 'firmwares' / 'rp2040' / 'Cargo.toml').write_text('', encoding='utf-8')
+    ran: list[list[str]] = []
+
+    monkeypatch.setattr(
+        pipeline_build,
+        '_run_command',
+        lambda **kwargs: ran.append(kwargs['cmd']),
+    )
+    monkeypatch.setattr(pipeline_build, 'firmware_tool_env', lambda base=None: {})
+    monkeypatch.setattr(
+        pipeline_build,
+        'resolve_firmware_tool',
+        lambda name, env=None: (_ for _ in ()).throw(
+            pipeline_build.FirmwareToolchainError(
+                'elf2uf2-rs not found — run: pixi run firmware-setup'
+            )
+        ),
+    )
+    data = {
+        'firmware': {'source_dir': 'lucy_embedded_firmware', 'build_dir': 'build'},
+        'boards': {
+            'rp2040_left_arm': {
+                'firmware_target': 'pico_left_arm',
+                'board_class': 'internal_servo_only',
+            },
+        },
+        'actuators': [],
+    }
+    errors: list[str] = []
+    with pytest.raises(pipeline_build.FirmwareToolchainError, match='firmware-setup'):
+        pipeline_build.run_build_phase(
+            data=data,
+            selected_boards=None,
+            workspace_src=tmp_path,
+            timeout_seconds=10,
+            feedback=lambda **_kwargs: None,
+            log_error=lambda msg: errors.append(msg),
+        )
+    assert ran == []
+    assert errors and 'firmware-setup' in errors[0]
