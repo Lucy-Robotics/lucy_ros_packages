@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import shutil
+import xml.etree.ElementTree as ET
 
 from lucy_config_generator.schema import BOARD_CLASS_I2C_PWM_ONLY
 from lucy_config_generator.schema import derive_ros2_node_name
@@ -25,6 +26,12 @@ def mega_bridges(hardware_yaml: Path) -> list[tuple[str, str]]:
         if board.get('board_class') == BOARD_CLASS_I2C_PWM_ONLY and serial:
             out.append((derive_ros2_node_name(board_id), serial))
     return out
+
+
+def ros2_control_nodes(urdf_xml: str) -> set[str]:
+    """``node_name`` of every ros2_control hardware block in the expanded URDF."""
+    params = ET.fromstring(urdf_xml).iterfind('ros2_control/hardware/param[@name="node_name"]')
+    return {param.text.strip() for param in params if param.text}
 
 
 def resolve_bridge_binary(start: Path) -> Path | None:

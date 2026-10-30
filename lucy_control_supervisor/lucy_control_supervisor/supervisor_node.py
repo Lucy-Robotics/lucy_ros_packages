@@ -37,6 +37,7 @@ from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
 from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
 from lucy_control_supervisor.mcu_bridges import mega_bridges
 from lucy_control_supervisor.mcu_bridges import resolve_bridge_binary
+from lucy_control_supervisor.mcu_bridges import ros2_control_nodes
 
 _WINDOWS_EXEC_SUFFIXES = ('.exe', '.bat', '.cmd')
 _PR_SET_PDEATHSIG = 1
@@ -384,7 +385,7 @@ class ControlSupervisorNode(Node):
                 f'{self.READY_TIMEOUT_S:.0f}s; spawners may block on the lock'
             )
 
-    def _start_mcu_bridges(self, cfg: _StackConfig) -> None:
+    def _start_mcu_bridges(self, cfg: _StackConfig, urdf_xml: str) -> None:
         """Start one bridge per Mega board of the active YAML (restarted with the stack).
 
         Being children of this node, they follow every RELOAD: a new serial_id or board
@@ -392,7 +393,8 @@ class ControlSupervisorNode(Node):
         shared memory and board, and lets go of the port while that board is flashed.
         """
         hardware_yaml = cfg.controllers_yaml.parent / 'hardware' / 'active.yaml'
-        bridges = mega_bridges(hardware_yaml)
+        nodes = ros2_control_nodes(urdf_xml)
+        bridges = [b for b in mega_bridges(hardware_yaml) if b[0] in nodes]
         if not bridges:
             return
         binary = resolve_bridge_binary(cfg.controllers_yaml.parent)
@@ -524,7 +526,7 @@ class ControlSupervisorNode(Node):
                 if not cfg.use_gazebo_sim:
                     self._start_cm(cfg)
                     if not cfg.use_mock_hardware:
-                        self._start_mcu_bridges(cfg)
+                        self._start_mcu_bridges(cfg, urdf_xml)
                     self._spawn_controllers(cfg)
 
             note = ''
