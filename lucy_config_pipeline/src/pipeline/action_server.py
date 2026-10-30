@@ -267,7 +267,7 @@ class PipelineActionServer(Node):
                 )
                 built_ok = set(plan_boards)
             elif not goal.dry_run and not goal.simulation_only:
-                build_failed_boards = run_build_phase(
+                build_failed_boards, built_ok = run_build_phase(
                     data=data,
                     selected_boards=boards,
                     workspace_src=self._paths.workspace_src,
@@ -275,7 +275,6 @@ class PipelineActionServer(Node):
                     feedback=lambda **kwargs: self._feedback(goal_handle, **kwargs),
                     log_error=lambda msg: self.get_logger().error(msg),
                 )
-                built_ok = {b for b in plan_boards if b not in set(build_failed_boards)}
             else:
                 built_ok = {b for b in plan_boards if b not in set(build_failed_boards)}
 
@@ -289,7 +288,13 @@ class PipelineActionServer(Node):
                 goal_handle.abort()
                 return result
 
-            if not goal.dry_run and plan_set and not built_ok and not goal.simulation_only:
+            if (
+                not goal.dry_run
+                and plan_set
+                and not built_ok
+                and build_failed_boards
+                and not goal.simulation_only
+            ):
                 result.errors.extend(
                     format_error_lines(
                         [f"build failed for boards: {', '.join(sorted(build_failed_boards))}"]
@@ -386,5 +391,6 @@ class PipelineActionServer(Node):
             return
         fw_cfg_dir = (self._paths.workspace_src / firmware_src_dir / 'config').resolve()
         fw_cfg_dir.mkdir(parents=True, exist_ok=True)
-        for cfile in out_dir.glob('config_*.c'):
-            shutil.copy2(cfile, fw_cfg_dir / cfile.name)
+        for pattern in ('config_*.c', 'config_*.yaml'):
+            for cfile in out_dir.glob(pattern):
+                shutil.copy2(cfile, fw_cfg_dir / cfile.name)

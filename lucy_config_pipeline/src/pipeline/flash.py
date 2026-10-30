@@ -64,7 +64,9 @@ def run_flash_phase(
             )
             continue
 
-        uf2 = paths.build_dir / f'{target}.uf2'
+        uf2 = paths.build_dir / f'{board}.uf2'
+        if not uf2.is_file():
+            uf2 = paths.build_dir / f'{target}.uf2'
         if not uf2.is_file():
             msg = f'missing UF2 for flash: {uf2}'
             log_error(f'Flash failed for {board}: {msg}')
@@ -111,7 +113,15 @@ def run_flash_phase(
                     f'USB serial did not become ready within {usb_wait_seconds}s '
                     f'(board {board})'
                 )
-            if node is not None and uptime_wait_seconds > 0:
+            # USB-CDC RP2040 images do not publish micro-ROS uptime topics.
+            cargo_firmware = (
+                paths.source_dir / 'firmwares' / 'rp2040' / 'Cargo.toml'
+            ).is_file()
+            if (
+                not cargo_firmware
+                and node is not None
+                and uptime_wait_seconds > 0
+            ):
                 topic = _uptime_topic(boards_entry)
                 feedback(
                     phase='flash',
