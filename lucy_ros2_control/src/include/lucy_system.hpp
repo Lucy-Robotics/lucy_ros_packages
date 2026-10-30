@@ -102,7 +102,6 @@ private:
   rclcpp::Node::SharedPtr node_;
 
   std::string node_name_;
-  /// Mock mode (publish_actuators=false): no firmware fills SHM encoders; loop commands back.
   bool loopback_encoders_{false};
 
   // Objects for logging
