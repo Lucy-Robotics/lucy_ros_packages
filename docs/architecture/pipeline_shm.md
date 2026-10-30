@@ -29,13 +29,17 @@ flowchart LR
 
 ## Generator outputs
 
-| `board_class` | Firmware crate |
-|---------------|----------------|
-| `internal_servo_only` | `firmwares/rp2040_servo2040` |
-| `internal_servo_i2c_pwm` | `firmwares/rp2040_servo2040` |
-| `bus_servo_only` | `firmwares/rp2040_servo2040` (`HAS_BUS` → UART0 Feetech) |
+GENERATE writes, per selected board, `config_<board_id>.yaml` into `lucy_embedded_firmware`. That spec is the only firmware input. Plugs fill a `pwm` table (`ServoN`) and an `i2c_pwm` table (`I2C0:PCA9685:<address>:<channel>`). `board_class` is a stored label, not a template switch. A bank is built only when its table is non-empty.
 
-All Servo2040 profiles share one board crate; banks gate on YAML/`GENERATED_HAS_*`.
+| Profile | Firmware crate |
+|---------|----------------|
+| Header PWM and PCA9685 on one Servo2040 | `firmwares/rp2040` |
+| SO-ARM101 host Feetech | `firmwares/linux` |
+| `bus_servo_only` UART Feetech | documented, not the header-PWM image |
+
+## One interface and one bridge per board
+
+Each board with a non-empty `serial_id` gets one `LucySystemHardware` (`node_name` is the suffix after `rp2040_`) and one `mcu_bridge <node_name> <serial_id>`. InMoov has three because the YAML has three such boards. Empty `serial_id` skips flash and skips the bridge. The bridge forwards the `f64` table and does not read plugs.
 
 ## End-to-end path (f64 SHM)
 
@@ -49,8 +53,8 @@ flowchart TB
   HI["LucySystemHardware"]
   SHM["POSIX_SHM_f64_JointTable"]
   LinuxFW["firmwares_linux"]
-  Bridge["host_to_MCU_bridge"]
-  FW["rp2040_servo2040"]
+  Bridge["mcu_bridge_per_board"]
+  FW["firmwares_rp2040"]
   JS["joint_state_broadcaster"]
 
   Clients -->|"trajectory"| CM
@@ -81,7 +85,7 @@ ActuatorSharedState / JointTable  (alignas 64; N = MAX_ACTUATORS or const N)
 | Segment | `/{node_name}` (sanitised HI `node_name`) |
 | Angle encoding | **`f64` radians** in SHM; YAML / HI joint space also radians |
 | Host Feetech | `firmwares/linux` mmaps SHM → USB serial STS (SO-ARM101) |
-| Servo2040 | Host↔MCU bridge carries commands; **UF2 never mmaps POSIX SHM** |
+| Servo2040 | One `mcu_bridge` per board carries commands; **UF2 never mmaps POSIX SHM** |
 | ABI | Nested Rust `JointTable<N>` vs flat C++ `ActuatorSharedState` — agree `N` |
 
 ## Related
