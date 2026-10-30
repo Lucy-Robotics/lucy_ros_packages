@@ -48,6 +48,7 @@ from launch.actions import GroupAction
 from launch.actions import IncludeLaunchDescription
 from launch.actions import LogInfo
 from launch.actions import OpaqueFunction
+from launch.actions import SetEnvironmentVariable
 from launch.conditions import IfCondition
 from launch.conditions import UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -533,6 +534,7 @@ def generate_launch_description():
             controllers_yaml_arg,
             validate,
             resolve_robot_paths,
+            SetEnvironmentVariable('LUCY_CONFIG_DIR', LaunchConfiguration('config_dir')),
             LogInfo(msg='========================================'),
             LogInfo(msg='Starting lucy_bringup lucy.launch.py'),
             LogInfo(msg='========================================'),

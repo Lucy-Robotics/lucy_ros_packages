@@ -392,7 +392,8 @@ class ControlSupervisorNode(Node):
         layout applies on Activate, not only on a full relaunch. Each bridge waits for its
         shared memory and board, and lets go of the port while that board is flashed.
         """
-        hardware_yaml = cfg.controllers_yaml.parent / 'hardware' / 'active.yaml'
+        config_dir = os.environ.get('LUCY_CONFIG_DIR') or cfg.controllers_yaml.parent / 'hardware'
+        hardware_yaml = Path(config_dir) / 'active.yaml'
         nodes = ros2_control_nodes(urdf_xml)
         bridges = [b for b in mega_bridges(hardware_yaml) if b[0] in nodes]
         if not bridges:
