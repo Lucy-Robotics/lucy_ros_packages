@@ -14,8 +14,8 @@ import xml.etree.ElementTree as ET
 
 import jinja2
 
+from lucy_config_generator.firmware_spec import render_firmware_spec
 from lucy_config_generator.schema import BOARD_CLASS_BUS_SERVO_ONLY
-from lucy_config_generator.schema import BOARD_CLASS_INTERNAL_I2C_PWM
 from lucy_config_generator.schema import BOARD_CLASS_INTERNAL_ONLY
 from lucy_config_generator.schema import derive_ros2_hardware_name
 from lucy_config_generator.schema import derive_ros2_node_name
@@ -156,20 +156,6 @@ def _actuators_for_board(
 
 def _sensors_for_board(data: dict[str, Any], board_id: str) -> list[dict[str, Any]]:
     out = [s for s in data['sensors'] if s['board'] == board_id]
-    out.sort(key=lambda x: int(x['virtual_pin']))
-    return out
-
-
-def _sensors_for_board_firmware(
-    data: dict[str, Any], board_id: str
-) -> list[dict[str, Any]]:
-    """Pressure rows only if their associated actuator is enabled (matches firmware C scope)."""
-    enabled_ids = {a['id'] for a in data['actuators'] if a.get('enabled', True)}
-    out = [
-        s
-        for s in data['sensors']
-        if s['board'] == board_id and s['associated_actuator'] in enabled_ids
-    ]
     out.sort(key=lambda x: int(x['virtual_pin']))
     return out
 
@@ -324,14 +310,6 @@ def _mimic_joint_names(urdf_xml: str) -> set[str]:
     }
 
 
-def _firmware_template_for_board_class(board_class: str) -> str:
-    if board_class == BOARD_CLASS_INTERNAL_I2C_PWM:
-        return 'config_internal_i2c_board.c.j2'
-    if board_class == BOARD_CLASS_INTERNAL_ONLY:
-        return 'config_internal_only_board.c.j2'
-    raise ValueError(f'unknown board_class for firmware template: {board_class!r}')
-
-
 BUS_SERVO_BLOCK = 3
 
 
@@ -363,24 +341,6 @@ def render_firmware_rs(
         bus_servo_block=BUS_SERVO_BLOCK,
         bus_servo_base=0,
         bus_servo_slots=slots,
-    )
-
-
-def render_firmware_c(
-    data: dict[str, Any],
-    board_id: str,
-    env: jinja2.Environment | None = None,
-) -> str:
-    env = env or _jinja_env()
-    actuators = _actuators_for_board(data, board_id, enabled_only=True)
-    sensors = _sensors_for_board_firmware(data, board_id)
-    board_class = data['boards'][board_id]['board_class']
-    tpl_name = _firmware_template_for_board_class(board_class)
-    tpl = env.get_template(tpl_name)
-    return tpl.render(
-        board_id=board_id,
-        actuators=actuators,
-        sensors=sensors,
     )
 
 
@@ -509,9 +469,8 @@ def generate(
                 out = output_dir / f'config_{bid}.rs'
                 out.write_text(render_firmware_rs(data, bid, env), encoding='utf-8')
                 continue
-            text = render_firmware_c(data, bid, env)
-            out = output_dir / f'config_{bid}.c'
-            out.write_text(text, encoding='utf-8')
+            out = output_dir / f'config_{bid}.yaml'
+            out.write_text(render_firmware_spec(data, bid), encoding='utf-8')
 
     if targets & {'ros2_control', 'all'}:
         xacro_out = output_dir / names['ros2_control_xacro']
@@ -565,7 +524,7 @@ def generate_from_xacro_string_for_tests(
             if data['boards'][bid]['board_class'] == BOARD_CLASS_BUS_SERVO_ONLY:
                 out[f'config_{bid}.rs'] = render_firmware_rs(data, bid, env)
                 continue
-            out[f'config_{bid}.c'] = render_firmware_c(data, bid, env)
+            out[f'config_{bid}.yaml'] = render_firmware_spec(data, bid)
     if targets & {'ros2_control', 'all'}:
         out[names['ros2_control_xacro']] = render_ros2_control_xacro(
             data, board_ids, urdf_limits, env
