@@ -81,6 +81,32 @@ class TestClientRegistryNode:
         res = node._on_get_client_count(GetInt.Request(), GetInt.Response())
         assert res.value == 1
 
+    def test_goodbye_drops_the_client_and_its_control(self, node):
+        from lucy_msgs.srv import ClientControl
+        from lucy_msgs.srv import GetInt
+
+        node._on_heartbeat(String(data='cli_1'))
+        node._on_control(
+            ClientControl.Request(client_id='cp_2', acquire=True), ClientControl.Response()
+        )
+        node._on_goodbye(String(data='cp_2'))
+
+        res = node._on_get_client_count(GetInt.Request(), GetInt.Response())
+        assert res.value == 1
+        assert node._active_client == ''
+
+    def test_goodbye_from_a_non_controller_keeps_control(self, node):
+        from lucy_msgs.srv import ClientControl
+
+        node._on_heartbeat(String(data='cp_2'))
+        node._on_control(
+            ClientControl.Request(client_id='cli_1', acquire=True), ClientControl.Response()
+        )
+        node._on_goodbye(String(data='cp_2'))
+        node._on_goodbye(String(data='unknown'))
+
+        assert node._active_client == 'cli_1'
+
     def test_tick_prunes_stale_clients(self, node):
         from lucy_msgs.srv import GetInt
 
