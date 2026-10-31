@@ -20,6 +20,7 @@ A good client ID is one that is both unique and descriptive, for example: `my_ap
 
 **Registering presence (heartbeat).** Pulse your client ID on `/lucy/client_heartbeat` (`std_msgs/msg/String`, volatile) roughly once per second.
 The registry counts you as connected while your heartbeats keep arriving and prunes you automatically about ten seconds after they stop (ten missed beats at the 1 Hz cadence) — so a crash or a closed tab is handled for free, with no explicit "disconnect" step.
+To leave at once instead, publish your client ID on `/lucy/client_goodbye` (`std_msgs/msg/String`, volatile): the registry drops you and releases control if you held it.
 
 ```python
 # A unique identifier for this specific client instance.
@@ -185,6 +186,7 @@ def get_initial_client_count(self) -> int | None:
 | Endpoint | Type | Message/Service Type | QoS Durability | Purpose |
 |---|---|---|---|---|
 | `/lucy/client_heartbeat` | Topic | `std_msgs/msg/String` | `VOLATILE` | Pulse your client ID ~1 Hz to register as connected. |
+| `/lucy/client_goodbye` | Topic | `std_msgs/msg/String` | `VOLATILE` | Publish your client ID once to leave immediately. |
 | `/lucy/active_client` | Topic | `std_msgs/msg/String` | `TRANSIENT_LOCAL` | Monitor which client currently holds control. |
 | `/lucy/client_count` | Topic | `std_msgs/msg/Int32` | `TRANSIENT_LOCAL` | Get live updates on the number of connected clients. |
 | `/lucy/control` | Service | `lucy_msgs/srv/ClientControl` | N/A | Take or release control (`acquire` flag). |
