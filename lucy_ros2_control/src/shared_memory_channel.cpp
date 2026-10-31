@@ -20,6 +20,7 @@
 #include <thread>
 
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 namespace
@@ -50,7 +51,10 @@ std::optional<SharedMemoryChannel> SharedMemoryChannel::create(
     return std::nullopt;
   }
 
-  if (ftruncate(fd, shm_size) == -1) {
+  struct stat st {};
+  if (fstat(fd, &st) == -1 ||
+    (static_cast<std::size_t>(st.st_size) < shm_size && ftruncate(fd, shm_size) == -1))
+  {
     close(fd);
     shm_unlink(shm_name.c_str());
     return std::nullopt;
