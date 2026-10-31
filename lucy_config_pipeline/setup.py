@@ -14,15 +14,11 @@ setup(
     ],
     install_requires=["setuptools", "PyYAML", "Jinja2"],
     zip_safe=True,
-    maintainer="Lucy Robotics Team",
-    maintainer_email="contact@lucy-robotics.com",
-    description="Config store services + pipeline action server for Lucy hardware YAML.",
-    license="GPL-3.0",
-    extras_require={
-        "test": [
-            "pytest",
-        ],
-    },
+    extras_require={'test': ['pytest']},
+    maintainer='Lucy Robotics Team',
+    maintainer_email='contact@lucy-robotics.com',
+    description='Config store services + pipeline action server for Lucy hardware YAML.',
+    license='GPL-3.0',
     entry_points={
         "console_scripts": [
             "config_pipeline_node = src.main:main",

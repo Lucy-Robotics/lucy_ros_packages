@@ -14,15 +14,11 @@ setup(
     ],
     install_requires=["setuptools", "PyYAML"],
     zip_safe=True,
-    maintainer="Lucy Robotics Team",
-    maintainer_email="contact@lucy-robotics.com",
-    description="Restart RSP + ros2_control_node + spawners after config pipeline reload.",
-    license="GPL-3.0",
-    extras_require={
-        "test": [
-            "pytest",
-        ],
-    },
+    extras_require={'test': ['pytest']},
+    maintainer='Lucy Robotics Team',
+    maintainer_email='contact@lucy-robotics.com',
+    description='Restart RSP + ros2_control_node + spawners after config pipeline reload.',
+    license='GPL-3.0',
     entry_points={
         "console_scripts": [
             "control_supervisor_node = lucy_control_supervisor.supervisor_node:main",
