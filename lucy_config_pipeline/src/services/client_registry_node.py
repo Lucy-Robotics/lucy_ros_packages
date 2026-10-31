@@ -23,6 +23,7 @@ from lucy_msgs.srv import ClientControl
 from lucy_msgs.srv import GetInt
 
 HEARTBEAT_TOPIC = '/lucy/client_heartbeat'
+GOODBYE_TOPIC = '/lucy/client_goodbye'
 CLIENT_COUNT_TOPIC = '/lucy/client_count'
 ACTIVE_CLIENT_TOPIC = '/lucy/active_client'
 GET_CLIENT_COUNT_SERVICE = '/lucy/get_client_count'
@@ -63,6 +64,7 @@ class ClientRegistryNode(Node):
         self._active_pub = self.create_publisher(String, ACTIVE_CLIENT_TOPIC, _LATCHED_QOS)
 
         self.create_subscription(String, HEARTBEAT_TOPIC, self._on_heartbeat, _HEARTBEAT_QOS)
+        self.create_subscription(String, GOODBYE_TOPIC, self._on_goodbye, _HEARTBEAT_QOS)
         self.create_service(GetInt, GET_CLIENT_COUNT_SERVICE, self._on_get_client_count)
         self.create_service(ClientControl, CONTROL_SERVICE, self._on_control)
 
@@ -83,6 +85,21 @@ class ClientRegistryNode(Node):
         if is_new:
             self.get_logger().info(f'Client registered: {client_id} ({count} connected)')
             self._publish_count()
+
+    def _on_goodbye(self, msg: String) -> None:
+        client_id = msg.data
+        with self._state_lock:
+            if self._last_seen.pop(client_id, None) is None:
+                return
+            controller_lost = self._active_client == client_id
+            if controller_lost:
+                self._active_client = ''
+            count = len(self._last_seen)
+        self.get_logger().info(f'Client left: {client_id} ({count} connected)')
+        if controller_lost:
+            self.get_logger().info('Active controller left; control released')
+        self._publish_count()
+        self._publish_active()
 
     def _on_tick(self) -> None:
         deadline = time.monotonic() - CLIENT_TTL_S
