@@ -29,7 +29,7 @@ GET_CLIENT_COUNT_SERVICE = '/lucy/get_client_count'
 CONTROL_SERVICE = '/lucy/control'
 
 TICK_PERIOD_S = 1.0
-CLIENT_TTL_S = 3.0  # ~3 missed beats at the 1 Hz client cadence
+CLIENT_TTL_S = 10.0  # ~10 missed beats at the 1 Hz client cadence
 
 _LATCHED_QOS = QoSProfile(
     history=QoSHistoryPolicy.KEEP_LAST,
