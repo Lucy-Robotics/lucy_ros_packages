@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
@@ -92,40 +93,50 @@ BOARD_CLASS_INTERNAL_I2C_PWM = 'internal_servo_i2c_pwm'
 # Smart bus servos daisy-chained on one UART, addressed by id rather than each
 # wired to a pin. Firmware config for these is emitted as Rust, not C.
 BOARD_CLASS_BUS_SERVO_ONLY = 'bus_servo_only'
+# Arduino Mega driving the outputs of its chained PCA9685s (`pca_addresses`). The
+# generator emits its Rust board tables; the pipeline builds them with cargo and
+# flashes the Mega with avrdude.
+BOARD_CLASS_I2C_PWM_ONLY = 'i2c_pwm_only'
 BOARD_CLASSES = frozenset(
     {
         BOARD_CLASS_INTERNAL_ONLY,
         BOARD_CLASS_INTERNAL_I2C_PWM,
         BOARD_CLASS_BUS_SERVO_ONLY,
+        BOARD_CLASS_I2C_PWM_ONLY,
     }
 )
 
-_BOARD_ID_RE = re.compile(r'^rp2040_[a-z][a-z0-9_]*$')
+# Servos straight on Arduino Mega pins (Nervo ribbons): D0/D1 are the host serial link and
+# D20/D21 the I2C bus; A0..A15 are D54..D69. Timer5 pulses them in turn within a 20 ms frame.
+MEGA_SERVO_PINS = frozenset(range(2, 70)) - {20, 21}
+MEGA_MAX_SERVO_PINS = 8
+
+_BOARD_ID_RE = re.compile(r'^(rp2040|mega)_[a-z][a-z0-9_]*$')
 _TOPIC_RE = re.compile(r'^[a-z][a-z0-9_/]*$')
 _SERIAL_ID_RE = re.compile(r'^[A-Za-z0-9]*$')
 
 
 def ros2_hardware_suffix(board_id: str) -> str:
-    """Return the snake_case segment after the ``rp2040_`` board id prefix."""
+    """Return the snake_case segment after the ``rp2040_`` / ``mega_`` board id prefix."""
     if not _BOARD_ID_RE.fullmatch(board_id):
         raise ValueError(
             f'board id {board_id!r} must match {_BOARD_ID_RE.pattern} '
-            '(rp2040_ prefix + snake_case suffix)'
+            '(rp2040_ or mega_ prefix + snake_case suffix)'
         )
-    return board_id[7:]  # len("rp2040_") == 7
+    return board_id.split('_', 1)[1]
 
 
 def derive_ros2_hardware_name(board_id: str) -> str:
     """
     Return ``<ros2_control name="…">`` for *board_id*.
 
-    Pattern: ``LucyHardware`` + PascalCase of the segment after ``rp2040_``.
+    Pattern: ``LucyHardware`` + PascalCase of the segment after the board prefix.
     Example: ``rp2040_left_arm`` → ``LucyHardwareLeftArm``.
     """
     suffix = ros2_hardware_suffix(board_id)
     parts = [p for p in suffix.split('_') if p]
     if not parts:
-        raise ValueError(f'board id {board_id!r}: empty suffix after rp2040_')
+        raise ValueError(f'board id {board_id!r}: empty suffix after the board prefix')
     inner = ''.join(p[:1].upper() + p[1:].lower() if p else '' for p in parts)
     return 'LucyHardware' + inner
 
@@ -134,7 +145,7 @@ def derive_ros2_node_name(board_id: str) -> str:
     """
     Return the ``node_name`` hardware parameter for *board_id*.
 
-    Pattern: the bare snake_case suffix after ``rp2040_``.
+    Pattern: the bare snake_case suffix after ``rp2040_`` / ``mega_``.
 
     ``LucySystemHardware`` names its POSIX shm/sem objects after this, and Darwin
     caps those at 31 chars - 14 once the leading '/' and ``.lucy_reg_header``
@@ -239,6 +250,8 @@ def _validate_boards(boards: dict[str, Any], errors: list[str]) -> None:
             slots = 0
         if slots < 1:
             errors.append(f'board {board_id}: internal_servo_slots must be >= 1')
+        if board_class == BOARD_CLASS_I2C_PWM_ONLY:
+            _validate_pca_addresses(board_id, board, slots, errors)
 
         for key in ('topic_actuators', 'topic_sensors'):
             topic = board[key]
@@ -259,6 +272,80 @@ def _validate_boards(boards: dict[str, Any], errors: list[str]) -> None:
             errors.append(
                 f'board {board_id}: topic_actuators must not have surrounding whitespace'
             )
+
+
+def _validate_pca_addresses(
+    board_id: str, board: dict[str, Any], slots: int, errors: list[str]
+) -> None:
+    """
+    Check a Mega board's chained PCA9685s and direct servo pins.
+
+    physical_pin 1..16*N are the PCA9685 outputs, then N*16+1.. the ``mega_pins`` in order.
+    """
+    addresses = board.get('pca_addresses')
+    if not isinstance(addresses, list) or not addresses:
+        errors.append(
+            f'board {board_id}: pca_addresses must be a non-empty list of PCA9685 '
+            'I2C addresses (i2c_pwm_only)'
+        )
+        return
+    if any(isinstance(a, bool) or not isinstance(a, int) or not 0x40 <= a <= 0x7F
+           for a in addresses):
+        errors.append(f'board {board_id}: pca_addresses must be integers in 0x40..0x7F')
+    elif len(set(addresses)) != len(addresses):
+        errors.append(f'board {board_id}: duplicate pca_addresses')
+    pins = board.get('mega_pins', [])
+    if not isinstance(pins, list) or any(
+        isinstance(p, bool) or not isinstance(p, int) or p not in MEGA_SERVO_PINS for p in pins
+    ):
+        errors.append(
+            f'board {board_id}: mega_pins must be Mega digital pins 2..69 '
+            '(not D20/D21, the I2C bus to the PCA9685s)'
+        )
+        pins = []
+    elif len(set(pins)) != len(pins):
+        errors.append(f'board {board_id}: duplicate mega_pins')
+    elif len(pins) > MEGA_MAX_SERVO_PINS:
+        errors.append(
+            f'board {board_id}: at most {MEGA_MAX_SERVO_PINS} mega_pins '
+            '(their pulses share one 20 ms frame)'
+        )
+    outputs = 16 * len(addresses) + len(pins)
+    if slots > outputs:
+        errors.append(
+            f'board {board_id}: internal_servo_slots {slots} exceeds the {outputs} outputs of '
+            f'{len(addresses)} PCA9685(s) and {len(pins)} mega_pins'
+        )
+
+
+def _validate_pca_board_actuators(
+    by_board: dict[str, list[dict[str, Any]]],
+    boards: dict[str, Any],
+    errors: list[str],
+) -> None:
+    """Mega PWM maps 0..180 deg of servo travel; two driven servos cannot share an output."""
+    for board_id, actuators in by_board.items():
+        if boards.get(board_id, {}).get('board_class') != BOARD_CLASS_I2C_PWM_ONLY:
+            continue
+        driven: dict[int, str] = {}
+        for actuator in actuators:
+            aid = _label(actuator)
+            try:
+                lo, hi = float(actuator['limit_min']), float(actuator['limit_max'])
+            except Exception:
+                continue  # reported by _validate_actuator_ranges
+            if lo < 0.0 or hi > math.pi + 1e-4:
+                errors.append(
+                    f'actuator {aid}: limits [{lo}, {hi}] must stay within 0..pi '
+                    '(0..180 deg servo travel on i2c_pwm_only boards)'
+                )
+            if actuator['enabled']:
+                pin = int(actuator['physical_pin'])
+                if pin in driven:
+                    errors.append(
+                        f'actuator {aid}: physical_pin {pin} already driven by {driven[pin]}'
+                    )
+                driven[pin] = aid
 
 
 def _validate_actuator(
@@ -551,6 +638,7 @@ def validate_hardware_yaml(data: dict[str, Any]) -> None:
             actuator_item_errors_by_board,
         )
     _validate_actuator_ranges(actuators_by_board, actuator_item_errors_by_board, errors)
+    _validate_pca_board_actuators(actuators_by_board, boards, errors)
 
     sensors: list[dict[str, Any]] = data['sensors']
     if not isinstance(sensors, list):

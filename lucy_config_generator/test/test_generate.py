@@ -40,6 +40,91 @@ def test_ros2_names_derived_from_board_id():
     assert derive_ros2_node_name('rp2040_left_arm') == 'left_arm'
     assert derive_ros2_hardware_name('rp2040_torso_head') == 'LucyHardwareTorsoHead'
     assert derive_ros2_node_name('rp2040_torso_head') == 'torso_head'
+    assert derive_ros2_hardware_name('mega_torso_head') == 'LucyHardwareTorsoHead'
+    assert derive_ros2_node_name('mega_arms') == 'arms'
+
+
+def _mega_mapping() -> dict:
+    """Fixture with rp2040_left_arm turned into a Mega on two chained PCA9685s."""
+    data = _load_mapping()
+    data['boards']['rp2040_left_arm'].update(
+        board_class='i2c_pwm_only', pca_addresses=[0x40, 0x41]
+    )
+    for a in data['actuators']:
+        if a['board'] == 'rp2040_left_arm':
+            a['limit_max'] = 3.14159
+            a['default'] = 1.5708
+    return data
+
+
+def test_mega_board_gets_rust_board_tables():
+    out = generate_from_xacro_string_for_tests(
+        _mega_mapping(), _fixture_urdf_xml(), {'firmware'}, None
+    )
+    assert 'config_rp2040_left_arm.c' not in out
+    assert 'config_rp2040_right_arm.c' in out
+    rs = out['config_rp2040_left_arm.rs']
+    assert 'PCA_ADDRESSES: [u8; 2] = [0x40, 0x41];' in rs
+    # Both slots are clamped, only the enabled one (left_a, physical_pin 10) is driven.
+    assert 'JOINTS_CONFIG: [CommandConfig; 2]' in rs
+    assert 'limit_max: 3.14159 }, // left_disabled' in rs
+    assert 'DRIVEN: [(usize, u8); 1] = [\n    (0, 9), // left_a\n];' in rs
+
+
+def test_mega_pins_come_after_the_pca_outputs():
+    data = _mega_mapping()
+    data['boards']['rp2040_left_arm'].update(mega_pins=[8, 9, 54], internal_servo_slots=35)
+    left = [a for a in data['actuators'] if a['board'] == 'rp2040_left_arm']
+    left[0]['physical_pin'] = 34  # mega_pins[1] = D9, output 33
+    rs = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
+        'config_rp2040_left_arm.rs'
+    ]
+    assert 'MEGA_PINS: [u8; 3] = [8, 9, 54];' in rs
+    assert '$pins.d9.into_output().downgrade()' in rs
+    assert '$pins.a0.into_output().downgrade()' in rs  # D54 is A0
+    assert '(0, 33), // left_a' in rs
+
+
+@pytest.mark.parametrize('pins, match', [
+    ([20], 'not D20/D21'),
+    ([8, 8], 'duplicate mega_pins'),
+    (list(range(2, 11)), 'at most 8 mega_pins'),
+])
+def test_schema_rejects_bad_mega_pins(pins, match):
+    data = _mega_mapping()
+    data['boards']['rp2040_left_arm']['mega_pins'] = pins
+    with pytest.raises(ValueError, match=match):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_mega_board_without_pca_addresses():
+    data = _mega_mapping()
+    del data['boards']['rp2040_left_arm']['pca_addresses']
+    with pytest.raises(ValueError, match='pca_addresses must be a non-empty list'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_mega_slots_beyond_its_pcas():
+    data = _mega_mapping()
+    data['boards']['rp2040_left_arm']['pca_addresses'] = [0x40]
+    with pytest.raises(ValueError, match='exceeds the 16 outputs'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_mega_limits_beyond_180_deg():
+    data = _mega_mapping()
+    data['actuators'][0]['limit_max'] = 4.0
+    with pytest.raises(ValueError, match='must stay within 0..pi'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_two_driven_servos_on_one_mega_output():
+    data = _mega_mapping()
+    left = [a for a in data['actuators'] if a['board'] == 'rp2040_left_arm']
+    left[1]['enabled'] = True
+    left[1]['physical_pin'] = left[0]['physical_pin']
+    with pytest.raises(ValueError, match='already driven by'):
+        validate_hardware_yaml(data)
 
 
 def test_schema_rejects_bad_version():

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from lucy_config_generator.schema import BOARD_CLASS_I2C_PWM_ONLY
+
 from .models import FirmwarePaths
 from ..config_store import ConfigStore
 
@@ -42,6 +44,20 @@ def resolve_firmware_paths(data: dict, workspace_src: Path) -> FirmwarePaths:
         build_dir = (source_dir / build_dir).resolve()
 
     return FirmwarePaths(source_dir=source_dir, build_dir=build_dir)
+
+
+def is_mega_board(board: dict) -> bool:
+    """Tell Arduino Megas (i2c_pwm_only), built with cargo and flashed with avrdude."""
+    return board.get('board_class') == BOARD_CLASS_I2C_PWM_ONLY
+
+
+def mega_crate_dir(paths: FirmwarePaths) -> Path:
+    return paths.source_dir / 'firmwares' / 'arduino_mega'
+
+
+def mega_artifact_dir(paths: FirmwarePaths) -> Path:
+    """Return where generated board tables and built ELFs go (in the gitignored target/)."""
+    return mega_crate_dir(paths) / 'target' / 'lucy'
 
 
 def board_build_plan(data: dict, selected_boards: set[str] | None) -> list[tuple[str, str]]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import subprocess
@@ -9,6 +10,8 @@ import time
 from typing import TYPE_CHECKING
 
 from .selection import board_build_plan
+from .selection import is_mega_board
+from .selection import mega_artifact_dir
 from .selection import resolve_firmware_paths
 
 if TYPE_CHECKING:
@@ -40,11 +43,12 @@ def run_flash_phase(
     Returns ``(failed_board_ids, flashed_board_ids)`` in stable board order.
     """
     paths = resolve_firmware_paths(data, workspace_src)
-    if not paths.build_dir.is_dir():
-        raise FileNotFoundError(paths.build_dir)
-
     plan = board_build_plan(data, selected_boards)
     flashable = [(b, t) for b, t in plan if b in boards_built_ok]
+    boards_map = data.get('boards', {})
+    needs_uf2 = any(not is_mega_board(boards_map.get(b, {})) for b, _ in flashable)
+    if needs_uf2 and not paths.build_dir.is_dir():
+        raise FileNotFoundError(paths.build_dir)
     total = max(len(flashable), 1)
 
     failed: list[str] = []
@@ -62,6 +66,27 @@ def run_flash_phase(
                 detail=f'skip flash for {board}: no serial_id',
                 board=board,
             )
+            continue
+
+        if is_mega_board(boards_entry):
+            try:
+                _flash_mega(board, serial, paths, picotool_timeout_seconds, feedback, row)
+                flashed.append(board)
+                feedback(
+                    phase='flash',
+                    progress=min(1.0, row + 0.95 / total),
+                    detail=f'flash completed for {board}',
+                    board=board,
+                )
+            except Exception as exc:
+                failed.append(board)
+                log_error(f'Flash failed for {board}: {exc}')
+                feedback(
+                    phase='flash',
+                    progress=min(1.0, row + 0.9 / total),
+                    detail=f'flash failed for {board}: {exc}',
+                    board=board,
+                )
             continue
 
         uf2 = paths.build_dir / f'{target}.uf2'
@@ -174,6 +199,69 @@ def _wait_uptime_message(node: Node, topic: str, timeout_sec: float) -> bool:
 
     ok, _msg = wait_for_message(Int32, node, topic, time_to_wait=timeout_sec)
     return bool(ok)
+
+
+MEGA_USB_ID = (0x2341, 0x0042)
+
+
+def _flash_mega(
+    board: str,
+    serial: str,
+    paths,
+    timeout_seconds: int,
+    feedback: Callable[..., None],
+    progress: float,
+) -> None:
+    """Flash the board's ELF with avrdude onto the Mega whose USB serial is ``serial``."""
+    elf = mega_artifact_dir(paths) / f'{board}.elf'
+    if not elf.is_file():
+        raise FileNotFoundError(f'missing ELF for flash: {elf}')
+    port = mega_port(serial)
+    feedback(phase='flash', progress=progress, detail=f'avrdude {elf.name} -> {port}', board=board)
+    # Same programmer settings ravedude uses for mega2560 (stk500v2 bootloader at 115200).
+    with mega_flash_lock(serial):
+        _run_command(
+            phase='flash',
+            board=board,
+            cmd=['avrdude', '-p', 'atmega2560', '-c', 'wiring', '-P', port, '-b', '115200',
+                 '-D', '-U', f'flash:w:{elf}:e'],
+            cwd=elf.parent,
+            timeout_seconds=timeout_seconds,
+            feedback=feedback,
+            stream_progress=progress,
+        )
+
+
+@contextmanager
+def mega_flash_lock(serial: str):
+    """
+    Keep this Mega's mcu_bridge off the port while avrdude owns it.
+
+    The bridge closes the port once it sees the lock file and reconnects once it is gone,
+    so it never has to be stopped. It can hold the port for 2 s after opening it (the Mega
+    resets), so wait longer than that before avrdude opens it.
+    """
+    lock = Path(f'/tmp/.lucy_mcu_flashing_{serial}')
+    lock.touch()
+    try:
+        time.sleep(3.0)
+        yield
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def mega_port(serial_id: str) -> str:
+    """Return the serial device of the plugged Arduino Mega with this USB serial number."""
+    from serial.tools import list_ports
+
+    megas = [p for p in list_ports.comports() if (p.vid, p.pid) == MEGA_USB_ID]
+    for p in megas:
+        if p.serial_number == serial_id:
+            return p.device
+    found = ', '.join(f'{p.device}={p.serial_number}' for p in megas) or 'none'
+    raise RuntimeError(
+        f'no Arduino Mega with USB serial {serial_id} plugged in (found: {found})'
+    )
 
 
 def _wait_for_usb_serial(serial_id: str, timeout_seconds: int) -> bool:
