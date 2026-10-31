@@ -154,13 +154,15 @@ def test_mega_bridges_follow_the_active_yaml(tmp_path: Path):
     hw = tmp_path / 'active.yaml'
     hw.write_text(
         'boards:\n'
-        '  mega_left: {board_class: i2c_pwm_only, serial_id: "AAA"}\n'
+        '  mega_left: {board_class: i2c_pwm_only, serial_id: "AAA", pca_addresses: [65, 64]}\n'
         '  mega_right: {board_class: i2c_pwm_only, serial_id: ""}\n'
         '  rp2040_torso_head: {board_class: internal_servo_only, serial_id: "BBB"}\n',
         encoding='utf-8',
     )
-    # Only Mega boards with a serial get a bridge; the RP2040 path is not a Mega bridge.
-    assert mega_bridges(hw) == [('left', 'AAA')]
+    assert mega_bridges(hw) == [
+        ('mega_left', 'left', 'AAA', '0x41,0x40'),
+        ('mega_right', 'right', '', ''),
+    ]
     assert mega_bridges(tmp_path / 'missing.yaml') == []
 
 
@@ -178,3 +180,26 @@ def test_ros2_control_nodes_reads_the_hardware_blocks():
     )
     assert ros2_control_nodes(urdf) == {'left'}
 
+
+def test_pca_warning_tracks_bridge_lines():
+    from lucy_control_supervisor.mcu_bridges import pca_warning
+
+    msg = 'left Mega: PCA9685 0x40 not answering, its servos cannot move'
+    assert pca_warning('left', "PCA9685 0x40 not answering: its servos can't move") == (msg, True)
+    assert pca_warning('left', 'PCA9685 0x40 answering') == (msg, False)
+    assert pca_warning('left', 'Board X connected') is None
+
+
+def test_board_unreachable_tracks_bridge_lines():
+    from lucy_control_supervisor.mcu_bridges import board_unreachable
+
+    assert board_unreachable('Board AAA not found, waiting').startswith('not found')
+    assert board_unreachable('Board AAA cannot be opened (Device or resource busy), waiting') == (
+        'cannot be opened (Device or resource busy)'
+    )
+    assert board_unreachable('Board AAA is being flashed: releasing the port') == 'being flashed'
+    assert board_unreachable('Board AAA not answering').startswith('on USB but not answering')
+    assert board_unreachable('Board AAA stopped answering: reconnecting').startswith('stopped')
+    assert board_unreachable('Board AAA connected') is None
+    assert board_unreachable('Board AAA answering') == ''
+    assert board_unreachable('PCA9685 0x40 answering') is None

@@ -36,7 +36,9 @@ from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
 from lucy_control_supervisor.controllers_spawn import torque_command_values
 from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
 from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
+from lucy_control_supervisor.mcu_bridges import board_unreachable
 from lucy_control_supervisor.mcu_bridges import mega_bridges
+from lucy_control_supervisor.mcu_bridges import pca_warning
 from lucy_control_supervisor.mcu_bridges import resolve_bridge_binary
 from lucy_control_supervisor.mcu_bridges import ros2_control_nodes
 
@@ -108,6 +110,10 @@ class _StackConfig:
 class ControlSupervisorNode(Node):
     RESTART_SERVICE = '/lucy_control/restart'
     GAZEBO_RUNNING_TOPIC = '/lucy/gazebo_running'
+    # Latched JSON list of hardware problems the bridges report (e.g. a PCA9685 not answering).
+    HARDWARE_WARNINGS_TOPIC = '/lucy/hardware_warnings'
+    # Latched JSON {board_id: reason} of the Mega boards their bridge cannot reach.
+    UNREACHABLE_BOARDS_TOPIC = '/lucy/unreachable_boards'
     # Latched by lucy_client_registry. Non-empty means Control Robot is ON.
     ACTIVE_CLIENT_TOPIC = '/lucy/active_client'
     # Latched JSON list of joint names the LCP keeps limp while Control Robot is ON.
@@ -149,6 +155,19 @@ class ControlSupervisorNode(Node):
             Bool, self.GAZEBO_RUNNING_TOPIC, latched_qos
         )
         self._publish_gazebo_running()
+        # bridge name -> its current warnings; pump threads write, hence the lock.
+        self._hardware_warnings: dict[str, set[str]] = {}
+        self._warnings_lock = threading.Lock()
+        self._hardware_warnings_pub = self.create_publisher(
+            String, self.HARDWARE_WARNINGS_TOPIC, latched_qos
+        )
+        # bridge name -> board_id, and board_id -> why it is unreachable; same lock.
+        self._bridge_boards: dict[str, str] = {}
+        self._unreachable: dict[str, str] = {}
+        self._unreachable_pub = self.create_publisher(
+            String, self.UNREACHABLE_BOARDS_TOPIC, latched_qos
+        )
+        self._publish_hardware_warnings()
         # name -> (publisher, joint names). Filled after the torque controllers spawn.
         self._torque_pubs: dict[str, tuple] = {}
         self._torque_enabled = False
@@ -348,6 +367,7 @@ class ControlSupervisorNode(Node):
                     tail.append(text)
                     if kind == 'bridge':
                         self.get_logger().info(f'[{name}] {text}')
+                        self._note_bridge_line(name, text)
                     else:
                         self.get_logger().debug(f'[{name}] {text}')
             except (OSError, ValueError):
@@ -360,10 +380,44 @@ class ControlSupervisorNode(Node):
                 code = popen.poll()
             if code and not child.stopping:
                 self.get_logger().error(f'{name} exited with code {code}')
+                if kind == 'bridge':
+                    self._set_unreachable(name, f'its mcu_bridge exited (code {code})')
                 for text in tail:
                     self.get_logger().error(f'[{name}] {text}')
 
         threading.Thread(target=pump, name=f'pump-{name}', daemon=True).start()
+
+    def _note_bridge_line(self, bridge: str, text: str) -> None:
+        """Keep what a bridge reports (PCA9685 or whole board not answering) on the topics."""
+        reason = board_unreachable(text)
+        if reason is not None:
+            self._set_unreachable(bridge, reason)
+            return
+        warning = pca_warning(bridge.removeprefix('mcu_bridge_'), text)
+        if warning is None:
+            return
+        message, active = warning
+        with self._warnings_lock:
+            board = self._hardware_warnings.setdefault(bridge, set())
+            (board.add if active else board.discard)(message)
+        self._publish_hardware_warnings()
+
+    def _set_unreachable(self, bridge: str, reason: str) -> None:
+        with self._warnings_lock:
+            board = self._bridge_boards.get(bridge)
+            if board is None:
+                return
+            if reason:
+                self._unreachable[board] = reason
+            else:
+                self._unreachable.pop(board, None)
+        self._publish_hardware_warnings()
+
+    def _publish_hardware_warnings(self) -> None:
+        with self._warnings_lock:
+            warnings = sorted(w for board in self._hardware_warnings.values() for w in board)
+            self._hardware_warnings_pub.publish(String(data=json.dumps(warnings)))
+            self._unreachable_pub.publish(String(data=json.dumps(self._unreachable)))
 
     def _start_cm(self, cfg: _StackConfig) -> None:
         cmd = [
@@ -402,26 +456,40 @@ class ControlSupervisorNode(Node):
         config_dir = os.environ.get('LUCY_CONFIG_DIR') or cfg.controllers_yaml.parent / 'hardware'
         hardware_yaml = Path(config_dir) / 'active.yaml'
         nodes = ros2_control_nodes(urdf_xml)
-        bridges = [b for b in mega_bridges(hardware_yaml) if b[0] in nodes]
+        bridges = [b for b in mega_bridges(hardware_yaml) if b[1] in nodes]
+        # New bridges report every PCA again; boards gone from the YAML take their warnings along.
+        with self._warnings_lock:
+            self._hardware_warnings.clear()
+            self._unreachable.clear()
+            self._bridge_boards = {f'mcu_bridge_{node}': board for board, node, _, _ in bridges}
+        self._publish_hardware_warnings()
         if not bridges:
             return
         binary = resolve_bridge_binary(cfg.controllers_yaml.parent)
-        if binary is None:
-            self.get_logger().error(
-                'lucy-embedded-firmware-mcu-bridge not found: run `pixi run firmware-build-linux`'
-            )
-            return
-        for node_name, serial in bridges:
-            self.get_logger().info(f'starting mcu_bridge {node_name} {serial}')
-            popen = subprocess.Popen(
-                [str(binary), node_name, serial],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                env=os.environ.copy(),
-                start_new_session=True,
-                preexec_fn=_die_with_parent if sys.platform == 'linux' else None,
-            )
-            self._track(f'mcu_bridge_{node_name}', popen, 'bridge')
+        for _, node_name, serial, pcas in bridges:
+            name = f'mcu_bridge_{node_name}'
+            if binary is None:
+                self._set_unreachable(
+                    name, 'its mcu_bridge is not built: run `pixi run firmware-build-linux`'
+                )
+                continue
+            if not serial:
+                self._set_unreachable(name, 'no serial_id set for it')
+                continue
+            self.get_logger().info(f'starting mcu_bridge {node_name} {serial} {pcas}')
+            try:
+                popen = subprocess.Popen(
+                    [str(binary), node_name, serial, pcas],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    env=os.environ.copy(),
+                    start_new_session=True,
+                    preexec_fn=_die_with_parent if sys.platform == 'linux' else None,
+                )
+            except OSError as e:
+                self._set_unreachable(name, f'its mcu_bridge failed to start ({e})')
+                continue
+            self._track(name, popen, 'bridge')
 
     def _spawn_controllers(self, cfg: _StackConfig) -> None:
         """Load and activate controllers after controller_manager is up.
