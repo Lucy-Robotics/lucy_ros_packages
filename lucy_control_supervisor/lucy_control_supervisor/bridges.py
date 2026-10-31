@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import xml.etree.ElementTree as ET
 
+from lucy_config_generator.schema import BOARD_CLASS_I2C_PWM_ONLY
 from lucy_config_generator.schema import derive_ros2_node_name
 import yaml
 
@@ -16,20 +18,41 @@ BRIDGE_EXECUTABLES = {
         "lucy-embedded-firmware-mcu-bridge",
     ),
 }
+# The bridge prints one of these per PCA9685 when its state changes.
+_PCA_LINE = re.compile(r"PCA9685 (0x[0-9a-f]+) (not answering|answering)")
+# The bridge prints `Board <serial> <state>` when its link to the board changes.
+_BOARD_LINE = re.compile(r"Board \S*\s(.+)")
+_UNREACHABLE = (
+    ("not found", "not found on USB: check its cable and serial_id"),
+    ("is being flashed", "being flashed"),
+    ("stopped answering", "stopped answering: reconnecting"),
+    ("not answering", "on USB but not answering (frozen?): unplug and replug it"),
+)
+
+
+def board_entries(hardware_yaml: Path) -> list[tuple[str, str, str, str]]:
+    """Return ``(board_id, node_name, serial_id, pca_addresses)`` per board of the active YAML.
+
+    ``pca_addresses`` is the Mega bridge's argument naming its PCA9685s, e.g. ``0x41,0x40``,
+    and ``""`` for other boards.
+    """
+    if not hardware_yaml.is_file():
+        return []
+    data = yaml.safe_load(hardware_yaml.read_text(encoding="utf-8")) or {}
+    out = []
+    for board_id, board in (data.get("boards") or {}).items():
+        board = board or {}
+        pcas = ""
+        if board.get("board_class") == BOARD_CLASS_I2C_PWM_ONLY:
+            pcas = ",".join(f"{int(a):#04x}" for a in board.get("pca_addresses") or [])
+        serial = str(board.get("serial_id") or "").strip()
+        out.append((board_id, derive_ros2_node_name(board_id), serial, pcas))
+    return out
 
 
 def mcu_boards(hardware_yaml: Path) -> list[tuple[str, str]]:
     """Return ``(node_name, serial_id)`` per board of the active YAML (``""``: no serial)."""
-    if not hardware_yaml.is_file():
-        return []
-    data = yaml.safe_load(hardware_yaml.read_text(encoding="utf-8")) or {}
-    return [
-        (
-            derive_ros2_node_name(board_id),
-            str((board or {}).get("serial_id") or "").strip(),
-        )
-        for board_id, board in (data.get("boards") or {}).items()
-    ]
+    return [(node, serial) for _, node, serial, _ in board_entries(hardware_yaml)]
 
 
 def ros2_control_nodes(urdf_xml: str) -> set[str]:
@@ -56,14 +79,18 @@ def bridge_processes(
         return [(node, [node]) for node in sorted(nodes)]
     if bridge == "mcu_bridge":
         boards = [
-            (node, serial)
-            for node, serial in mcu_boards(hardware_yaml)
+            (node, serial, pcas)
+            for _, node, serial, pcas in board_entries(hardware_yaml)
             if node in nodes
         ]
-        if len(boards) == 1:
-            node, serial = boards[0]
-            return [(node, [node, serial] if serial else [node])]
-        return [(node, [node, serial]) for node, serial in boards if serial]
+        if len(boards) == 1 and not boards[0][1]:
+            node, _, pcas = boards[0]
+            return [(node, [node, "", pcas] if pcas else [node])]
+        return [
+            (node, [node, serial, pcas] if pcas else [node, serial])
+            for node, serial, pcas in boards
+            if serial
+        ]
     raise ValueError(
         f"unknown bridge {bridge!r} (expected {', '.join(BRIDGE_EXECUTABLES)})"
     )
@@ -90,3 +117,26 @@ def bridge_executable(bridge: str) -> str:
             "run `pixi run firmware-setup`, then `pixi run build`"
         )
     return path
+
+
+def pca_warning(board: str, line: str) -> tuple[str, bool] | None:
+    """``(warning, active)`` for a bridge's PCA9685 status line, None for other lines."""
+    m = _PCA_LINE.match(line)
+    if m is None:
+        return None
+    message = f"{board} Mega: PCA9685 {m[1]} not answering, its servos cannot move"
+    return message, m[2] == "not answering"
+
+
+def board_unreachable(line: str) -> str | None:
+    """Why the board is unreachable after this line, '' once it answers, None if unrelated."""
+    m = _BOARD_LINE.match(line)
+    if m is None:
+        return None
+    if m[1] == "answering":
+        return ""
+    if m[1].startswith("cannot be opened"):
+        return m[1].removesuffix(", waiting")
+    return next(
+        (reason for start, reason in _UNREACHABLE if m[1].startswith(start)), None
+    )

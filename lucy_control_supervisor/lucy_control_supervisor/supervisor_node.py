@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections import deque
 import ctypes
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
@@ -20,9 +21,13 @@ import threading
 import time
 from typing import List
 
+from lucy_control_supervisor.bridges import board_entries
+from lucy_control_supervisor.bridges import board_unreachable
 from lucy_control_supervisor.bridges import bridge_executable
 from lucy_control_supervisor.bridges import BRIDGE_EXECUTABLES
 from lucy_control_supervisor.bridges import bridge_processes
+from lucy_control_supervisor.bridges import pca_warning
+from lucy_control_supervisor.bridges import ros2_control_nodes
 from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
 from lucy_control_supervisor.controllers_spawn import torque_command_values
 from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
@@ -108,10 +113,14 @@ class _StackConfig:
 class ControlSupervisorNode(Node):
     RESTART_SERVICE = "/lucy_control/restart"
     GAZEBO_RUNNING_TOPIC = "/lucy/gazebo_running"
+    # Latched JSON list of hardware problems the bridges report (e.g. a PCA9685 not answering).
+    HARDWARE_WARNINGS_TOPIC = "/lucy/hardware_warnings"
+    # Latched JSON {board_id: reason} of the Mega boards their bridge cannot reach.
+    UNREACHABLE_BOARDS_TOPIC = "/lucy/unreachable_boards"
     # Latched by lucy_client_registry. Non-empty means Control Robot is ON.
-    ACTIVE_CLIENT_TOPIC = '/lucy/active_client'
+    ACTIVE_CLIENT_TOPIC = "/lucy/active_client"
     # Latched JSON list of joint names the LCP keeps limp while Control Robot is ON.
-    DISABLED_JOINTS_TOPIC = '/lucy/disabled_joints'
+    DISABLED_JOINTS_TOPIC = "/lucy/disabled_joints"
     TERMINATE_TIMEOUT_S = 10.0
     BRIDGE_DRAIN_S = 0.2
     READY_TIMEOUT_S = 60.0
@@ -148,6 +157,19 @@ class ControlSupervisorNode(Node):
             Bool, self.GAZEBO_RUNNING_TOPIC, latched_qos
         )
         self._publish_gazebo_running()
+        # bridge name -> its current warnings; pump threads write, hence the lock.
+        self._hardware_warnings: dict[str, set[str]] = {}
+        self._warnings_lock = threading.Lock()
+        self._hardware_warnings_pub = self.create_publisher(
+            String, self.HARDWARE_WARNINGS_TOPIC, latched_qos
+        )
+        # bridge name -> board_id, and board_id -> why it is unreachable; same lock.
+        self._bridge_boards: dict[str, str] = {}
+        self._unreachable: dict[str, str] = {}
+        self._unreachable_pub = self.create_publisher(
+            String, self.UNREACHABLE_BOARDS_TOPIC, latched_qos
+        )
+        self._publish_hardware_warnings()
         # name -> (publisher, joint names). Filled after the torque controllers spawn.
         self._torque_pubs: dict[str, tuple] = {}
         self._torque_enabled = False
@@ -158,7 +180,7 @@ class ControlSupervisorNode(Node):
         self.create_subscription(
             String, self.DISABLED_JOINTS_TOPIC, self._on_disabled_joints, latched_qos
         )
-        if self.get_parameter('autostart').value:
+        if self.get_parameter("autostart").value:
             ok, msg = self._restart_stack()
             if not ok:
                 self.get_logger().error(msg)
@@ -350,6 +372,7 @@ class ControlSupervisorNode(Node):
                     tail.append(text)
                     if kind == "bridge":
                         self.get_logger().info(f"[{name}] {text}")
+                        self._note_bridge_line(name, text)
                     else:
                         self.get_logger().debug(f"[{name}] {text}")
             except (OSError, ValueError):
@@ -362,10 +385,46 @@ class ControlSupervisorNode(Node):
                 code = popen.poll()
             if code and not child.stopping:
                 self.get_logger().error(f"{name} exited with code {code}")
+                if kind == "bridge":
+                    self._set_unreachable(name, f"its mcu_bridge exited (code {code})")
                 for text in tail:
                     self.get_logger().error(f"[{name}] {text}")
 
         threading.Thread(target=pump, name=f"pump-{name}", daemon=True).start()
+
+    def _note_bridge_line(self, bridge: str, text: str) -> None:
+        """Keep what a bridge reports (PCA9685 or whole board not answering) on the topics."""
+        reason = board_unreachable(text)
+        if reason is not None:
+            self._set_unreachable(bridge, reason)
+            return
+        warning = pca_warning(bridge.removeprefix("mcu_bridge_"), text)
+        if warning is None:
+            return
+        message, active = warning
+        with self._warnings_lock:
+            board = self._hardware_warnings.setdefault(bridge, set())
+            (board.add if active else board.discard)(message)
+        self._publish_hardware_warnings()
+
+    def _set_unreachable(self, bridge: str, reason: str) -> None:
+        with self._warnings_lock:
+            board = self._bridge_boards.get(bridge)
+            if board is None:
+                return
+            if reason:
+                self._unreachable[board] = reason
+            else:
+                self._unreachable.pop(board, None)
+        self._publish_hardware_warnings()
+
+    def _publish_hardware_warnings(self) -> None:
+        with self._warnings_lock:
+            warnings = sorted(
+                w for board in self._hardware_warnings.values() for w in board
+            )
+            self._hardware_warnings_pub.publish(String(data=json.dumps(warnings)))
+            self._unreachable_pub.publish(String(data=json.dumps(self._unreachable)))
 
     def _start_cm(self, cfg: _StackConfig) -> None:
         cmd = [
@@ -418,13 +477,27 @@ class ControlSupervisorNode(Node):
             os.environ.get("LUCY_CONFIG_DIR")
             or cfg.controllers_yaml.parent / "hardware"
         )
+        hardware_yaml = Path(config_dir) / "active.yaml"
         try:
-            processes = bridge_processes(
-                bridge, Path(config_dir) / "active.yaml", urdf_xml
-            )
+            processes = bridge_processes(bridge, hardware_yaml, urdf_xml)
         except ValueError as exc:
             self.get_logger().error(f"LUCY_BRIDGE: {exc}")
             return
+        # New bridges report every PCA again; boards gone from the YAML take their warnings along.
+        nodes = ros2_control_nodes(urdf_xml)
+        boards = {
+            f"{bridge}_{node}": board
+            for board, node, _, _ in board_entries(hardware_yaml)
+            if bridge == "mcu_bridge" and node in nodes
+        }
+        with self._warnings_lock:
+            self._hardware_warnings.clear()
+            self._unreachable.clear()
+            self._bridge_boards = boards
+        self._publish_hardware_warnings()
+        started = {f"{bridge}_{node}" for node, _ in processes}
+        for name in boards.keys() - started:
+            self._set_unreachable(name, "no serial_id set for it")
         if not processes:
             self.get_logger().warning(
                 f"{bridge}: nothing to drive in this robot"
@@ -440,18 +513,25 @@ class ControlSupervisorNode(Node):
             executable = bridge_executable(bridge)
         except LookupError as exc:
             self.get_logger().error(str(exc))
+            for name in started:
+                self._set_unreachable(name, f"its {bridge} is not built")
             return
         for node_name, args in processes:
+            name = f"{bridge}_{node_name}"
             self.get_logger().info(f"starting {bridge} {' '.join(args)}")
-            popen = subprocess.Popen(
-                [executable, *args],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                env=os.environ.copy(),
-                start_new_session=True,
-                preexec_fn=_die_with_parent if sys.platform == "linux" else None,
-            )
-            self._track(f"{bridge}_{node_name}", popen, "bridge")
+            try:
+                popen = subprocess.Popen(
+                    [executable, *args],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    env=os.environ.copy(),
+                    start_new_session=True,
+                    preexec_fn=_die_with_parent if sys.platform == "linux" else None,
+                )
+            except OSError as e:
+                self._set_unreachable(name, f"its {bridge} failed to start ({e})")
+                continue
+            self._track(name, popen, "bridge")
 
     def _spawn_controllers(self, cfg: _StackConfig) -> None:
         """Load and activate controllers after controller_manager is up.
@@ -502,15 +582,15 @@ class ControlSupervisorNode(Node):
     def _on_disabled_joints(self, msg: String) -> None:
         """Keep the listed joints limp (torque 0) even with Control Robot ON."""
         try:
-            names = json.loads(msg.data or '[]')
+            names = json.loads(msg.data or "[]")
         except ValueError:
             self.get_logger().warning(
-                f'ignoring malformed {self.DISABLED_JOINTS_TOPIC}: {msg.data!r}'
+                f"ignoring malformed {self.DISABLED_JOINTS_TOPIC}: {msg.data!r}"
             )
             return
         if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
             self.get_logger().warning(
-                f'{self.DISABLED_JOINTS_TOPIC} must be a JSON list of joint names'
+                f"{self.DISABLED_JOINTS_TOPIC} must be a JSON list of joint names"
             )
             return
         self._disabled_joints = frozenset(names)
@@ -523,7 +603,7 @@ class ControlSupervisorNode(Node):
         for name, joints in torque_enable_controllers(cfg.controllers_yaml):
             pub, _old = self._torque_pubs.get(name, (None, None))
             if pub is None:
-                pub = self.create_publisher(Float64MultiArray, f'/{name}/commands', 10)
+                pub = self.create_publisher(Float64MultiArray, f"/{name}/commands", 10)
             self._torque_pubs[name] = (pub, joints)
 
     def _publish_torque_after_match(self) -> None:
@@ -546,7 +626,9 @@ class ControlSupervisorNode(Node):
         """Write 1.0 or 0.0 on every joint of each torque_enable controller."""
         for pub, joints in self._torque_pubs.values():
             msg = Float64MultiArray()
-            msg.data = torque_command_values(self._torque_enabled, joints, self._disabled_joints)
+            msg.data = torque_command_values(
+                self._torque_enabled, joints, self._disabled_joints
+            )
             pub.publish(msg)
 
     def _restart_stack(self) -> tuple[bool, str]:
