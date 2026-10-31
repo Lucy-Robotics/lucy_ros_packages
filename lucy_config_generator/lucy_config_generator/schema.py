@@ -110,6 +110,8 @@ BOARD_CLASSES = frozenset(
 # D20/D21 the I2C bus; A0..A15 are D54..D69. Timer5 pulses them in turn within a 20 ms frame.
 MEGA_SERVO_PINS = frozenset(range(2, 70)) - {20, 21}
 MEGA_MAX_SERVO_PINS = 8
+MEGA_MAX_PCAS = 8
+MEGA_MAX_JOINTS = 24
 
 _BOARD_ID_RE = re.compile(r'^(rp2040|mega)_[a-z][a-z0-9_]*$')
 _TOPIC_RE = re.compile(r'^[a-z][a-z0-9_/]*$')
@@ -273,6 +275,18 @@ def _validate_boards(boards: dict[str, Any], errors: list[str]) -> None:
                 f'board {board_id}: topic_actuators must not have surrounding whitespace'
             )
 
+    node_boards: dict[str, str] = {}
+    for board_id in boards:
+        try:
+            node = derive_ros2_node_name(board_id)
+        except ValueError:
+            continue
+        if node in node_boards:
+            errors.append(
+                f'boards {node_boards[node]} and {board_id} share the node_name {node!r}'
+            )
+        node_boards[node] = board_id
+
 
 def _validate_pca_addresses(
     board_id: str, board: dict[str, Any], slots: int, errors: list[str]
@@ -294,6 +308,8 @@ def _validate_pca_addresses(
         errors.append(f'board {board_id}: pca_addresses must be integers in 0x40..0x7F')
     elif len(set(addresses)) != len(addresses):
         errors.append(f'board {board_id}: duplicate pca_addresses')
+    elif len(addresses) > MEGA_MAX_PCAS:
+        errors.append(f'board {board_id}: at most {MEGA_MAX_PCAS} pca_addresses')
     pins = board.get('mega_pins', [])
     if not isinstance(pins, list) or any(
         isinstance(p, bool) or not isinstance(p, int) or p not in MEGA_SERVO_PINS for p in pins
@@ -327,14 +343,20 @@ def _validate_pca_board_actuators(
     for board_id, actuators in by_board.items():
         if boards.get(board_id, {}).get('board_class') != BOARD_CLASS_I2C_PWM_ONLY:
             continue
+        if len(actuators) > MEGA_MAX_JOINTS:
+            errors.append(
+                f'board {board_id}: at most {MEGA_MAX_JOINTS} actuators on an i2c_pwm_only board'
+            )
         driven: dict[int, str] = {}
         for actuator in actuators:
             aid = _label(actuator)
+            if str(actuator['servo_type']).strip('"') != '180':
+                errors.append(f'actuator {aid}: i2c_pwm_only boards drive 180 deg servos only')
             try:
                 lo, hi = float(actuator['limit_min']), float(actuator['limit_max'])
             except Exception:
                 continue  # reported by _validate_actuator_ranges
-            if lo < 0.0 or hi > math.pi + 1e-4:
+            if not 0.0 <= lo <= hi <= math.pi:
                 errors.append(
                     f'actuator {aid}: limits [{lo}, {hi}] must stay within 0..pi '
                     '(0..180 deg servo travel on i2c_pwm_only boards)'

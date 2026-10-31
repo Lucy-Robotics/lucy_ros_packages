@@ -54,6 +54,7 @@ def _mega_mapping() -> dict:
         if a['board'] == 'rp2040_left_arm':
             a['limit_max'] = 3.14159
             a['default'] = 1.5708
+            a['servo_type'] = '180'
     return data
 
 
@@ -115,6 +116,43 @@ def test_schema_rejects_mega_limits_beyond_180_deg():
     data = _mega_mapping()
     data['actuators'][0]['limit_max'] = 4.0
     with pytest.raises(ValueError, match='must stay within 0..pi'):
+        validate_hardware_yaml(data)
+
+
+@pytest.mark.parametrize('limit_max', [3.1416, float('nan')])
+def test_schema_rejects_mega_limits_the_firmware_rejects(limit_max):
+    data = _mega_mapping()
+    data['actuators'][0]['limit_max'] = limit_max
+    with pytest.raises(ValueError, match='must stay within 0..pi'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_non_180_servos_on_a_mega():
+    data = _mega_mapping()
+    data['actuators'][0]['servo_type'] = '270'
+    with pytest.raises(ValueError, match='180 deg servos only'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_more_than_8_pcas_on_a_mega():
+    data = _mega_mapping()
+    data['boards']['rp2040_left_arm']['pca_addresses'] = list(range(0x40, 0x49))
+    with pytest.raises(ValueError, match='at most 8 pca_addresses'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_more_joints_than_a_mega_holds():
+    data = _mega_mapping()
+    template = next(a for a in data['actuators'] if a['board'] == 'rp2040_left_arm')
+    data['actuators'] += [{**template, 'enabled': False} for _ in range(24)]
+    with pytest.raises(ValueError, match='at most 24 actuators'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_boards_sharing_a_node_name():
+    data = _load_mapping()
+    data['boards']['mega_left_arm'] = dict(data['boards']['rp2040_left_arm'])
+    with pytest.raises(ValueError, match="share the node_name 'left_arm'"):
         validate_hardware_yaml(data)
 
 
