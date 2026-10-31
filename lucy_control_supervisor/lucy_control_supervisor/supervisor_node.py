@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+import ctypes
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -35,8 +37,14 @@ from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
 from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
 from lucy_control_supervisor.mcu_bridges import mega_bridges
 from lucy_control_supervisor.mcu_bridges import resolve_bridge_binary
+from lucy_control_supervisor.mcu_bridges import ros2_control_nodes
 
 _WINDOWS_EXEC_SUFFIXES = ('.exe', '.bat', '.cmd')
+_PR_SET_PDEATHSIG = 1
+
+
+def _die_with_parent() -> None:
+    ctypes.CDLL(None).prctl(_PR_SET_PDEATHSIG, signal.SIGTERM)
 
 
 def _control_ready_file() -> Path:
@@ -328,12 +336,13 @@ class ControlSupervisorNode(Node):
             try:
                 for line in iter(popen.stdout.readline, b''):
                     text = line.decode('utf-8', 'replace').rstrip()
-                    if text:
-                        tail.append(text)
-                        # Bridges only print state changes and summaries: worth seeing.
-                        logger = self.get_logger()
-                        log = logger.info if kind == 'bridge' else logger.debug
-                        log(f'[{name}] {text}')
+                    if not text:
+                        continue
+                    tail.append(text)
+                    if kind == 'bridge':
+                        self.get_logger().info(f'[{name}] {text}')
+                    else:
+                        self.get_logger().debug(f'[{name}] {text}')
             except (OSError, ValueError):
                 pass
             # poll rather than wait: _terminate_children polls these same handles.
@@ -376,15 +385,17 @@ class ControlSupervisorNode(Node):
                 f'{self.READY_TIMEOUT_S:.0f}s; spawners may block on the lock'
             )
 
-    def _start_mcu_bridges(self, cfg: _StackConfig) -> None:
+    def _start_mcu_bridges(self, cfg: _StackConfig, urdf_xml: str) -> None:
         """Start one bridge per Mega board of the active YAML (restarted with the stack).
 
         Being children of this node, they follow every RELOAD: a new serial_id or board
         layout applies on Activate, not only on a full relaunch. Each bridge waits for its
         shared memory and board, and lets go of the port while that board is flashed.
         """
-        hardware_yaml = cfg.controllers_yaml.parent / 'hardware' / 'active.yaml'
-        bridges = mega_bridges(hardware_yaml)
+        config_dir = os.environ.get('LUCY_CONFIG_DIR') or cfg.controllers_yaml.parent / 'hardware'
+        hardware_yaml = Path(config_dir) / 'active.yaml'
+        nodes = ros2_control_nodes(urdf_xml)
+        bridges = [b for b in mega_bridges(hardware_yaml) if b[0] in nodes]
         if not bridges:
             return
         binary = resolve_bridge_binary(cfg.controllers_yaml.parent)
@@ -400,6 +411,8 @@ class ControlSupervisorNode(Node):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=os.environ.copy(),
+                start_new_session=True,
+                preexec_fn=_die_with_parent if sys.platform == 'linux' else None,
             )
             self._track(f'mcu_bridge_{node_name}', popen, 'bridge')
 
@@ -514,7 +527,7 @@ class ControlSupervisorNode(Node):
                 if not cfg.use_gazebo_sim:
                     self._start_cm(cfg)
                     if not cfg.use_mock_hardware:
-                        self._start_mcu_bridges(cfg)
+                        self._start_mcu_bridges(cfg, urdf_xml)
                     self._spawn_controllers(cfg)
 
             note = ''
