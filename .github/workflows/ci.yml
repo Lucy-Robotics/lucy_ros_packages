@@ -61,7 +61,7 @@ jobs:
         run: |
           source /opt/ros/jazzy/setup.bash
           colcon build --symlink-install \
-            --packages-select camera_ros lucy_bringup lucy_ros2_control lucy_config_generator \
+            --packages-select camera_ros lucy_bringup lucy_ros2_control lucy_config_generator lucy_msgs lucy_config_pipeline lucy_control_supervisor \
             --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
 
       - name: colcon test
@@ -71,7 +71,7 @@ jobs:
           source /opt/ros/jazzy/setup.bash
           source install/setup.bash
           colcon test \
-            --packages-select camera_ros lucy_bringup lucy_ros2_control lucy_config_generator \
+            --packages-select camera_ros lucy_bringup lucy_ros2_control lucy_config_generator lucy_msgs lucy_config_pipeline lucy_control_supervisor \
             --event-handlers console_direct+ \
             --pytest-args -vv --tb=short
 

@@ -6,9 +6,9 @@ import pytest
 import rclpy
 from src.config_store import ConfigStore
 from src.services.config_services_node import (
+    ConfigServicesNode,
     MESH_ENCODING_UTF8,
     MESH_ENCODING_ZLIB_BASE64,
-    ConfigServicesNode,
 )
 
 

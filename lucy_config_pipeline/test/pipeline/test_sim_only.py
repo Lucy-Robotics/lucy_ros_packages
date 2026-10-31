@@ -14,9 +14,9 @@ import pytest
 
 pytest.importorskip('rclpy')
 
-from src.pipeline.action_server import PipelineActionServer
-from src.pipeline.models import PipelinePaths
-import yaml
+from src.pipeline.action_server import PipelineActionServer  # noqa: E402
+from src.pipeline.models import PipelinePaths  # noqa: E402
+import yaml  # noqa: E402
 
 _FIXTURE = (
     Path(__file__).resolve().parents[2]
@@ -66,7 +66,7 @@ def test_simulation_only_skips_build_flash_and_calls_reload(pipeline_paths: Pipe
     store.get_active_name.return_value = 'default'
 
     node = PipelineActionServer(paths=pipeline_paths, config_store=store)
-    node._reload_client.wait_for_service = MagicMock(return_value=True)  # type: ignore[method-assign]
+    node._reload_client.wait_for_service = MagicMock(return_value=True)  # type: ignore
 
     future = MagicMock()
     future.done.return_value = True
@@ -89,7 +89,10 @@ def test_simulation_only_skips_build_flash_and_calls_reload(pipeline_paths: Pipe
     goal_handle.is_cancel_requested = False
 
     with (
-        patch('src.pipeline.action_server.resolve_mapping_input', return_value=('default', config_yaml)),
+        patch(
+            'src.pipeline.action_server.resolve_mapping_input',
+            return_value=('default', config_yaml),
+        ),
         patch('src.pipeline.action_server.validate_schema', return_value=data),
         patch('src.pipeline.action_server.urdf_crosscheck') as cross,
         patch('src.pipeline.action_server.generate') as gen,

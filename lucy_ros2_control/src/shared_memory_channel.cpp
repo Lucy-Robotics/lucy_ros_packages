@@ -1,4 +1,4 @@
-// Copyright 2025 Sentience Robotics Team
+// Copyright 2025 Lucy Robotics Team
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@
 #include <thread>
 
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 namespace
@@ -50,7 +51,10 @@ std::optional<SharedMemoryChannel> SharedMemoryChannel::create(
     return std::nullopt;
   }
 
-  if (ftruncate(fd, shm_size) == -1) {
+  struct stat st {};
+  if (fstat(fd, &st) == -1 ||
+    (static_cast<std::size_t>(st.st_size) < shm_size && ftruncate(fd, shm_size) == -1))
+  {
     close(fd);
     shm_unlink(shm_name.c_str());
     return std::nullopt;
