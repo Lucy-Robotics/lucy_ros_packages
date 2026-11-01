@@ -4,12 +4,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from lucy_config_generator.generate import urdf_joint_names
 from lucy_config_generator.schema import URDF_IGNORE_LIST_KEYS
 from lucy_config_generator.schema import URDF_PASSIVE_LIST_KEYS
 from lucy_config_generator.schema import validate_hardware_yaml
+import yaml
 
 
 @dataclass(frozen=True)

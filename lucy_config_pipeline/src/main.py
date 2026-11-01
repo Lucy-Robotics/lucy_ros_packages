@@ -3,11 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
-import rclpy
-import yaml
-
 from lucy_config_generator.schema import GENERATED_FILES_DEFAULTS
 from lucy_config_generator.schema import resolve_generated_files
+import rclpy
+import yaml
 
 from .config_store import ConfigStore
 from .pipeline.action_server import PipelineActionServer

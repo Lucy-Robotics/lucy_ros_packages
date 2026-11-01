@@ -24,5 +24,5 @@ def test_controllers_basename_override(tmp_path: Path):
         tmp_path, controllers_basename='custom_controllers.yaml'
     )
     assert controllers.name == 'custom_controllers.yaml'
-    assert urdf.as_posix().endswith('inmoov.urdf.xacro')
+    assert urdf.as_posix().endswith('robot.urdf.xacro')
     assert base.name == 'description'

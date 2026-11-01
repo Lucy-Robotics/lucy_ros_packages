@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..config_store import ConfigStore
 from .models import FirmwarePaths
+from ..config_store import ConfigStore
 
 
 def resolve_mapping_input(store: ConfigStore, mapping_file: str) -> tuple[str, str]:
@@ -57,7 +57,8 @@ def board_build_plan(data: dict, selected_boards: set[str] | None) -> list[tuple
 
 
 def all_selected_serials_empty(data: dict, selected_boards: set[str] | None) -> bool:
-    """True when every board in the flash/build set has an empty ``serial_id``.
+    """
+    Return True when every board in the flash/build set has an empty ``serial_id``.
 
     Used to skip MCU cmake/cargo build and picotool when nothing can be flashed
     (e.g. so101 host-linux path with ``serial_id: ''``).

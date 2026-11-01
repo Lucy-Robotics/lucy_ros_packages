@@ -785,7 +785,7 @@ This documentation is part of the Lucy Robot project and is licensed under **GPL
 
 For issues, questions, or contributions:
 - **Email:** contact@lucy-robotics.com
-- **Repository:** [Lucy ROS Packages](https://github.com/sentience-robotics/lucy_ros_packages)
+- **Repository:** [Lucy ROS Packages](https://github.com/Lucy-Robotics/lucy_ros_packages)
 
 ---
 
