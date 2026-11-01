@@ -19,7 +19,7 @@ The registry is the only writer of the count and the active controller; clients 
 A good client ID is one that is both unique and descriptive, for example: `my_app_1678886400_a3f7`.
 
 **Registering presence (heartbeat).** Pulse your client ID on `/lucy/client_heartbeat` (`std_msgs/msg/String`, volatile) roughly once per second.
-The registry counts you as connected while your heartbeats keep arriving and prunes you automatically about three seconds after they stop (three missed beats at the 1 Hz cadence) — so a crash or a closed tab is handled for free, with no explicit "disconnect" step.
+The registry counts you as connected while your heartbeats keep arriving and prunes you automatically about ten seconds after they stop (ten missed beats at the 1 Hz cadence) — so a crash or a closed tab is handled for free, with no explicit "disconnect" step.
 
 ```python
 # A unique identifier for this specific client instance.
