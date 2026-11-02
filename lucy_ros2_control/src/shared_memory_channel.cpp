@@ -73,7 +73,8 @@ std::optional<SharedMemoryChannel> SharedMemoryChannel::create(
   channel.node_name_ = shm_name;
   channel.actuators_state_ = new (addr) ActuatorSharedState();
   channel.actuators_state_->max_actuators = static_cast<uint32_t>(max_actuators);
-  std::fill_n(channel.actuators_state_->payload, 5 * max_actuators, 0.0);
+  std::fill_n(
+    channel.actuators_state_->payload, ActuatorSharedState::kArrays * max_actuators, 0.0);
   return channel;
 }
 
