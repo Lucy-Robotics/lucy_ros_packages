@@ -116,6 +116,8 @@ private:
   std::vector<double> hw_accelerations_;
 
   std::vector<double> hw_positions_;
+  std::vector<double> hw_temperatures_;
+  std::vector<double> hw_efforts_;
 
   /** Per-joint URDF limits from command_interface min/max (rad); ±inf when unset. */
   std::vector<double> joint_min_rad_;
