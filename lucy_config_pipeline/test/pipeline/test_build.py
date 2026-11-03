@@ -85,6 +85,10 @@ def test_cargo_build_writes_one_uf2_per_board(tmp_path: Path, monkeypatch: pytes
 
     def fake_run_command(*, cmd: list[str], **_kwargs):
         calls.append(cmd)
+        if Path(cmd[0]) == cargo:
+            elf = source / 'target' / 'thumbv6m-none-eabi' / 'release'
+            elf.mkdir(parents=True, exist_ok=True)
+            (elf / 'lucy-embedded-firmware-rp2040').write_bytes(b'\0' * 10_000)
         if Path(cmd[0]).name in ('elf2uf2-rs', 'elf2uf2-rs.exe'):
             Path(cmd[2]).write_text('uf2', encoding='utf-8')
 
