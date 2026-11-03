@@ -3,6 +3,8 @@ import time
 import pytest
 import rclpy
 from src.services.client_registry_node import ClientRegistryNode
+from src.services.client_registry_node import SOCKET_DROP_GRACE_S
+from std_msgs.msg import Int32
 from std_msgs.msg import String
 
 
@@ -81,6 +83,32 @@ class TestClientRegistryNode:
         res = node._on_get_client_count(GetInt.Request(), GetInt.Response())
         assert res.value == 1
 
+    def test_goodbye_drops_the_client_and_its_control(self, node):
+        from lucy_msgs.srv import ClientControl
+        from lucy_msgs.srv import GetInt
+
+        node._on_heartbeat(String(data='cli_1'))
+        node._on_control(
+            ClientControl.Request(client_id='cp_2', acquire=True), ClientControl.Response()
+        )
+        node._on_goodbye(String(data='cp_2'))
+
+        res = node._on_get_client_count(GetInt.Request(), GetInt.Response())
+        assert res.value == 1
+        assert node._active_client == ''
+
+    def test_goodbye_from_a_non_controller_keeps_control(self, node):
+        from lucy_msgs.srv import ClientControl
+
+        node._on_heartbeat(String(data='cp_2'))
+        node._on_control(
+            ClientControl.Request(client_id='cli_1', acquire=True), ClientControl.Response()
+        )
+        node._on_goodbye(String(data='cp_2'))
+        node._on_goodbye(String(data='unknown'))
+
+        assert node._active_client == 'cli_1'
+
     def test_tick_prunes_stale_clients(self, node):
         from lucy_msgs.srv import GetInt
 
@@ -104,3 +132,25 @@ class TestClientRegistryNode:
         node._on_tick()
 
         assert node._active_client == ''
+
+    def _spin_past_grace(self, node, beating):
+        deadline = time.monotonic() + SOCKET_DROP_GRACE_S + 1.0
+        while time.monotonic() < deadline:
+            for client_id in beating:
+                node._on_heartbeat(String(data=client_id))
+            rclpy.spin_once(node, timeout_sec=0.1)
+
+    def test_socket_drop_removes_only_the_client_that_stopped_beating(self, node):
+        node._on_heartbeat(String(data='cp_closed'))
+        node._on_heartbeat(String(data='cp_open'))
+        node._on_bridge_client_count(Int32(data=2))
+        node._on_bridge_client_count(Int32(data=1))
+        self._spin_past_grace(node, ['cp_open'])
+        assert 'cp_closed' not in node._last_seen
+        assert 'cp_open' in node._last_seen
+
+    def test_first_bridge_count_is_not_a_drop(self, node):
+        node._on_heartbeat(String(data='cp_quiet'))
+        node._on_bridge_client_count(Int32(data=0))
+        self._spin_past_grace(node, [])
+        assert 'cp_quiet' in node._last_seen
