@@ -20,9 +20,10 @@ setup(
     description='Config store services + pipeline action server for Lucy hardware YAML.',
     license='GPL-3.0',
     entry_points={
-        "console_scripts": [
-            "config_pipeline_node = src.main:main",
-            "client_registry_node = src.services.client_registry_node:main",
+        'console_scripts': [
+            'config_pipeline_node = src.main:main',
+            'client_registry_node = src.services.client_registry_node:main',
+            'robot_select_node = src.services.robot_select_node:main',
         ],
     },
 )
