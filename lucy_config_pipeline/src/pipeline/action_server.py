@@ -24,6 +24,10 @@ from ..error_format import format_error_lines
 from ..validation import urdf_crosscheck
 from ..validation import validate_schema
 from .build import run_build_phase
+from .flash import _board_bridge_node_name
+from .flash import _mcu_bridge_process_running
+from .flash import _wait_for_bridge_link
+from .flash import flash_bridge_link_wait_seconds
 from .flash import flash_picotool_timeout_seconds
 from .flash import flash_uptime_wait_seconds
 from .flash import flash_usb_wait_seconds
@@ -141,6 +145,43 @@ class PipelineActionServer(Node):
             detail=resp.message or 'reload complete',
         )
         return True, resp.message or 'reload complete'
+
+    def _verify_bridge_links_after_reload(
+        self, goal_handle, flashed_boards: list[str]
+    ) -> list[str]:
+        """Return error strings if flashed boards' mcu_bridge links stay dead."""
+        import time
+
+        if not flashed_boards:
+            return []
+        link_wait = flash_bridge_link_wait_seconds()
+        if link_wait <= 0:
+            return []
+        since = time.time()
+        errors: list[str] = []
+        for board in flashed_boards:
+            node = _board_bridge_node_name(board)
+            if not node:
+                continue
+            # Give respawn a moment; then require either no bridge or a fresh link.
+            deadline = time.monotonic() + min(5.0, link_wait)
+            while time.monotonic() < deadline and not _mcu_bridge_process_running(node):
+                time.sleep(0.2)
+            if not _mcu_bridge_process_running(node):
+                continue
+            self._feedback(
+                goal_handle,
+                phase='reload',
+                progress=0.95,
+                detail=f'verifying mcu_bridge link for {node}',
+                board=board,
+            )
+            if not _wait_for_bridge_link(node, since=since, timeout_seconds=link_wait):
+                errors.append(
+                    f'mcu_bridge {node} has no live serial link after reload '
+                    f'(within {link_wait}s) — control is not restored'
+                )
+        return errors
 
     def _generate_to_dir(
         self,
@@ -351,6 +392,18 @@ class PipelineActionServer(Node):
                 if not ok:
                     result.errors.extend(format_error_lines([reload_msg]))
                     result.message = reload_msg
+                    goal_handle.abort()
+                    return result
+                # After reload, mcu_bridge is signalled to respawn — require a live
+                # framed link before claiming success (USB-by-id alone is a lie).
+                link_failed = self._verify_bridge_links_after_reload(
+                    goal_handle, result.boards_flashed
+                )
+                if link_failed:
+                    result.errors.extend(format_error_lines(link_failed))
+                    result.message = (
+                        'reload claimed success but mcu_bridge serial link is dead'
+                    )
                     goal_handle.abort()
                     return result
 

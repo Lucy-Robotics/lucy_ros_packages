@@ -433,6 +433,10 @@ def _real_hardware_stack(context, *args, **kwargs):
                     cmd=[str(binary), item['node'], item['serial'], item['device']],
                     name=f"mcu_bridge_{item['node']}",
                     output='screen',
+                    # After firmware flash / USB re-enum the CDC FD dies; respawn
+                    # (and in-process reopen) restores control without relaunching Lucy.
+                    respawn=True,
+                    respawn_delay=1.0,
                 )
             )
     for problem in problems:
