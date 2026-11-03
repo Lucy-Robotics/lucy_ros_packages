@@ -176,31 +176,17 @@ def test_schema_suppresses_sensor_contiguity_when_sensor_has_item_error():
     assert 'missing sensor virtual_pin indices' not in msg
 
 
-def test_golden_firmware_left_arm():
+def test_firmware_spec_replaces_internal_c():
     data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
-        'config_rp2040_left_arm.c'
-    ]
-    expected = (_FIXTURES / 'golden_config_rp2040_left_arm.c').read_text(encoding='utf-8')
-    assert got == expected
-
-
-def test_golden_firmware_right_arm():
-    data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
-        'config_rp2040_right_arm.c'
-    ]
-    expected = (_FIXTURES / 'golden_config_rp2040_right_arm.c').read_text(encoding='utf-8')
-    assert got == expected
-
-
-def test_golden_firmware_torso():
-    data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
-        'config_rp2040_torso_head.c'
-    ]
-    expected = (_FIXTURES / 'golden_config_rp2040_torso_head.c').read_text(encoding='utf-8')
-    assert got == expected
+    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)
+    assert 'config_rp2040_left_arm.c' not in got
+    left = yaml.safe_load(got['config_rp2040_left_arm.yaml'])
+    assert left['node_name'] == 'left_arm'
+    assert left['pwm'][0]['identity'] == 'Servo10'
+    right = yaml.safe_load(got['config_rp2040_right_arm.yaml'])
+    assert right['pwm'][0]['identity'] == 'Servo10'
+    torso = yaml.safe_load(got['config_rp2040_torso_head.yaml'])
+    assert [row['identity'] for row in torso['pwm']] == ['Servo5', 'Servo6']
 
 
 def test_golden_ros2_control():
@@ -262,7 +248,7 @@ def test_boards_filter_emits_subset():
         {'firmware'},
         {'rp2040_left_arm'},
     )
-    assert set(got.keys()) == {'config_rp2040_left_arm.c'}
+    assert set(got.keys()) == {'config_rp2040_left_arm.yaml'}
 
 
 def test_generated_files_defaults_when_section_absent():

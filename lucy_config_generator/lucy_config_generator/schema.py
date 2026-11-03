@@ -9,6 +9,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from lucy_config_generator.plug import header_constraint_errors
+from lucy_config_generator.plug import i2c_device_errors
+from lucy_config_generator.plug import pca_channel_errors
+from lucy_config_generator.plug import resolve_plug
+
 REQUIRED_ROOT = (
     'version',
     'robot_name',
@@ -259,6 +264,7 @@ def _validate_boards(boards: dict[str, Any], errors: list[str]) -> None:
             errors.append(
                 f'board {board_id}: topic_actuators must not have surrounding whitespace'
             )
+        errors.extend(i2c_device_errors(board_id, board))
 
 
 def _validate_actuator(
@@ -278,7 +284,12 @@ def _validate_actuator(
         )
     if rejected:
         return
-    if not _append_missing_keys(errors, f'actuator {aid}', actuator, REQUIRED_ACTUATOR):
+    plug = actuator.get('plug')
+    pca = isinstance(plug, dict) and plug.get('kind') == 'pca9685'
+    required = REQUIRED_ACTUATOR
+    if pca:
+        required = tuple(key for key in REQUIRED_ACTUATOR if key != 'physical_pin')
+    if not _append_missing_keys(errors, f'actuator {aid}', actuator, required):
         return
 
     valid = True
@@ -302,28 +313,38 @@ def _validate_actuator(
         errors.append(f'actuator {aid}: virtual_pin must be an integer')
         valid = False
 
-    try:
-        pin = int(actuator['physical_pin'])
-    except Exception:
-        errors.append(f'actuator {aid}: physical_pin must be an integer')
-        valid = False
-        pin = 0
-
-    board_slots = 0
-    if board_id in boards:
+    pin = 0
+    if not pca:
         try:
-            board_slots = int(boards[board_id]['internal_servo_slots'])
+            pin = int(actuator['physical_pin'])
         except Exception:
+            errors.append(f'actuator {aid}: physical_pin must be an integer')
+            valid = False
+            pin = 0
+
+        board_slots = 0
+        if board_id in boards:
+            try:
+                board_slots = int(boards[board_id]['internal_servo_slots'])
+            except Exception:
+                errors.append(
+                    f'actuator {aid}: cannot validate physical_pin because '
+                    f'board {board_id} internal_servo_slots is invalid'
+                )
+                valid = False
+        if valid and (pin < 1 or pin > board_slots):
             errors.append(
-                f'actuator {aid}: cannot validate physical_pin because '
-                f'board {board_id} internal_servo_slots is invalid'
+                f'actuator {aid}: physical_pin {pin} out of range 1..{board_slots}'
             )
             valid = False
-    if valid and (pin < 1 or pin > board_slots):
-        errors.append(
-            f'actuator {aid}: physical_pin {pin} out of range 1..{board_slots}'
-        )
-        valid = False
+
+    if valid:
+        board = boards.get(board_id) if isinstance(boards.get(board_id), dict) else None
+        try:
+            resolve_plug(actuator, board)
+        except (KeyError, TypeError, ValueError) as exc:
+            errors.append(f'actuator {aid}: {exc}')
+            valid = False
 
     servo_type = str(actuator['servo_type']).strip('"')
     if servo_type not in ('180', '270', '300'):
@@ -510,6 +531,27 @@ def _validate_sensor_ranges(
             )
 
 
+def normalize_board_classes(boards: dict[str, Any]) -> None:
+    """
+    Derive ``board_class`` from plugs for internal Servo2040 boards.
+
+    ``bus_servo_only`` is left alone. Otherwise the label is
+    ``internal_servo_i2c_pwm`` when ``i2c_devices`` is non-empty, else
+    ``internal_servo_only``. The generator does not branch on this label for
+    firmware; it stays a derived annotation for humans and ros2_control.
+    """
+    for board in boards.values():
+        if not isinstance(board, dict):
+            continue
+        if board.get('board_class') == BOARD_CLASS_BUS_SERVO_ONLY:
+            continue
+        devices = board.get('i2c_devices') or []
+        has_i2c = isinstance(devices, list) and len(devices) > 0
+        board['board_class'] = (
+            BOARD_CLASS_INTERNAL_I2C_PWM if has_i2c else BOARD_CLASS_INTERNAL_ONLY
+        )
+
+
 def validate_hardware_yaml(data: dict[str, Any]) -> None:
     """Raise ValueError if the mapping is structurally invalid."""
     for key in REQUIRED_ROOT:
@@ -534,6 +576,8 @@ def validate_hardware_yaml(data: dict[str, Any]) -> None:
     if not isinstance(boards, dict) or not boards:
         raise ValueError('boards must be a non-empty map')
 
+    normalize_board_classes(boards)
+
     errors: list[str] = []
     _validate_boards(boards, errors)
 
@@ -551,6 +595,13 @@ def validate_hardware_yaml(data: dict[str, Any]) -> None:
             actuator_item_errors_by_board,
         )
     _validate_actuator_ranges(actuators_by_board, actuator_item_errors_by_board, errors)
+    for board_id, board_actuators in actuators_by_board.items():
+        if actuator_item_errors_by_board.get(board_id, False):
+            continue
+        errors.extend(header_constraint_errors(board_id, board_actuators))
+        board = boards.get(board_id)
+        if isinstance(board, dict):
+            errors.extend(pca_channel_errors(board_id, board, board_actuators))
 
     sensors: list[dict[str, Any]] = data['sensors']
     if not isinstance(sensors, list):
