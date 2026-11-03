@@ -4,8 +4,6 @@ import base64
 from pathlib import Path
 import zlib
 
-import rclpy
-import yaml
 from ament_index_python.packages import get_package_share_directory
 from lucy_msgs.srv import ActivateConfig
 from lucy_msgs.srv import DeleteConfig
@@ -15,6 +13,7 @@ from lucy_msgs.srv import ListConfigs
 from lucy_msgs.srv import SaveConfig
 import rclpy
 from rclpy.node import Node
+import yaml
 
 from ..config_store import ConfigStore
 from ..error_format import format_error_lines
