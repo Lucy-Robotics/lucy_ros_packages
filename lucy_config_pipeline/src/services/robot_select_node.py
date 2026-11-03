@@ -1,8 +1,9 @@
 """
 Robot package selection for the web panel.
 
-Publishes the active and installed robot packages, and asks the Lucy launcher
-to restart the stack on another one, exactly like ticking it in the TUI.
+Publishes the active and installed robot packages, asks the Lucy launcher
+to restart the stack on another one, exactly like ticking it in the TUI, and
+relays the launcher's core readiness stage.
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ from std_msgs.msg import String
 
 ROBOTS_TOPIC = '/lucy/robots'
 SELECT_TOPIC = '/lucy/select_robot'
+STACK_STATUS_TOPIC = '/lucy/stack_status'
+STATUS_POLL_S = 0.5
 
 _LATCHED_QOS = QoSProfile(
     history=QoSHistoryPolicy.KEEP_LAST,
@@ -43,13 +46,22 @@ def installed_robot_packages() -> list[str]:
     return sorted(found)
 
 
-def select_request_file() -> Path:
-    """Return the file the Lucy launcher watches for a robot change."""
-    override = os.environ.get('LUCY_SELECT_ROBOT_FILE')
+def _launcher_file(env: str, name: str) -> Path:
+    override = os.environ.get(env)
     if override:
         return Path(override)
     uid = getattr(os, 'getuid', lambda: 0)()
-    return Path(tempfile.gettempdir()) / f'lucy_select_robot.{uid}'
+    return Path(tempfile.gettempdir()) / f'{name}.{uid}'
+
+
+def select_request_file() -> Path:
+    """Return the file the Lucy launcher watches for a robot change."""
+    return _launcher_file('LUCY_SELECT_ROBOT_FILE', 'lucy_select_robot')
+
+
+def stack_status_file() -> Path:
+    """Return the file the Lucy launcher writes the core readiness stage to."""
+    return _launcher_file('LUCY_STACK_STATUS_FILE', 'lucy_stack_status')
 
 
 class RobotSelectNode(Node):
@@ -65,6 +77,18 @@ class RobotSelectNode(Node):
         self._robots_pub.publish(
             String(data=json.dumps({'active': self._active, 'available': self._available}))
         )
+        self._status_pub = self.create_publisher(String, STACK_STATUS_TOPIC, _LATCHED_QOS)
+        self._last_status = ''
+        self.create_timer(STATUS_POLL_S, self._relay_stack_status)
+
+    def _relay_stack_status(self) -> None:
+        try:
+            status = stack_status_file().read_text(encoding='utf-8')
+        except OSError:
+            return
+        if status and status != self._last_status:
+            self._last_status = status
+            self._status_pub.publish(String(data=status))
 
     def _on_select(self, msg: String) -> None:
         robot = msg.data.strip()
