@@ -28,6 +28,7 @@ from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch.substitutions import PathJoinSubstitution
+from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -96,10 +97,13 @@ def generate_launch_description():
         ]),
     )
 
+    kinematics = Node(package='lucy_kinematics', executable='kinematics_node', output='screen')
+
     return LaunchDescription([
         robot_package_arg,
         config_dir_arg,
         rosbridge,
         config_pipeline_launch,
         hardware_discovery_launch,
+        kinematics,
     ])
