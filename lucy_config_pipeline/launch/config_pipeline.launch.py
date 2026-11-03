@@ -27,4 +27,13 @@ def generate_launch_description() -> LaunchDescription:
         output='screen',
     )
 
-    return LaunchDescription([robot_pkg_arg, config_dir_arg, node, registry_node])
+    robot_select_node = Node(
+        package='lucy_config_pipeline',
+        executable='robot_select_node',
+        output='screen',
+        parameters=[{'robot_package': LaunchConfiguration('robot_package')}],
+    )
+
+    return LaunchDescription(
+        [robot_pkg_arg, config_dir_arg, node, registry_node, robot_select_node]
+    )
