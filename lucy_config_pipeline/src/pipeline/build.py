@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -11,8 +12,8 @@ from .selection import is_mega_board
 from .selection import mega_artifact_dir
 from .selection import mega_crate_dir
 from .selection import resolve_firmware_paths
-from .toolchain import FirmwareToolchainError
 from .toolchain import firmware_tool_env
+from .toolchain import FirmwareToolchainError
 from .toolchain import resolve_firmware_tool
 
 MEGA_ELF = Path("target/avr-none/release/lucy-embedded-firmware-arduino-mega.elf")
@@ -36,14 +37,12 @@ def run_build_phase(
         return _run_cargo_builds(
             data=data,
             selected_boards=selected_boards,
-            source_dir=paths.source_dir,
-            build_dir=paths.build_dir,
+            paths=paths,
             timeout_seconds=timeout_seconds,
             feedback=feedback,
             log_error=log_error,
         )
 
-    paths.build_dir.mkdir(parents=True, exist_ok=True)
     plan = board_build_plan(data, selected_boards)
     boards_map = data.get("boards", {})
     total_steps = len(plan) + 1
@@ -123,14 +122,16 @@ def _run_cargo_builds(
     *,
     data: dict,
     selected_boards: set[str] | None,
-    source_dir: Path,
-    build_dir: Path,
+    paths,
     timeout_seconds: int,
     feedback: Callable[..., None],
     log_error: Callable[[str], None],
 ) -> tuple[list[str], set[str]]:
     """One cargo release build and ``elf2uf2-rs`` per internal-servo board."""
     from lucy_config_generator.firmware_spec import render_firmware_spec
+
+    source_dir = paths.source_dir
+    build_dir = paths.build_dir
 
     build_dir.mkdir(parents=True, exist_ok=True)
     plan = board_build_plan(data, selected_boards)
@@ -166,6 +167,10 @@ def _run_cargo_builds(
         spec_path = build_dir / f'config_{board}.yaml'
         uf2 = build_dir / f'{board}.uf2'
         try:
+            if is_mega_board(board_def):
+                _build_mega(board, paths, timeout_seconds, feedback, index / total)
+                built.add(board)
+                continue
             # Empty pwm/i2c_pwm is fine — board still builds/flashes/runs as CDC.
             spec_path.write_text(render_firmware_spec(data, board), encoding='utf-8')
             env = dict(tool_env)
@@ -293,7 +298,6 @@ def _run_command(
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
-        env=env,
     )
     assert process.stdout is not None
     watchdog = threading.Timer(timeout_seconds, process.kill)
