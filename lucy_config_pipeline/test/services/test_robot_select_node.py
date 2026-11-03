@@ -9,6 +9,7 @@ from std_msgs.msg import String
 @pytest.fixture
 def node(tmp_path, monkeypatch):
     monkeypatch.setenv('LUCY_SELECT_ROBOT_FILE', str(tmp_path / 'select'))
+    monkeypatch.setenv('LUCY_STACK_STATUS_FILE', str(tmp_path / 'status'))
     rclpy.init()
     n = RobotSelectNode(available=['inmoov_urdf', 'so_arm101_urdf'])
     yield n
@@ -39,3 +40,13 @@ def test_robot_list_is_published(node):
             break
     node.destroy_subscription(sub)
     assert json.loads(received[0])['available'] == ['inmoov_urdf', 'so_arm101_urdf']
+
+
+def test_launcher_stack_status_is_relayed_once(node, tmp_path):
+    published = []
+    node._status_pub.publish = lambda m: published.append(m.data)
+    node._relay_stack_status()
+    (tmp_path / 'status').write_text('{"ready": false, "index": 6}')
+    node._relay_stack_status()
+    node._relay_stack_status()
+    assert published == ['{"ready": false, "index": 6}']
