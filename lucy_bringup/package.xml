@@ -17,6 +17,7 @@
   <exec_depend>camera_ros</exec_depend>
   <exec_depend>lucy_config_pipeline</exec_depend>
   <exec_depend>lucy_hardware_discovery</exec_depend>
+  <exec_depend>lucy_kinematics</exec_depend>
   <exec_depend>inmoov_urdf</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
