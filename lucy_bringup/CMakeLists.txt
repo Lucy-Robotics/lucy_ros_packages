@@ -46,6 +46,9 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_mcu_bridge_bringup test/test_mcu_bridge_bringup.py
     TIMEOUT 60
   )
+  ament_add_pytest_test(test_host_firmware test/test_host_firmware.py
+    TIMEOUT 60
+  )
 endif()
 
 ament_package()
