@@ -271,7 +271,7 @@ def test_force_reflash_reboots_by_bus_then_copies_uf2(
     bus_i = calls[0].index('--bus')
     force_i = calls[0].index('-f')
     assert bus_i < force_i
-    assert calls[0][bus_i : bus_i + 2] == ['--bus', '5']
+    assert calls[0][bus_i:bus_i + 2] == ['--bus', '5']
     assert '--address' in calls[0] and '17' in calls[0]
     assert '-u' in calls[0]
     assert 'sudo' not in calls[0]

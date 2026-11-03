@@ -7,8 +7,8 @@ import threading
 
 from .selection import board_build_plan
 from .selection import resolve_firmware_paths
-from .toolchain import FirmwareToolchainError
 from .toolchain import firmware_tool_env
+from .toolchain import FirmwareToolchainError
 from .toolchain import resolve_firmware_tool
 
 
