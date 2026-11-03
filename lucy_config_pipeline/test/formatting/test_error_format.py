@@ -30,23 +30,9 @@ def test_yaml_parser_line_column_are_exposed():
     assert o['column'] == 18
 
 
-def test_board_virtual_pin_gap_message_is_preserved():
-    s = format_error_line(
-        'board rp2040_left_arm: virtual_pin must be contiguous from 0..N-1, got [0, 1, 3]'
-    )
+def test_board_duplicate_sensor_physical_pin_message_is_mapped():
+    s = format_error_line('board rp2040_left_arm: duplicate sensor physical_pin')
     o = json.loads(s)
-    assert o['field'] == 'boards.rp2040_left_arm.virtual_pin'
-    assert o['field_path'] == ['boards', 'rp2040_left_arm', 'virtual_pin']
-    assert o['message'] == 'virtual_pin must be contiguous from 0..N-1, got [0, 1, 3]'
-
-
-def test_board_missing_virtual_pin_message_is_explicit_and_mapped():
-    s = format_error_line(
-        'board rp2040_left_arm: missing virtual_pin indices [2, 5] '
-        '(no actuator mapped to these virtual_pin values)'
-    )
-    o = json.loads(s)
-    assert o['field'] == 'boards.rp2040_left_arm.virtual_pin'
-    assert o['field_path'] == ['boards', 'rp2040_left_arm', 'virtual_pin']
-    assert 'missing virtual_pin indices [2, 5]' in o['message']
-    assert 'no actuator mapped' in o['message']
+    assert o['field'] == 'boards.rp2040_left_arm.duplicate'
+    assert o['field_path'] == ['boards', 'rp2040_left_arm', 'duplicate']
+    assert o['message'] == 'duplicate sensor physical_pin'

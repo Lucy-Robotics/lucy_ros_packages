@@ -406,7 +406,11 @@ def parse_actuators_yaml(yaml_string: str) -> dict:
             if not isinstance(bdef, dict): continue
             ctrl_name = bdef.get('controller', {}).get('name')
             if not ctrl_name: continue
-            board_actuators = sorted([a for a in actuators_list if isinstance(a, dict) and a.get('board') == board_id], key=lambda a: a.get('virtual_pin', 0))
+            # YAML list order on this board (== derived virtual_pin 0..N-1).
+            board_actuators = [
+                a for a in actuators_list
+                if isinstance(a, dict) and a.get('board') == board_id
+            ]
             joints = []
             for actuator in board_actuators:
                 urdf_joint = actuator.get('urdf_joint')
@@ -444,7 +448,11 @@ def parse_sensors_yaml(yaml_string: str) -> dict:
             if not isinstance(bdef, dict): continue
             topic_sensor = bdef.get('topic_sensors', {})
             if not topic_sensor: continue
-            board_sensors = sorted([s for s in sensors_list if isinstance(s, dict) and s.get('board') == board_id], key=lambda s: s.get('virtual_pin', 0))
+            # YAML list order on this board (== derived virtual_pin 0..N-1).
+            board_sensors = [
+                s for s in sensors_list
+                if isinstance(s, dict) and s.get('board') == board_id
+            ]
             sensors = []
             for sensor in board_sensors:
                 sensor_type = sensor.get('type')

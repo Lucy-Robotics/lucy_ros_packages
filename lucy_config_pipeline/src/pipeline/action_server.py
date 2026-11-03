@@ -20,6 +20,10 @@ from rclpy.node import Node
 from std_srvs.srv import Trigger
 
 from .build import run_build_phase
+from .flash import _board_bridge_node_name
+from .flash import _mcu_bridge_process_running
+from .flash import _wait_for_bridge_link
+from .flash import flash_bridge_link_wait_seconds
 from .flash import flash_picotool_timeout_seconds
 from .flash import flash_uptime_wait_seconds
 from .flash import flash_usb_wait_seconds
@@ -148,6 +152,43 @@ class PipelineActionServer(Node):
         )
         return True, resp.message or 'reload complete'
 
+    def _verify_bridge_links_after_reload(
+        self, goal_handle, flashed_boards: list[str]
+    ) -> list[str]:
+        """Return error strings if flashed boards' mcu_bridge links stay dead."""
+        import time
+
+        if not flashed_boards:
+            return []
+        link_wait = flash_bridge_link_wait_seconds()
+        if link_wait <= 0:
+            return []
+        since = time.time()
+        errors: list[str] = []
+        for board in flashed_boards:
+            node = _board_bridge_node_name(board)
+            if not node:
+                continue
+            # Give respawn a moment; then require either no bridge or a fresh link.
+            deadline = time.monotonic() + min(5.0, link_wait)
+            while time.monotonic() < deadline and not _mcu_bridge_process_running(node):
+                time.sleep(0.2)
+            if not _mcu_bridge_process_running(node):
+                continue
+            self._feedback(
+                goal_handle,
+                phase='reload',
+                progress=0.95,
+                detail=f'verifying mcu_bridge link for {node}',
+                board=board,
+            )
+            if not _wait_for_bridge_link(node, since=since, timeout_seconds=link_wait):
+                errors.append(
+                    f'mcu_bridge {node} has no live serial link after reload '
+                    f'(within {link_wait}s) — control is not restored'
+                )
+        return errors
+
     def _generate_to_dir(
         self,
         *,
@@ -274,7 +315,7 @@ class PipelineActionServer(Node):
                 )
                 built_ok = set(plan_boards)
             elif not goal.dry_run and not goal.simulation_only:
-                build_failed_boards = run_build_phase(
+                build_failed_boards, built_ok = run_build_phase(
                     data=data,
                     selected_boards=boards,
                     workspace_src=self._paths.workspace_src,
@@ -282,7 +323,6 @@ class PipelineActionServer(Node):
                     feedback=lambda **kwargs: self._feedback(goal_handle, **kwargs),
                     log_error=lambda msg: self.get_logger().error(msg),
                 )
-                built_ok = {b for b in plan_boards if b not in set(build_failed_boards)}
             else:
                 built_ok = {b for b in plan_boards if b not in set(build_failed_boards)}
 
@@ -296,7 +336,13 @@ class PipelineActionServer(Node):
                 goal_handle.abort()
                 return result
 
-            if not goal.dry_run and plan_set and not built_ok and not goal.simulation_only:
+            if (
+                not goal.dry_run
+                and plan_set
+                and not built_ok
+                and build_failed_boards
+                and not goal.simulation_only
+            ):
                 result.errors.extend(
                     format_error_lines(
                         [f"build failed for boards: {', '.join(sorted(build_failed_boards))}"]
@@ -356,6 +402,18 @@ class PipelineActionServer(Node):
                     result.message = reload_msg
                     goal_handle.abort()
                     return result
+                # After reload, mcu_bridge is signalled to respawn — require a live
+                # framed link before claiming success (USB-by-id alone is a lie).
+                link_failed = self._verify_bridge_links_after_reload(
+                    goal_handle, result.boards_flashed
+                )
+                if link_failed:
+                    result.errors.extend(format_error_lines(link_failed))
+                    result.message = (
+                        'reload claimed success but mcu_bridge serial link is dead'
+                    )
+                    goal_handle.abort()
+                    return result
 
             result.success = True
             if build_failed_boards:
@@ -395,8 +453,9 @@ class PipelineActionServer(Node):
             return
         fw_cfg_dir = (self._paths.workspace_src / firmware_src_dir / 'config').resolve()
         fw_cfg_dir.mkdir(parents=True, exist_ok=True)
-        for cfile in out_dir.glob('config_*.c'):
-            shutil.copy2(cfile, fw_cfg_dir / cfile.name)
+        for pattern in ('config_*.c', 'config_*.yaml'):
+            for cfile in out_dir.glob(pattern):
+                shutil.copy2(cfile, fw_cfg_dir / cfile.name)
         mega_dir = mega_artifact_dir(resolve_firmware_paths(data, self._paths.workspace_src))
         for board_id, board in (data.get('boards') or {}).items():
             generated = out_dir / f'config_{board_id}.rs'

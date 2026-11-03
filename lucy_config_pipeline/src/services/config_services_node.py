@@ -13,6 +13,7 @@ from lucy_msgs.srv import ListConfigs
 from lucy_msgs.srv import SaveConfig
 import rclpy
 from rclpy.node import Node
+import yaml
 
 from ..config_store import ConfigStore
 from ..error_format import format_error_lines
@@ -112,7 +113,11 @@ class ConfigServicesNode(Node):
                 res.message = 'validation failed'
                 return res
 
-            self._store.write_named_yaml(req.config_name, req.config_yaml)
+            # Persist schema-normalized labels (e.g. derived board_class).
+            self._store.write_named_yaml(
+                req.config_name,
+                yaml.safe_dump(data, sort_keys=False, default_flow_style=False),
+            )
             if req.activate:
                 self._store.activate(req.config_name)
             res.success = True
