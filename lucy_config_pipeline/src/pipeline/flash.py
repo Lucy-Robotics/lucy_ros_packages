@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import contextmanager
+from contextlib import ExitStack
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -71,6 +73,27 @@ def run_flash_phase(
                 detail=f"skip flash for {board}: no serial_id",
                 board=board,
             )
+            continue
+
+        if is_mega_board(boards_entry):
+            try:
+                _flash_mega(board, serial, paths, picotool_timeout_seconds, feedback, row, locks)
+                flashed.append(board)
+                feedback(
+                    phase='flash',
+                    progress=min(1.0, row + 0.95 / total),
+                    detail=f'flash completed for {board}',
+                    board=board,
+                )
+            except Exception as exc:
+                failed.append(board)
+                log_error(f'Flash failed for {board}: {exc}')
+                feedback(
+                    phase='flash',
+                    progress=min(1.0, row + 0.9 / total),
+                    detail=f'flash failed for {board}: {exc}',
+                    board=board,
+                )
             continue
 
         uf2 = paths.build_dir / f'{board}.uf2'
@@ -350,7 +373,7 @@ def _bridge_link_path(node_name: str) -> Path:
 
 
 def _mcu_bridge_process_running(node_name: str) -> bool:
-    """True when a host mcu_bridge for ``node_name`` is in the process table."""
+    """Return True when a host mcu_bridge for ``node_name`` is in the process table."""
     import subprocess
 
     needle = f'lucy-embedded-firmware-mcu-bridge {node_name}'
@@ -415,7 +438,8 @@ def flash_bridge_link_wait_seconds() -> float:
 
 
 def _list_bootsel_serials() -> list[str]:
-    """USB serial strings for devices whose product is RP2 Boot (BOOTSEL).
+    """
+    Return USB serial strings for devices whose product is RP2 Boot (BOOTSEL).
 
     Application firmware also uses VID ``2e8a`` / PID ``0003``, so product
     string is the reliable discriminator. BOOTSEL serial ≠ flash unique ID
@@ -447,7 +471,7 @@ def _list_bootsel_serials() -> list[str]:
 
 
 def _is_bootsel_volume(path: Path) -> bool:
-    """True when ``path`` is a writable RP2 BOOTSEL mass-storage mount."""
+    """Return True when ``path`` is a writable RP2 BOOTSEL mass-storage mount."""
     name = path.name.upper()
     if name not in {'RPI-RP2', 'RP2350'} and 'RPI-RP2' not in name:
         return False

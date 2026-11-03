@@ -4,8 +4,6 @@ import base64
 from pathlib import Path
 import zlib
 
-import rclpy
-import yaml
 from ament_index_python.packages import get_package_share_directory
 from lucy_config_generator.motors import motors_used
 from lucy_msgs.srv import ActivateConfig

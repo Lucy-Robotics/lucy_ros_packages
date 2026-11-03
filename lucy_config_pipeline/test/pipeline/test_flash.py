@@ -276,7 +276,7 @@ def test_force_reflash_reboots_by_bus_then_copies_uf2(
     bus_i = calls[0].index('--bus')
     force_i = calls[0].index('-f')
     assert bus_i < force_i
-    assert calls[0][bus_i : bus_i + 2] == ['--bus', '5']
+    assert calls[0][bus_i:bus_i + 2] == ['--bus', '5']
     assert '--address' in calls[0] and '17' in calls[0]
     assert '-u' in calls[0]
     assert 'sudo' not in calls[0]
@@ -398,6 +398,59 @@ def test_run_flash_phase_uptime_timeout_fails_board(
 
     assert failed == ["rp2040_right_arm"]
     assert flashed == []
+
+
+def test_mega_board_is_flashed_with_avrdude_on_its_serial_port(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    artifacts = tmp_path / 'fw' / 'firmwares' / 'arduino_mega' / 'target' / 'lucy'
+    artifacts.mkdir(parents=True)
+    (artifacts / 'mega_left.elf').write_bytes(b'elf')
+    lock = Path('/tmp/.lucy_mcu_flashing_TESTMEGA0')
+    calls: list[list[str]] = []
+    locked: list[bool] = []
+
+    def run(*, cmd, **_k):
+        calls.append(cmd)
+        locked.append(lock.exists())
+
+    monkeypatch.setattr(pipeline_flash, '_run_command', run)
+    monkeypatch.setattr(pipeline_flash, 'mega_port', lambda serial: f'/dev/tty-{serial}')
+    monkeypatch.setattr(pipeline_flash.time, 'sleep', lambda _s: None)
+    locks = ExitStack()
+
+    failed, flashed = pipeline_flash.run_flash_phase(
+        data={
+            'firmware': {'source_dir': 'fw', 'build_dir': 'build'},
+            'boards': {
+                'mega_left': {
+                    'serial_id': 'TESTMEGA0',
+                    'board_class': 'i2c_pwm_only',
+                    'firmware_target': 'arduino_mega',
+                },
+            },
+        },
+        selected_boards=None,
+        boards_built_ok={'mega_left'},
+        workspace_src=tmp_path,
+        picotool_timeout_seconds=30,
+        usb_wait_seconds=1,
+        uptime_wait_seconds=5,
+        node=None,
+        feedback=lambda **_kwargs: None,
+        log_error=lambda _msg: None,
+        locks=locks,
+    )
+
+    assert (failed, flashed) == ([], ['mega_left'])
+    assert calls == [[
+        'avrdude', '-p', 'atmega2560', '-c', 'wiring', '-P', '/dev/tty-TESTMEGA0', '-b', '115200',
+        '-D', '-U', f"flash:w:{artifacts / 'mega_left.elf'}:e",
+    ]]
+    assert locked == [True]
+    assert lock.exists()
+    locks.close()
+    assert not lock.exists()
 
 
 def test_flash_fails_when_bridge_link_stays_dead(

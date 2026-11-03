@@ -2,7 +2,8 @@
 #
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""Resolve the Pixi-hosted Rust firmware toolchain for cargo / elf2uf2-rs.
+"""
+Resolve the Pixi-hosted Rust firmware toolchain for cargo / elf2uf2-rs.
 
 ``pixi run firmware-setup`` installs rustup + ``elf2uf2-rs`` under
 ``$CONDA_PREFIX/cargo`` (not ``$CONDA_PREFIX/bin``). The config pipeline node
@@ -61,10 +62,10 @@ def _tool_name(name: str) -> str:
 
 
 def resolve_firmware_tool(name: str, *, env: dict[str, str] | None = None) -> Path:
-    """Absolute path to ``cargo`` / ``elf2uf2-rs`` under the Pixi cargo home or ``PATH``.
+    """
+    Return the absolute path to ``cargo`` / ``elf2uf2-rs`` (Pixi cargo home or ``PATH``).
 
-    Raises:
-        FirmwareToolchainError: when the tool cannot be found, with a fix hint.
+    Raise FirmwareToolchainError with a fix hint when the tool cannot be found.
     """
     exe = _tool_name(name)
     prefix = conda_prefix()
