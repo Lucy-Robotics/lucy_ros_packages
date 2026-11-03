@@ -12,8 +12,8 @@ from .selection import is_mega_board
 from .selection import mega_artifact_dir
 from .selection import mega_crate_dir
 from .selection import resolve_firmware_paths
-from .toolchain import FirmwareToolchainError
 from .toolchain import firmware_tool_env
+from .toolchain import FirmwareToolchainError
 from .toolchain import resolve_firmware_tool
 
 MEGA_ELF = Path('target/avr-none/release/lucy-embedded-firmware-arduino-mega.elf')
