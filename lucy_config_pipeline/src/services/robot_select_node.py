@@ -14,6 +14,7 @@ import tempfile
 
 from ament_index_python.packages import get_packages_with_prefixes
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSDurabilityPolicy
 from rclpy.qos import QoSHistoryPolicy
@@ -81,7 +82,7 @@ def main(args=None) -> None:
     node = RobotSelectNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.destroy_node()
