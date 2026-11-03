@@ -22,6 +22,8 @@ A good client ID is one that is both unique and descriptive, for example: `my_ap
 The registry counts you as connected while your heartbeats keep arriving and prunes you automatically about ten seconds after they stop (ten missed beats at the 1 Hz cadence) — so a crash or a closed tab is handled for free, with no explicit "disconnect" step.
 To leave at once instead, publish your client ID on `/lucy/client_goodbye` (`std_msgs/msg/String`, volatile): the registry drops you and releases control if you held it.
 
+A browser can lose that message while its tab closes. When rosbridge's own `/client_count` drops, the registry drops within 1.5 s every client that stops heart-beating, so a closed tab leaves quickly either way.
+
 ```python
 # A unique identifier for this specific client instance.
 CLIENT_ID = f"my_app_{int(time.time())}_{random.randint(1000, 9999)}"

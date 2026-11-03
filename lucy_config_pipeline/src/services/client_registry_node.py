@@ -24,6 +24,7 @@ from std_msgs.msg import String
 
 HEARTBEAT_TOPIC = '/lucy/client_heartbeat'
 GOODBYE_TOPIC = '/lucy/client_goodbye'
+BRIDGE_CLIENT_COUNT_TOPIC = '/client_count'
 CLIENT_COUNT_TOPIC = '/lucy/client_count'
 ACTIVE_CLIENT_TOPIC = '/lucy/active_client'
 GET_CLIENT_COUNT_SERVICE = '/lucy/get_client_count'
@@ -31,6 +32,7 @@ CONTROL_SERVICE = '/lucy/control'
 
 TICK_PERIOD_S = 1.0
 CLIENT_TTL_S = 10.0  # ~10 missed beats at the 1 Hz client cadence
+SOCKET_DROP_GRACE_S = 1.5
 
 _LATCHED_QOS = QoSProfile(
     history=QoSHistoryPolicy.KEEP_LAST,
@@ -58,6 +60,7 @@ class ClientRegistryNode(Node):
         # (Not _clients — Node uses that.)
         self._last_seen: dict[str, float] = {}
         self._active_client: str = ''
+        self._bridge_clients: int | None = None
         self._state_lock = threading.Lock()
 
         self._count_pub = self.create_publisher(Int32, CLIENT_COUNT_TOPIC, _LATCHED_QOS)
@@ -65,6 +68,9 @@ class ClientRegistryNode(Node):
 
         self.create_subscription(String, HEARTBEAT_TOPIC, self._on_heartbeat, _HEARTBEAT_QOS)
         self.create_subscription(String, GOODBYE_TOPIC, self._on_goodbye, _HEARTBEAT_QOS)
+        self.create_subscription(
+            Int32, BRIDGE_CLIENT_COUNT_TOPIC, self._on_bridge_client_count, _LATCHED_QOS
+        )
         self.create_service(GetInt, GET_CLIENT_COUNT_SERVICE, self._on_get_client_count)
         self.create_service(ClientControl, CONTROL_SERVICE, self._on_control)
 
@@ -101,11 +107,27 @@ class ClientRegistryNode(Node):
         self._publish_count()
         self._publish_active()
 
-    def _on_tick(self) -> None:
-        deadline = time.monotonic() - CLIENT_TTL_S
+    def _on_bridge_client_count(self, msg: Int32) -> None:
+        dropped = self._bridge_clients is not None and msg.data < self._bridge_clients
+        self._bridge_clients = msg.data
+        if not dropped:
+            return
+        dropped_at = time.monotonic()
+        timer = None
+
+        def check() -> None:
+            timer.cancel()
+            self.destroy_timer(timer)
+            if self._drop_silent_since(dropped_at, 'disconnected'):
+                self._publish_count()
+                self._publish_active()
+
+        timer = self.create_timer(SOCKET_DROP_GRACE_S, check)
+
+    def _drop_silent_since(self, cutoff: float, reason: str) -> list[str]:
         with self._state_lock:
-            expired = [cid for cid, seen in self._last_seen.items() if seen < deadline]
-            for cid in expired:
+            gone = [cid for cid, seen in self._last_seen.items() if seen < cutoff]
+            for cid in gone:
                 del self._last_seen[cid]
             controller_lost = (
                 bool(self._active_client) and self._active_client not in self._last_seen
@@ -113,10 +135,14 @@ class ClientRegistryNode(Node):
             if controller_lost:
                 self._active_client = ''
             count = len(self._last_seen)
-        for cid in expired:
-            self.get_logger().info(f'Client expired: {cid} ({count} connected)')
+        for cid in gone:
+            self.get_logger().info(f'Client {reason}: {cid} ({count} connected)')
         if controller_lost:
-            self.get_logger().info('Active controller expired; control released')
+            self.get_logger().info(f'Active controller {reason}; control released')
+        return gone
+
+    def _on_tick(self) -> None:
+        self._drop_silent_since(time.monotonic() - CLIENT_TTL_S, 'expired')
         # Republish so volatile subscribers (web via rosbridge) converge without a
         # dedicated query; subscribers dedupe by value.
         self._publish_count()
