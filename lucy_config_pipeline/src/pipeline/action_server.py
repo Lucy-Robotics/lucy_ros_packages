@@ -402,6 +402,7 @@ class PipelineActionServer(Node):
                     result.message = reload_msg
                     goal_handle.abort()
                     return result
+                mega_flash_locks.close()
                 # After reload, mcu_bridge is signalled to respawn — require a live
                 # framed link before claiming success (USB-by-id alone is a lie).
                 link_failed = self._verify_bridge_links_after_reload(
