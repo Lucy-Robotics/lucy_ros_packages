@@ -45,7 +45,7 @@ std::optional<SharedMemoryChannel> SharedMemoryChannel::create(
 {
   const std::string shm_name = posix_shm_name(node_name);
   const std::size_t shm_size = ActuatorSharedState::size_for(max_actuators);
-  int fd = shm_open(shm_name.c_str(), O_CREAT | O_RDWR, 0666);
+  int fd = shm_open(shm_name.c_str(), O_CREAT | O_RDWR, 0600);
   if (fd == -1) {
     shm_unlink(shm_name.c_str());
     return std::nullopt;
