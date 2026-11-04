@@ -448,15 +448,15 @@ class PipelineActionServer(Node):
         shutil.copy2(out_dir / ctrl_name, ctrl_dst)
 
     def _install_firmware_outputs(self, out_dir: Path, data: dict) -> None:
-        firmware_src_dir = str(data.get('firmware', {}).get('source_dir', '')).strip()
-        if not firmware_src_dir:
+        if not str(data.get('firmware', {}).get('source_dir', '')).strip():
             return
-        fw_cfg_dir = (self._paths.workspace_src / firmware_src_dir / 'config').resolve()
+        paths = resolve_firmware_paths(data, self._paths.workspace_src)
+        fw_cfg_dir = paths.source_dir / 'config'
         fw_cfg_dir.mkdir(parents=True, exist_ok=True)
         for pattern in ('config_*.c', 'config_*.yaml'):
             for cfile in out_dir.glob(pattern):
                 shutil.copy2(cfile, fw_cfg_dir / cfile.name)
-        mega_dir = mega_artifact_dir(resolve_firmware_paths(data, self._paths.workspace_src))
+        mega_dir = mega_artifact_dir(paths)
         for board_id, board in (data.get('boards') or {}).items():
             generated = out_dir / f'config_{board_id}.rs'
             if is_mega_board(board) and generated.is_file():

@@ -70,6 +70,7 @@ def generate_launch_description():
             ('max_message_size', '50000000'),
             ('call_services_in_new_thread', 'true'),
             ('send_action_goals_in_new_thread', 'true'),
+            ('address', LaunchConfiguration('rosbridge_address', default='127.0.0.1')),
         ],
     )
 

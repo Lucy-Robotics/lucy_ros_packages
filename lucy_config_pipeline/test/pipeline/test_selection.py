@@ -114,3 +114,14 @@ def test_mega_boards_are_built_and_flashed_by_the_pipeline():
     assert all_selected_serials_empty(data, None) is False
     assert is_mega_board(data['boards']['mega_left'])
     assert not is_mega_board(data['boards']['rp2040_left_arm'])
+
+
+@pytest.mark.parametrize('firmware', [
+    {'source_dir': '/etc'},
+    {'source_dir': '../outside'},
+    {'source_dir': 'fw', 'build_dir': '../../outside'},
+    {'source_dir': 'fw', 'build_dir': '/tmp/build'},
+])
+def test_resolve_firmware_paths_stays_inside_the_workspace(tmp_path: Path, firmware: dict):
+    with pytest.raises(ValueError, match='must stay inside'):
+        resolve_firmware_paths({'firmware': firmware}, tmp_path)

@@ -14,6 +14,7 @@ from lucy_config_generator.plug import header_constraint_errors
 from lucy_config_generator.plug import i2c_device_errors
 from lucy_config_generator.plug import pca_channel_errors
 from lucy_config_generator.plug import resolve_plug
+from lucy_config_generator.safe_strings import check_safe_strings
 
 REQUIRED_ROOT = (
     'version',
@@ -667,6 +668,7 @@ def normalize_board_classes(boards: dict[str, Any]) -> None:
 
 def validate_hardware_yaml(data: dict[str, Any]) -> None:
     """Raise ValueError if the mapping is structurally invalid."""
+    check_safe_strings(data)
     for key in REQUIRED_ROOT:
         if key not in data:
             raise ValueError(f'missing root key: {key}')
