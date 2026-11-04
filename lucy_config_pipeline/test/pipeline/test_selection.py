@@ -93,3 +93,14 @@ def test_all_selected_serials_empty():
     assert all_selected_serials_empty(data, {'rp2040_so_arm'}) is True
     assert all_selected_serials_empty(data, None) is False
     assert all_selected_serials_empty(data, {'rp2040_left_arm'}) is False
+
+
+@pytest.mark.parametrize('firmware', [
+    {'source_dir': '/etc'},
+    {'source_dir': '../outside'},
+    {'source_dir': 'fw', 'build_dir': '../../outside'},
+    {'source_dir': 'fw', 'build_dir': '/tmp/build'},
+])
+def test_resolve_firmware_paths_stays_inside_the_workspace(tmp_path: Path, firmware: dict):
+    with pytest.raises(ValueError, match='must stay inside'):
+        resolve_firmware_paths({'firmware': firmware}, tmp_path)
