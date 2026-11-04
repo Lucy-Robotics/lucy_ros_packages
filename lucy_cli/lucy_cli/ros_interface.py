@@ -223,7 +223,7 @@ class LucyROSInterface(Node):
         Creates one subscription per unique sensor topic found in `sensors`
         (the dict returned by tui_node.parse_sensors_yaml), fanning out to every
         sensor on that board by its position in the board's sensor list (which
-        is already sorted by virtual_pin).
+        is board YAML list order).
 
         Call once at startup after fetching and parsing the hardware config.
         Safe to call again: topics already subscribed to are left in place.

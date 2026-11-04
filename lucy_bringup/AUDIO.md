@@ -68,7 +68,7 @@ The Lucy robot audio system provides **stereo audio capture and playback** capab
 │  ┌──────────────────────────────────────────────┐  │
 │  │  ROS2 Audio Nodes                            │  │
 │  │  ├─ audio_capturer_node                      │  │
-│  │  │   └─ Publishes: /audio (AudioStamped)     │  │
+│  │  │   └─ Publishes: /mic_audio (AudioStamped)│  │
 │  │  └─ audio_player_node                        │  │
 │  │      └─ Subscribes: /audio (AudioStamped)    │  │
 │  └──────────────────────────────────────────────┘  │
@@ -76,7 +76,8 @@ The Lucy robot audio system provides **stereo audio capture and playback** capab
 │                          ▼                         │
 │  ┌──────────────────────────────────────────────┐  │
 │  │  ROS2 Topics                                 │  │
-│  │  └─ /audio (audio_common_msgs/AudioStamped)  │  │
+│  │  ├─ /mic_audio (microphone input)            │  │
+│  │  └─ /audio (playback output)                 │  │
 │  └──────────────────────────────────────────────┘  │
 └────────────────────────────────────────────────────┘
 ```
@@ -85,7 +86,7 @@ The Lucy robot audio system provides **stereo audio capture and playback** capab
 
 1. **Capture Path:**
    ```
-   Microphones → ALSA → PortAudio → audio_capturer_node → /audio topic
+   Microphones → ALSA → PortAudio → audio_capturer_node → /mic_audio topic
    ```
 
 2. **Playback Path:**
@@ -369,7 +370,8 @@ ros2 bag record /audio
 
 | Topic | Type | Direction | Description |
 |-------|------|-----------|-------------|
-| `/audio` | `audio_common_msgs/AudioStamped` | Publisher: `audio_capturer_node`<br>Subscriber: `audio_player_node` | Audio data stream with timestamp |
+| `/mic_audio` | `audio_common_msgs/AudioStamped` | Publisher: `audio_capturer_node` | Microphone stream |
+| `/audio` | `audio_common_msgs/AudioStamped` | Subscriber: `audio_player_node` | Playback stream |
 
 ### Message Structure
 
@@ -425,7 +427,7 @@ audio:
 
 ### audio_capturer_node
 
-**Purpose:** Captures audio from microphones and publishes to `/audio` topic.
+**Purpose:** Captures audio from microphones and publishes to `/mic_audio` topic.
 
 **Parameters:**
 - `format` (uint8): PortAudio format constant (default: 8 = paInt16)
@@ -436,7 +438,7 @@ audio:
 - `frame_id` (string): TF frame ID (default: "audio_capture")
 
 **Published Topics:**
-- `/audio` (`audio_common_msgs/AudioStamped`): Audio data stream
+- `/mic_audio` (`audio_common_msgs/AudioStamped`): Microphone stream
 
 **Behavior:**
 - Continuously captures audio from the specified device
@@ -446,7 +448,7 @@ audio:
 
 ### audio_player_node
 
-**Purpose:** Subscribes to `/audio` topic and plays audio through speakers.
+**Purpose:** Subscribes to `/audio` topic and plays audio through speakers (playback only; mic is on `/mic_audio`).
 
 **Parameters:**
 - `channels` (uint8): Number of channels (default: 2 = stereo)
@@ -729,9 +731,10 @@ from audio_common_msgs.msg import AudioStamped
 class MyAudioProcessor(Node):
     def __init__(self):
         super().__init__('my_audio_processor')
+        # Use '/mic_audio' for microphone input, '/audio' for playback stream
         self.subscription = self.create_subscription(
             AudioStamped,
-            '/audio',
+            '/mic_audio',
             self.audio_callback,
             10
         )

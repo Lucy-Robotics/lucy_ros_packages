@@ -14,6 +14,7 @@ setup(
     ],
     install_requires=['setuptools', 'PyYAML'],
     zip_safe=True,
+    extras_require={'test': ['pytest']},
     maintainer='Lucy Robotics Team',
     maintainer_email='contact@lucy-robotics.com',
     description='Restart RSP + ros2_control_node + spawners after config pipeline reload.',

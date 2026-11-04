@@ -40,6 +40,129 @@ def test_ros2_names_derived_from_board_id():
     assert derive_ros2_node_name('rp2040_left_arm') == 'left_arm'
     assert derive_ros2_hardware_name('rp2040_torso_head') == 'LucyHardwareTorsoHead'
     assert derive_ros2_node_name('rp2040_torso_head') == 'torso_head'
+    assert derive_ros2_hardware_name('mega_torso_head') == 'LucyHardwareTorsoHead'
+    assert derive_ros2_node_name('mega_arms') == 'arms'
+
+
+def _mega_mapping() -> dict:
+    """Fixture with rp2040_left_arm turned into a Mega on two chained PCA9685s."""
+    data = _load_mapping()
+    data['boards']['rp2040_left_arm'].update(
+        board_class='i2c_pwm_only', pca_addresses=[0x40, 0x41]
+    )
+    for a in data['actuators']:
+        if a['board'] == 'rp2040_left_arm':
+            a['limit_max'] = 3.14159
+            a['default'] = 1.5708
+            a['servo_type'] = '180'
+    return data
+
+
+def test_mega_board_gets_rust_board_tables():
+    out = generate_from_xacro_string_for_tests(
+        _mega_mapping(), _fixture_urdf_xml(), {'firmware'}, None
+    )
+    assert 'config_rp2040_left_arm.yaml' not in out
+    assert 'config_rp2040_right_arm.yaml' in out
+    rs = out['config_rp2040_left_arm.rs']
+    assert 'PCA_ADDRESSES: [u8; 2] = [0x40, 0x41];' in rs
+    # Both slots are clamped, only the enabled one (left_a, physical_pin 10) is driven.
+    assert 'JOINTS_CONFIG: [CommandConfig; 2]' in rs
+    assert 'limit_max: 3.14159 }, // left_disabled' in rs
+    assert 'DRIVEN: [(usize, u8); 1] = [\n    (0, 9), // left_a\n];' in rs
+
+
+def test_mega_pins_come_after_the_pca_outputs():
+    data = _mega_mapping()
+    data['boards']['rp2040_left_arm'].update(mega_pins=[8, 9, 54], internal_servo_slots=35)
+    left = [a for a in data['actuators'] if a['board'] == 'rp2040_left_arm']
+    left[0]['physical_pin'] = 34  # mega_pins[1] = D9, output 33
+    rs = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
+        'config_rp2040_left_arm.rs'
+    ]
+    assert 'MEGA_PINS: [u8; 3] = [8, 9, 54];' in rs
+    assert '$pins.d9.into_output().downgrade()' in rs
+    assert '$pins.a0.into_output().downgrade()' in rs  # D54 is A0
+    assert '(0, 33), // left_a' in rs
+
+
+@pytest.mark.parametrize('pins, match', [
+    ([20], 'not D20/D21'),
+    ([8, 8], 'duplicate mega_pins'),
+    (list(range(2, 11)), 'at most 8 mega_pins'),
+])
+def test_schema_rejects_bad_mega_pins(pins, match):
+    data = _mega_mapping()
+    data['boards']['rp2040_left_arm']['mega_pins'] = pins
+    with pytest.raises(ValueError, match=match):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_mega_board_without_pca_addresses():
+    data = _mega_mapping()
+    del data['boards']['rp2040_left_arm']['pca_addresses']
+    with pytest.raises(ValueError, match='pca_addresses must be a non-empty list'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_mega_slots_beyond_its_pcas():
+    data = _mega_mapping()
+    data['boards']['rp2040_left_arm']['pca_addresses'] = [0x40]
+    with pytest.raises(ValueError, match='exceeds the 16 outputs'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_mega_limits_beyond_180_deg():
+    data = _mega_mapping()
+    data['actuators'][0]['limit_max'] = 4.0
+    with pytest.raises(ValueError, match='must stay within 0..pi'):
+        validate_hardware_yaml(data)
+
+
+@pytest.mark.parametrize('limit_max', [3.1416, float('nan')])
+def test_schema_rejects_mega_limits_the_firmware_rejects(limit_max):
+    data = _mega_mapping()
+    data['actuators'][0]['limit_max'] = limit_max
+    with pytest.raises(ValueError, match='must stay within 0..pi'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_non_180_servos_on_a_mega():
+    data = _mega_mapping()
+    data['actuators'][0]['servo_type'] = '270'
+    with pytest.raises(ValueError, match='180 deg servos only'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_more_than_8_pcas_on_a_mega():
+    data = _mega_mapping()
+    data['boards']['rp2040_left_arm']['pca_addresses'] = list(range(0x40, 0x49))
+    with pytest.raises(ValueError, match='at most 8 pca_addresses'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_more_joints_than_a_mega_holds():
+    data = _mega_mapping()
+    template = next(a for a in data['actuators'] if a['board'] == 'rp2040_left_arm')
+    data['actuators'] += [{**template, 'enabled': False} for _ in range(24)]
+    with pytest.raises(ValueError, match='at most 24 actuators'):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_boards_sharing_a_node_name():
+    data = _load_mapping()
+    data['boards']['mega_left_arm'] = dict(data['boards']['rp2040_left_arm'])
+    with pytest.raises(ValueError, match="share the node_name 'left_arm'"):
+        validate_hardware_yaml(data)
+
+
+def test_schema_rejects_two_driven_servos_on_one_mega_output():
+    data = _mega_mapping()
+    left = [a for a in data['actuators'] if a['board'] == 'rp2040_left_arm']
+    left[1]['enabled'] = True
+    left[1]['physical_pin'] = left[0]['physical_pin']
+    with pytest.raises(ValueError, match='already driven by'):
+        validate_hardware_yaml(data)
 
 
 def test_schema_rejects_bad_version():
@@ -70,11 +193,18 @@ def test_schema_rejects_invalid_internal_servo_slots():
         validate_hardware_yaml(data)
 
 
-def test_schema_rejects_null_virtual_pin():
+def test_schema_assigns_virtual_pin_from_board_list_order():
     data = _load_mapping()
-    data['actuators'][0]['virtual_pin'] = None
-    with pytest.raises(ValueError, match='virtual_pin must be an integer'):
-        validate_hardware_yaml(data)
+    for actuator in data['actuators']:
+        actuator.pop('virtual_pin', None)
+    for sensor in data['sensors']:
+        sensor.pop('virtual_pin', None)
+    validate_hardware_yaml(data)
+    by_board: dict[str, list[int]] = {}
+    for actuator in data['actuators']:
+        by_board.setdefault(actuator['board'], []).append(int(actuator['virtual_pin']))
+    for pins in by_board.values():
+        assert pins == list(range(len(pins)))
 
 
 def test_schema_rejects_servo_min_greater_than_max():
@@ -158,49 +288,27 @@ def test_schema_rejects_sensor_min_value_greater_than_max_value():
         validate_hardware_yaml(data)
 
 
-def test_schema_reports_missing_virtual_pin_when_gap_exists():
-    data = _load_mapping()
-    data['actuators'][2]['virtual_pin'] = 3
-    with pytest.raises(ValueError, match=r'board .*: missing virtual_pin indices \[[0-9, ]+\]'):
-        validate_hardware_yaml(data)
-
-
-def test_schema_suppresses_sensor_contiguity_when_sensor_has_item_error():
+def test_schema_suppresses_sensor_physical_pin_dup_when_sensor_has_item_error():
     data = _load_mapping()
     data['sensors'][0]['associated_actuator'] = 'does_not_exist'
     with pytest.raises(ValueError) as exc:
         validate_hardware_yaml(data)
     msg = str(exc.value)
     assert 'associated_actuator does_not_exist not found' in msg
-    assert 'sensor virtual_pin must be contiguous' not in msg
-    assert 'missing sensor virtual_pin indices' not in msg
+    assert 'duplicate sensor physical_pin' not in msg
 
 
-def test_golden_firmware_left_arm():
+def test_firmware_spec_replaces_internal_c():
     data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
-        'config_rp2040_left_arm.c'
-    ]
-    expected = (_FIXTURES / 'golden_config_rp2040_left_arm.c').read_text(encoding='utf-8')
-    assert got == expected
-
-
-def test_golden_firmware_right_arm():
-    data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
-        'config_rp2040_right_arm.c'
-    ]
-    expected = (_FIXTURES / 'golden_config_rp2040_right_arm.c').read_text(encoding='utf-8')
-    assert got == expected
-
-
-def test_golden_firmware_torso():
-    data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
-        'config_rp2040_torso_head.c'
-    ]
-    expected = (_FIXTURES / 'golden_config_rp2040_torso_head.c').read_text(encoding='utf-8')
-    assert got == expected
+    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)
+    assert 'config_rp2040_left_arm.c' not in got
+    left = yaml.safe_load(got['config_rp2040_left_arm.yaml'])
+    assert left['node_name'] == 'left_arm'
+    assert left['pwm'][0]['identity'] == 'Servo10'
+    right = yaml.safe_load(got['config_rp2040_right_arm.yaml'])
+    assert right['pwm'][0]['identity'] == 'Servo10'
+    torso = yaml.safe_load(got['config_rp2040_torso_head.yaml'])
+    assert [row['identity'] for row in torso['pwm']] == ['Servo5', 'Servo6']
 
 
 def test_golden_ros2_control():
@@ -262,7 +370,7 @@ def test_boards_filter_emits_subset():
         {'firmware'},
         {'rp2040_left_arm'},
     )
-    assert set(got.keys()) == {'config_rp2040_left_arm.c'}
+    assert set(got.keys()) == {'config_rp2040_left_arm.yaml'}
 
 
 def test_generated_files_defaults_when_section_absent():
@@ -359,13 +467,13 @@ def test_bus_servo_board_generates_rust_layout():
     rust = out[f'config_{board_id}.rs']
 
     actuators = [a for a in data['actuators'] if a['board'] == board_id]
-    expected = max(int(a['virtual_pin']) for a in actuators) + 1
+    expected = len(actuators)
     assert f'pub const BUS_SERVO_SLOTS: u16 = {expected};' in rust
     assert 'pub const BUS_SERVO_BLOCK: u16 = 3;' in rust
 
 
 def test_slot_count_is_the_board_joint_count():
-    """virtual_pin is validated contiguous from 0, so slots == joints on the board."""
+    """Derived virtual_pin is 0..N-1 by board list order, so slots == joints on the board."""
     data, board_id = _bus_servo_mapping()
     out = generate_from_xacro_string_for_tests(
         data, _fixture_urdf_xml(), targets={'firmware'}

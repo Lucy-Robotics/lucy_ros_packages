@@ -138,3 +138,35 @@ def test_wait_times_out_and_still_allows_publish():
     assert time.time() - started < 1.0
     pub.publish(type('M', (), {'data': torque_command_values(True, 6)})())
     assert pub.published == [[1.0, 1.0, 1.0, 1.0, 1.0, 1.0]]
+
+
+def test_mega_bridges_follow_the_active_yaml(tmp_path: Path):
+    from lucy_control_supervisor.mcu_bridges import mega_bridges
+
+    hw = tmp_path / 'active.yaml'
+    hw.write_text(
+        'boards:\n'
+        '  mega_left: {board_class: i2c_pwm_only, serial_id: "AAA"}\n'
+        '  mega_right: {board_class: i2c_pwm_only, serial_id: ""}\n'
+        '  rp2040_torso_head: {board_class: internal_servo_only, serial_id: "BBB"}\n',
+        encoding='utf-8',
+    )
+    # Only Mega boards with a serial get a bridge; the RP2040 path is not a Mega bridge.
+    assert mega_bridges(hw) == [('left', 'AAA')]
+    assert mega_bridges(tmp_path / 'missing.yaml') == []
+
+
+def test_ros2_control_nodes_reads_the_hardware_blocks():
+    from lucy_control_supervisor.mcu_bridges import ros2_control_nodes
+
+    urdf = (
+        '<robot name="r">'
+        '<ros2_control name="left" type="system"><hardware>'
+        '<plugin>lucy_ros2_control/LucySystem</plugin><param name="node_name">left</param>'
+        '</hardware></ros2_control>'
+        '<ros2_control name="mock" type="system"><hardware><plugin>mock</plugin></hardware>'
+        '</ros2_control>'
+        '</robot>'
+    )
+    assert ros2_control_nodes(urdf) == {'left'}
+

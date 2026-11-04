@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from lucy_config_generator.schema import BOARD_CLASS_I2C_PWM_ONLY
+
 from .models import FirmwarePaths
 from ..config_store import ConfigStore
 
@@ -26,6 +28,14 @@ def select_boards_to_process(data: dict, requested: list[str]) -> set[str] | Non
     return boards
 
 
+def _inside(root: Path, relative: str, name: str) -> Path:
+    root = root.resolve()
+    path = (root / relative).resolve()
+    if not path.is_relative_to(root):
+        raise ValueError(f'{name} must stay inside {root}')
+    return path
+
+
 def resolve_firmware_paths(data: dict, workspace_src: Path) -> FirmwarePaths:
     firmware = data.get('firmware', {})
     source_dir_raw = str(firmware.get('source_dir', '')).strip()
@@ -33,15 +43,23 @@ def resolve_firmware_paths(data: dict, workspace_src: Path) -> FirmwarePaths:
         raise ValueError('missing firmware.source_dir in mapping')
 
     build_dir_raw = str(firmware.get('build_dir', '')).strip() or 'build'
-    source_dir = Path(source_dir_raw)
-    if not source_dir.is_absolute():
-        source_dir = (workspace_src / source_dir).resolve()
-
-    build_dir = Path(build_dir_raw)
-    if not build_dir.is_absolute():
-        build_dir = (source_dir / build_dir).resolve()
-
+    source_dir = _inside(workspace_src, source_dir_raw, 'firmware.source_dir')
+    build_dir = _inside(source_dir, build_dir_raw, 'firmware.build_dir')
     return FirmwarePaths(source_dir=source_dir, build_dir=build_dir)
+
+
+def is_mega_board(board: dict) -> bool:
+    """Tell Arduino Megas (i2c_pwm_only), built with cargo and flashed with avrdude."""
+    return board.get('board_class') == BOARD_CLASS_I2C_PWM_ONLY
+
+
+def mega_crate_dir(paths: FirmwarePaths) -> Path:
+    return paths.source_dir / 'firmwares' / 'arduino_mega'
+
+
+def mega_artifact_dir(paths: FirmwarePaths) -> Path:
+    """Return where generated board tables and built ELFs go (in the gitignored target/)."""
+    return mega_crate_dir(paths) / 'target' / 'lucy'
 
 
 def board_build_plan(data: dict, selected_boards: set[str] | None) -> list[tuple[str, str]]:
