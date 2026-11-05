@@ -31,7 +31,7 @@ struct ActuatorSharedState
   uint32_t max_actuators{0};
   double payload[0];
 
-  static constexpr std::size_t kArrays = 7;
+  static constexpr std::size_t kArrays = 9;
 
   std::span<double> hw_commands() {return {payload, max_actuators};}
   std::span<double> hw_velocities() {return {payload + max_actuators, max_actuators};}
@@ -40,6 +40,8 @@ struct ActuatorSharedState
   std::span<double> hw_positions() {return {payload + 4 * max_actuators, max_actuators};}
   std::span<double> hw_temperatures() {return {payload + 5 * max_actuators, max_actuators};}
   std::span<double> hw_efforts() {return {payload + 6 * max_actuators, max_actuators};}
+  std::span<double> hw_currents() {return {payload + 7 * max_actuators, max_actuators};}
+  std::span<double> hw_loads() {return {payload + 8 * max_actuators, max_actuators};}
 
 
   std::span<const double> hw_commands() const {return {payload, max_actuators};}
@@ -63,6 +65,14 @@ struct ActuatorSharedState
   std::span<const double> hw_efforts() const
   {
     return {payload + 6 * max_actuators, max_actuators};
+  }
+  std::span<const double> hw_currents() const
+  {
+    return {payload + 7 * max_actuators, max_actuators};
+  }
+  std::span<const double> hw_loads() const
+  {
+    return {payload + 8 * max_actuators, max_actuators};
   }
 
   static constexpr std::size_t size_for(std::size_t max_actuators)

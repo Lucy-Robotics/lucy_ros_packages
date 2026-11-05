@@ -71,6 +71,8 @@ hardware_interface::CallbackReturn LucySystemHardware::on_init(
   hw_positions_.resize(info_.joints.size(), 0);
   hw_temperatures_.resize(info_.joints.size(), 0);
   hw_efforts_.resize(info_.joints.size(), 0);
+  hw_currents_.resize(info_.joints.size(), 0);
+  hw_loads_.resize(info_.joints.size(), 0);
   // torque_enable is claimed by a forward_command_controller. Stay off until it writes.
   hw_torque_enabled_.resize(info_.joints.size(), 0.0);
 
@@ -168,6 +170,12 @@ std::vector<hardware_interface::StateInterface> LucySystemHardware::export_state
     state_interfaces.emplace_back(
       hardware_interface::StateInterface(
         info_.joints[i].name, "temperature", &hw_temperatures_[i]));
+    state_interfaces.emplace_back(
+      hardware_interface::StateInterface(
+        info_.joints[i].name, "current", &hw_currents_[i]));
+    state_interfaces.emplace_back(
+      hardware_interface::StateInterface(
+        info_.joints[i].name, "load", &hw_loads_[i]));
     state_interfaces.emplace_back(
       hardware_interface::StateInterface(
         info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &hw_efforts_[i]));
@@ -274,6 +282,8 @@ hardware_interface::return_type LucySystemHardware::read(
     hw_positions_[i] = servo_rad_to_joint_position(m, (*access).hw_positions()[i]);
     hw_temperatures_[i] = (*access).hw_temperatures()[i];
     hw_efforts_[i] = (*access).hw_efforts()[i];
+    hw_currents_[i] = (*access).hw_currents()[i];
+    hw_loads_[i] = (*access).hw_loads()[i];
   }
 
   return hardware_interface::return_type::OK;
