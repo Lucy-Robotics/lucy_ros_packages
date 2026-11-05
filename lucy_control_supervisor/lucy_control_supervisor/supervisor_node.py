@@ -78,7 +78,7 @@ def node_argv(package: str, executable: str) -> list[str]:
 class _ManagedProc:
     name: str
     popen: subprocess.Popen
-    kind: str  # rsp | cm | bridge
+    kind: str
     stopping: bool = False  # set when we ask it to stop, so the exit is expected
     # Temp files the child reads while starting. Removed when it is reaped rather
     # than on a graph condition, which another node can satisfy first.
@@ -102,7 +102,6 @@ class ControlSupervisorNode(Node):
     # Latched by lucy_client_registry. Non-empty means Control Robot is ON.
     ACTIVE_CLIENT_TOPIC = '/lucy/active_client'
     TERMINATE_TIMEOUT_S = 10.0
-    # A few bridge ticks (~31 ms each) for the HI's torque-0 write to reach the boards.
     BRIDGE_DRAIN_S = 0.2
     READY_TIMEOUT_S = 60.0
     CONTROL_READY_FILE = _control_ready_file()
@@ -203,8 +202,6 @@ class ControlSupervisorNode(Node):
 
     def _terminate_children(self) -> None:
         self._clear_ready_marker()
-        # Bridges last: the HI writes torque 0 as it shuts down ("the host firmware must still
-        # see torque off"), and each bridge has to forward that to its board before it goes.
         stack = [c for c in self._children if c.kind != 'bridge']
         bridges = [c for c in self._children if c.kind == 'bridge']
         self._stop_children(stack)
@@ -330,7 +327,6 @@ class ControlSupervisorNode(Node):
                     text = line.decode('utf-8', 'replace').rstrip()
                     if text:
                         tail.append(text)
-                        # Bridges only print state changes and summaries: worth seeing.
                         logger = self.get_logger()
                         log = logger.info if kind == 'bridge' else logger.debug
                         log(f'[{name}] {text}')

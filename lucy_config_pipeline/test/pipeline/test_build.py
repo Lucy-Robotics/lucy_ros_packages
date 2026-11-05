@@ -102,7 +102,6 @@ def test_mega_board_builds_with_cargo_and_its_generated_tables(
     )
 
     assert failed == []
-    # No cmake for a Mega-only plan; cargo runs in the crate so its toolchain file applies.
     assert [c['cmd'] for c in calls] == [['cargo', 'build', '--release']]
     assert calls[0]['cwd'] == crate
     assert calls[0]['env']['LUCY_MEGA_BOARD_CONFIG'] == str(artifacts / 'config_mega_left.rs')

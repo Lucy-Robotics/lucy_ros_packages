@@ -199,5 +199,4 @@ def test_mega_board_is_flashed_with_avrdude_on_its_serial_port(
         'avrdude', '-p', 'atmega2560', '-c', 'wiring', '-P', '/dev/tty-TESTMEGA0', '-b', '115200',
         '-D', '-U', f"flash:w:{artifacts / 'mega_left.elf'}:e",
     ]]
-    # The bridge lock is released once avrdude is done.
     assert not Path('/tmp/.lucy_mcu_flashing_TESTMEGA0').exists()

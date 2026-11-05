@@ -218,7 +218,6 @@ def _flash_mega(
         raise FileNotFoundError(f'missing ELF for flash: {elf}')
     port = mega_port(serial)
     feedback(phase='flash', progress=progress, detail=f'avrdude {elf.name} -> {port}', board=board)
-    # Same programmer settings ravedude uses for mega2560 (stk500v2 bootloader at 115200).
     with mega_flash_lock(serial):
         _run_command(
             phase='flash',

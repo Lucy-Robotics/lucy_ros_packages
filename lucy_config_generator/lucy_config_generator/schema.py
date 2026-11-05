@@ -95,9 +95,6 @@ BOARD_CLASS_INTERNAL_I2C_PWM = 'internal_servo_i2c_pwm'
 # Smart bus servos daisy-chained on one UART, addressed by id rather than each
 # wired to a pin. Firmware config for these is emitted as Rust, not C.
 BOARD_CLASS_BUS_SERVO_ONLY = 'bus_servo_only'
-# Arduino Mega driving the outputs of its chained PCA9685s (`pca_addresses`). The
-# generator emits its Rust board tables; the pipeline builds them with cargo and
-# flashes the Mega with avrdude.
 BOARD_CLASS_I2C_PWM_ONLY = 'i2c_pwm_only'
 BOARD_CLASSES = frozenset(
     {
@@ -108,8 +105,6 @@ BOARD_CLASSES = frozenset(
     }
 )
 
-# Servos straight on Arduino Mega pins (Nervo ribbons): D0/D1 are the host serial link and
-# D20/D21 the I2C bus; A0..A15 are D54..D69. Timer5 pulses them in turn within a 20 ms frame.
 MEGA_SERVO_PINS = frozenset(range(2, 70)) - {20, 21}
 MEGA_MAX_SERVO_PINS = 8
 
@@ -335,7 +330,7 @@ def _validate_pca_board_actuators(
             try:
                 lo, hi = float(actuator['limit_min']), float(actuator['limit_max'])
             except Exception:
-                continue  # reported by _validate_actuator_ranges
+                continue
             if lo < 0.0 or hi > math.pi + 1e-4:
                 errors.append(
                     f'actuator {aid}: limits [{lo}, {hi}] must stay within 0..pi '

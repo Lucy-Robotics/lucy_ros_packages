@@ -151,6 +151,5 @@ def test_mega_bridges_follow_the_active_yaml(tmp_path: Path):
         '  rp2040_torso_head: {board_class: internal_servo_only, serial_id: "BBB"}\n',
         encoding='utf-8',
     )
-    # Only Mega boards with a serial get a bridge; the RP2040 path is not a Mega bridge.
     assert mega_bridges(hw) == [('left', 'AAA')]
     assert mega_bridges(tmp_path / 'missing.yaml') == []

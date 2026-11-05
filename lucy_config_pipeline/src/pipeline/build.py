@@ -116,7 +116,6 @@ def _build_mega(
     env = _cargo_env()
     env['LUCY_MEGA_BOARD_CONFIG'] = str(config)
     crate = mega_crate_dir(paths)
-    # cwd matters: the crate's rust-toolchain.toml and .cargo/config.toml resolve from it.
     _run_command(
         phase='build',
         board=board,

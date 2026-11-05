@@ -268,8 +268,6 @@ hardware_interface::return_type LucySystemHardware::read(
     return hardware_interface::return_type::ERROR;
   }
 
-  // Passive/unmapped joints, and servos that report no position (NaN, e.g. PWM servos on a
-  // Mega, or before the first state frame), have no feedback: echo their last command.
   for (std::size_t i = 0; i < hw_commands_.size(); ++i) {
     hw_positions_[i] = hw_commands_[i];
   }

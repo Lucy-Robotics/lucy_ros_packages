@@ -65,7 +65,6 @@ def test_mega_board_gets_rust_board_tables():
     assert 'config_rp2040_right_arm.c' in out
     rs = out['config_rp2040_left_arm.rs']
     assert 'PCA_ADDRESSES: [u8; 2] = [0x40, 0x41];' in rs
-    # Both slots are clamped, only the enabled one (left_a, physical_pin 10) is driven.
     assert 'JOINTS_CONFIG: [CommandConfig; 2]' in rs
     assert 'limit_max: 3.14159 }, // left_disabled' in rs
     assert 'DRIVEN: [(usize, u8); 1] = [\n    (0, 9), // left_a\n];' in rs
@@ -75,13 +74,13 @@ def test_mega_pins_come_after_the_pca_outputs():
     data = _mega_mapping()
     data['boards']['rp2040_left_arm'].update(mega_pins=[8, 9, 54], internal_servo_slots=35)
     left = [a for a in data['actuators'] if a['board'] == 'rp2040_left_arm']
-    left[0]['physical_pin'] = 34  # mega_pins[1] = D9, output 33
+    left[0]['physical_pin'] = 34
     rs = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
         'config_rp2040_left_arm.rs'
     ]
     assert 'MEGA_PINS: [u8; 3] = [8, 9, 54];' in rs
     assert '$pins.d9.into_output().downgrade()' in rs
-    assert '$pins.a0.into_output().downgrade()' in rs  # D54 is A0
+    assert '$pins.a0.into_output().downgrade()' in rs
     assert '(0, 33), // left_a' in rs
 
 

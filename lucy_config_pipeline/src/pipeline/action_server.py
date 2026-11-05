@@ -41,8 +41,6 @@ class PipelineActionServer(Node):
     _BUILD_TIMEOUT_SECONDS = int(os.environ.get('LUCY_PIPELINE_BUILD_TIMEOUT_SEC', '300'))
     _RELOAD_SERVICE = '/lucy_control/restart'
     _RELOAD_TIMEOUT_SECONDS = 15.0
-    # The restart itself: stop the stack, start rsp / controller_manager / bridges, then one
-    # spawner per controller in turn (1-4 s each, 5 for two Mega boards: ~20 s measured).
     _RELOAD_RESTART_TIMEOUT_SECONDS = 90.0
 
     def __init__(self, *, paths: PipelinePaths, config_store: ConfigStore):
