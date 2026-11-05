@@ -212,7 +212,7 @@ void LucySystemHardware::drop_torque_and_release_shm()
   if (shared_memory_channel_.has_value()) {
     auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
     for (const auto & m : mappings_) {
-      (*access).hw_torque_enabled()[m.joint_index] = 0.0;
+      (*access).hw_torque_enabled()[m.joint_index] = 0.0f;
     }
   }
   std::fill(hw_torque_enabled_.begin(), hw_torque_enabled_.end(), 0.0);
@@ -277,7 +277,8 @@ hardware_interface::return_type LucySystemHardware::read(
   for (const auto & m : mappings_) {
     const std::size_t i = m.joint_index;
     if (loopback_encoders_) {
-      (*access).hw_positions()[i] = actuator_command_to_servo_rad(m, hw_commands_[i]);
+      (*access).hw_positions()[i] =
+        static_cast<float>(actuator_command_to_servo_rad(m, hw_commands_[i]));
     }
     hw_positions_[i] = servo_rad_to_joint_position(m, (*access).hw_positions()[i]);
     hw_temperatures_[i] = (*access).hw_temperatures()[i];
@@ -302,10 +303,11 @@ hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
   auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
   for (const auto & m : mappings_) {
     const std::size_t i = m.joint_index;
-    (*access).hw_commands()[i] = actuator_command_to_servo_rad(m, hw_commands_[i]);
-    (*access).hw_velocities()[i] = hw_velocities_[i];
-    (*access).hw_accelerations()[i] = hw_accelerations_[i];
-    (*access).hw_torque_enabled()[i] = hw_torque_enabled_[i];
+    (*access).hw_commands()[i] =
+      static_cast<float>(actuator_command_to_servo_rad(m, hw_commands_[i]));
+    (*access).hw_velocities()[i] = static_cast<float>(hw_velocities_[i]);
+    (*access).hw_accelerations()[i] = static_cast<float>(hw_accelerations_[i]);
+    (*access).hw_torque_enabled()[i] = static_cast<float>(hw_torque_enabled_[i]);
   }
 
   return hardware_interface::return_type::OK;

@@ -7,7 +7,7 @@ ROS 2 **Jazzy** repository for **Lucy** (Lucy Robotics): runtime bringup, `ros2_
 | Package | One-line role |
 |---------|----------------|
 | [**lucy_bringup**](lucy_bringup/) | Jetson **system launch**: **`web_ros_api`** (rosbridge + **`lucy_config_pipeline`**), RealSense, `camera_ros`, [`lucy_ros2_control`](lucy_ros2_control/) bringup; **`lucy_*_development`** composes the web stack with **`thais_urdf`** RViz/Gazebo. |
-| [**lucy_ros2_control**](lucy_ros2_control/) | **Hardware** `ros2_control` plugin (`LucySystemHardware`, f64 SHM), controller YAML, `control.launch.py` for the real robot stack (no RViz/rosbridge in that launch). |
+| [**lucy_ros2_control**](lucy_ros2_control/) | **Hardware** `ros2_control` plugin (`LucySystemHardware`, f32 SHM), controller YAML, `control.launch.py` for the real robot stack (no RViz/rosbridge in that launch). |
 | [**lucy_config_generator**](lucy_config_generator/) | **Config pipeline**: reads **`thais_urdf`** hardware YAML and emits RP2040 firmware C, `ros2_control` xacro, and `controllers.yaml` (see package README). |
 | [**lucy_config_pipeline**](lucy_config_pipeline/) | **Config store + `ConfigurePipeline` action**: validate YAML, generate artifacts, build/flash RP2040 firmware via `picotool` [README](lucy_config_pipeline/README.md). |
 | [**camera_ros**](camera_ros/) | GStreamer-based **MJPEG** → `sensor_msgs/CompressedImage`; client-aware activation. |

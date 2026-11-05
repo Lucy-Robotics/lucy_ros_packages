@@ -17,7 +17,7 @@
 /// @brief Unit tests for the ActuatorSharedState layout and SharedMemoryChannel.
 ///
 /// The layout is the ABI shared with embed-rs (``crates/core/src/data.rs``):
-/// a 144-byte header followed by ``kArrays`` arrays of ``max_actuators`` doubles,
+/// a 144-byte header followed by ``kArrays`` arrays of ``max_actuators`` floats,
 /// in the order commands, velocities, accelerations, torque_enabled, positions,
 /// temperatures, efforts, currents, loads. These tests pin that contract so a
 /// change on one side fails here before it corrupts data at runtime.
@@ -41,6 +41,8 @@ namespace
 /// Mirrors ``SHM_PAYLOAD_OFFSET`` / ``SHM_ARRAYS`` in embed-rs ``crates/core/src/data.rs``.
 constexpr std::size_t kRustPayloadOffset = 144;
 constexpr std::size_t kRustArrays = 9;
+/// ``size_of::<f32>()``: stride of the payload arrays.
+constexpr std::size_t kRustElementSize = 4;
 
 /// Array slot indices, in ABI order.
 enum Slot : std::size_t
@@ -59,7 +61,7 @@ enum Slot : std::size_t
 /// Raw byte offset of ``payload[slot * n + i]`` from the start of the segment.
 std::size_t raw_offset(std::size_t slot, std::size_t n, std::size_t i)
 {
-  return kRustPayloadOffset + (slot * n + i) * sizeof(double);
+  return kRustPayloadOffset + (slot * n + i) * kRustElementSize;
 }
 
 /// Second mapping of an existing segment, standing in for the firmware process.
@@ -90,13 +92,13 @@ public:
 
   bool ok() const {return base_ != nullptr;}
 
-  double read(std::size_t offset) const
+  float read(std::size_t offset) const
   {
-    double v;
+    float v;
     std::memcpy(&v, base_ + offset, sizeof(v));
     return v;
   }
-  void write(std::size_t offset, double v) {std::memcpy(base_ + offset, &v, sizeof(v));}
+  void write(std::size_t offset, float v) {std::memcpy(base_ + offset, &v, sizeof(v));}
   std::uint32_t max_actuators() const
   {
     std::uint32_t v;
@@ -133,6 +135,11 @@ TEST(ActuatorSharedStateLayout, ArrayCountMatchesFirmware)
   EXPECT_EQ(ActuatorSharedState::kArrays, kRustArrays);
 }
 
+TEST(ActuatorSharedStateLayout, PayloadElementSizeMatchesFirmware)
+{
+  EXPECT_EQ(sizeof(ActuatorSharedState::payload[0]), kRustElementSize);
+}
+
 TEST(ActuatorSharedStateLayout, HeaderOffsetsMatchFirmware)
 {
   EXPECT_EQ(offsetof(ActuatorSharedState, command_seq), 0u);
@@ -144,10 +151,10 @@ TEST(ActuatorSharedStateLayout, HeaderOffsetsMatchFirmware)
 
 TEST(ActuatorSharedStateLayout, SizeForCoversAllArrays)
 {
-  // Rust: (SHM_PAYLOAD_OFFSET + 63) / 64 * 64 + SHM_ARRAYS * n * 8
+  // Rust: (SHM_PAYLOAD_OFFSET + 63) / 64 * 64 + SHM_ARRAYS * n * 4
   for (std::size_t n : {0u, 1u, 6u, 32u}) {
     const std::size_t rust_size =
-      (kRustPayloadOffset + 63) / 64 * 64 + kRustArrays * n * sizeof(double);
+      (kRustPayloadOffset + 63) / 64 * 64 + kRustArrays * n * kRustElementSize;
     EXPECT_EQ(ActuatorSharedState::size_for(n), rust_size) << "n=" << n;
     // The last array must end inside the segment.
     EXPECT_LE(raw_offset(kLoads, n, n), ActuatorSharedState::size_for(n)) << "n=" << n;
@@ -192,7 +199,7 @@ TEST_F(ActuatorSharedStateSpans, ConstAccessorsMatchMutable)
 
 TEST_F(ActuatorSharedStateSpans, ArraysAreContiguousAndDisjoint)
 {
-  const double * expected[] = {
+  const float * expected[] = {
     state_->hw_commands().data(),
     state_->hw_velocities().data(),
     state_->hw_accelerations().data(),
@@ -212,8 +219,8 @@ TEST_F(ActuatorSharedStateSpans, ArraysAreContiguousAndDisjoint)
 TEST_F(ActuatorSharedStateSpans, WritingCurrentsAndLoadsLeavesOtherArraysUntouched)
 {
   for (std::size_t i = 0; i < kN; ++i) {
-    state_->hw_currents()[i] = 1.0 + static_cast<double>(i);
-    state_->hw_loads()[i] = -1.0 - static_cast<double>(i);
+    state_->hw_currents()[i] = 1.0f + static_cast<float>(i);
+    state_->hw_loads()[i] = -1.0f - static_cast<float>(i);
   }
   for (std::size_t slot = 0; slot < kCurrents; ++slot) {
     for (std::size_t i = 0; i < kN; ++i) {
@@ -221,8 +228,8 @@ TEST_F(ActuatorSharedStateSpans, WritingCurrentsAndLoadsLeavesOtherArraysUntouch
     }
   }
   for (std::size_t i = 0; i < kN; ++i) {
-    EXPECT_EQ(state_->payload[kCurrents * kN + i], 1.0 + static_cast<double>(i));
-    EXPECT_EQ(state_->payload[kLoads * kN + i], -1.0 - static_cast<double>(i));
+    EXPECT_EQ(state_->payload[kCurrents * kN + i], 1.0f + static_cast<float>(i));
+    EXPECT_EQ(state_->payload[kLoads * kN + i], -1.0f - static_cast<float>(i));
   }
 }
 
@@ -253,8 +260,8 @@ TEST_F(SharedMemoryChannelTest, CreateClearsStaleCurrentsAndLoads)
     auto first = SharedMemoryChannel::create(name_, kN);
     ASSERT_TRUE(first.has_value());
     auto access = SharedMemoryChannel::Access(first.value());
-    (*access).hw_currents()[1] = 4.2;
-    (*access).hw_loads()[1] = 0.7;
+    (*access).hw_currents()[1] = 4.2f;
+    (*access).hw_loads()[1] = 0.7f;
   }
   // The segment is not unlinked on release: a restart must not report stale data.
   auto second = SharedMemoryChannel::create(name_, kN);
@@ -273,16 +280,16 @@ TEST_F(SharedMemoryChannelTest, FirmwareWritesAreVisibleThroughCurrentsAndLoads)
   ExternalMapping ext(name_, ActuatorSharedState::size_for(kN));
   ASSERT_TRUE(ext.ok());
   for (std::size_t i = 0; i < kN; ++i) {
-    ext.write(raw_offset(kEfforts, kN, i), 10.0 + static_cast<double>(i));
-    ext.write(raw_offset(kCurrents, kN, i), 0.25 * static_cast<double>(i + 1));
-    ext.write(raw_offset(kLoads, kN, i), -0.5 * static_cast<double>(i + 1));
+    ext.write(raw_offset(kEfforts, kN, i), 10.0f + static_cast<float>(i));
+    ext.write(raw_offset(kCurrents, kN, i), 0.25f * static_cast<float>(i + 1));
+    ext.write(raw_offset(kLoads, kN, i), -0.5f * static_cast<float>(i + 1));
   }
 
   auto access = SharedMemoryChannel::Access(channel.value());
   for (std::size_t i = 0; i < kN; ++i) {
-    EXPECT_DOUBLE_EQ((*access).hw_efforts()[i], 10.0 + static_cast<double>(i));
-    EXPECT_DOUBLE_EQ((*access).hw_currents()[i], 0.25 * static_cast<double>(i + 1));
-    EXPECT_DOUBLE_EQ((*access).hw_loads()[i], -0.5 * static_cast<double>(i + 1));
+    EXPECT_FLOAT_EQ((*access).hw_efforts()[i], 10.0f + static_cast<float>(i));
+    EXPECT_FLOAT_EQ((*access).hw_currents()[i], 0.25f * static_cast<float>(i + 1));
+    EXPECT_FLOAT_EQ((*access).hw_loads()[i], -0.5f * static_cast<float>(i + 1));
   }
 }
 

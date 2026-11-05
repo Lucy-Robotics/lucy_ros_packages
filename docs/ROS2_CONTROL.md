@@ -1,6 +1,6 @@
 # ros2_control on Lucy (`lucy_ros_packages` + robot URDF)
 
-ROS 2 **Jazzy**. Hardware plugin, f64 SHM contract, YAML, and launch. URDF / xacro blocks live in the active robot package (`thais_urdf` / `inmoov_urdf` / `so_arm101_urdf`); plugin binary in **`lucy_ros2_control`**.
+ROS 2 **Jazzy**. Hardware plugin, f32 SHM contract, YAML, and launch. URDF / xacro blocks live in the active robot package (`thais_urdf` / `inmoov_urdf` / `so_arm101_urdf`); plugin binary in **`lucy_ros2_control`**.
 
 **Related:**
 - Pipeline / SHM: [`architecture/pipeline_shm.md`](architecture/pipeline_shm.md)
@@ -14,7 +14,7 @@ ROS 2 **Jazzy**. Hardware plugin, f64 SHM contract, YAML, and launch. URDF / xac
 
 Layer between high-level motion and hardware (or sim): controller manager, controllers, broadcasters, and a hardware interface plugin (`read()` / `write()`).
 
-Clients talk to **controllers**, not microcontrollers. On Lucy, the plugin writes **`f64` radians** into POSIX SHM (`ActuatorSharedState` / `JointTable`). Host consumers (`firmwares/linux` for USB Feetech, or a host↔MCU bridge into Servo2040) read that SHM. The MCU does **not** mmap host SHM.
+Clients talk to **controllers**, not microcontrollers. On Lucy, the plugin writes **`f32` radians** into POSIX SHM (`ActuatorSharedState` / `JointTable`). Host consumers (`firmwares/linux` for USB Feetech, or a host↔MCU bridge into Servo2040) read that SHM. The MCU does **not** mmap host SHM.
 
 ---
 
@@ -22,9 +22,9 @@ Clients talk to **controllers**, not microcontrollers. On Lucy, the plugin write
 
 | Asset | Package | Notes |
 |--------|---------|--------|
-| **`LucySystemHardware`** | `lucy_ros2_control` | SHM writer for real hardware (`f64` rad + seq). |
+| **`LucySystemHardware`** | `lucy_ros2_control` | SHM writer for real hardware (`f32` rad + seq). |
 | **`SharedMemoryChannel` / `ActuatorSharedState`** | `lucy_ros2_control` | HI ↔ host consumers layout. |
-| **`firmwares/linux`** | `lucy_embedded_firmware` | Host USB Feetech consumer of f64 SHM (SO-ARM101). |
+| **`firmwares/linux`** | `lucy_embedded_firmware` | Host USB Feetech consumer of f32 SHM (SO-ARM101). |
 | **`rp2040_servo2040`** | `lucy_embedded_firmware` | InMoov + SO-ARM101 UART Feetech / PWM / I2C via host↔MCU bridge. |
 | Controllers YAML / xacro | robot package | From `lucy_config_generator` / pipeline. |
 
@@ -42,7 +42,7 @@ flowchart TB
   Clients["Clients"]
   CM["controller_manager"]
   HI["LucySystemHardware"]
-  SHM["POSIX_SHM_f64"]
+  SHM["POSIX_SHM_f32"]
   LinuxFW["firmwares_linux"]
   Bridge["host_to_MCU_bridge"]
   FW["rp2040_servo2040"]
@@ -52,7 +52,7 @@ flowchart TB
   CM <-->|"cmd / state ifaces"| HI
   CM --> JS
   JS -->|"/joint_states"| Topic["/joint_states"]
-  HI <-->|"f64 rad + seq"| SHM
+  HI <-->|"f32 rad + seq"| SHM
   SHM <-->|"SO101 USB Feetech"| LinuxFW
   SHM <-->|"not_on_MCU"| Bridge
   Bridge <-->|"CDC_or_serial"| FW
@@ -101,7 +101,7 @@ Needs active controllers, `ros2_control_node` with `LucySystemHardware` (or Gaze
 1. Controllers inactive — `ros2 control list_controllers`.
 2. Sim URDF on hardware — `use_gazebo_sim:=false`.
 3. SHM `node_name` mismatch between HI and consumers.
-4. **Encoding:** radians in YAML, HI, and SHM (`f64`). Driver edges map to Feetech ticks / PWM pulse.
+4. **Encoding:** radians in YAML, HI (`double`, imposed by ros2_control), and SHM (`f32`, narrowed by the plugin). Driver edges map to Feetech ticks / PWM pulse.
 5. Run GENERATE so URDF min/max land in xacro.
 6. SO-ARM101: host `firmwares/linux` vs Servo2040 UART — pick matching board profile.
 7. Agree `MAX_ACTUATORS` / `JointTable<N>` between HI and firmware consumers.
@@ -113,7 +113,7 @@ Needs active controllers, `ros2_control_node` with `LucySystemHardware` (or Gaze
 | Path | Purpose |
 |------|---------|
 | `lucy_ros2_control/src/lucy_system.cpp` | HI plugin |
-| `lucy_ros2_control/src/include/shared_memory_channel.hpp` | f64 SHM layout |
+| `lucy_ros2_control/src/include/shared_memory_channel.hpp` | f32 SHM layout |
 | Generator templates | xacro / board YAML / controllers |
 | `lucy_embedded_firmware/` | RP2040 Servo2040 + host Feetech |
 
