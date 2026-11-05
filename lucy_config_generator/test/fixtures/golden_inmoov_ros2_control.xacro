@@ -31,6 +31,8 @@
           <state_interface name="position" />
           <state_interface name="temperature" />
           <state_interface name="effort" />
+          <state_interface name="current" />
+          <state_interface name="load" />
       </joint>
       <joint name="left_disabled_joint">
           <param name="virtual_pin">1</param>
@@ -49,6 +51,8 @@
           <state_interface name="position" />
           <state_interface name="temperature" />
           <state_interface name="effort" />
+          <state_interface name="current" />
+          <state_interface name="load" />
       </joint>
   </ros2_control>
   <ros2_control name="LucyHardwareRightArm" type="system">
@@ -79,6 +83,8 @@
           <state_interface name="position" />
           <state_interface name="temperature" />
           <state_interface name="effort" />
+          <state_interface name="current" />
+          <state_interface name="load" />
       </joint>
   </ros2_control>
   <ros2_control name="LucyHardwareTorsoHead" type="system">
@@ -109,6 +115,8 @@
           <state_interface name="position" />
           <state_interface name="temperature" />
           <state_interface name="effort" />
+          <state_interface name="current" />
+          <state_interface name="load" />
       </joint>
       <joint name="right_shoulder_y_link_joint">
           <param name="virtual_pin">1</param>
@@ -127,6 +135,8 @@
           <state_interface name="position" />
           <state_interface name="temperature" />
           <state_interface name="effort" />
+          <state_interface name="current" />
+          <state_interface name="load" />
       </joint>
   </ros2_control>
 

@@ -134,6 +134,20 @@ if(BUILD_TESTING)
       ${PROJECT_SOURCE_DIR}/src/include
     )
     ament_target_dependencies(test_joint_config hardware_interface)
+
+    # Shared-memory ABI with embed-rs: struct layout plus a real POSIX segment.
+    ament_add_gtest(test_shared_memory_channel
+      test/test_shared_memory_channel.cpp
+      src/shared_memory_channel.cpp
+    )
+    target_include_directories(test_shared_memory_channel PRIVATE
+      ${PROJECT_SOURCE_DIR}/src/include
+    )
+
+    # LucySystemHardware state interfaces (temperature/effort/current/load),
+    # driven directly through on_init/on_configure/read against a shm segment.
+    ament_add_gtest(test_lucy_system_state test/test_lucy_system_state.cpp)
+    target_link_libraries(test_lucy_system_state lucy_ros2_control)
   endif()
 endif()
 
