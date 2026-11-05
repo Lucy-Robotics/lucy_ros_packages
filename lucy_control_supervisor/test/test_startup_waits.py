@@ -94,3 +94,40 @@ def test_wait_gives_up_at_the_deadline():
         timeout_s=0.3,
     ) is False
     assert time.time() - started < 2.0
+
+
+def test_bridges_stop_after_the_stack_so_torque_off_reaches_the_boards():
+    from types import SimpleNamespace
+
+    from lucy_control_supervisor.supervisor_node import _ManagedProc
+    from lucy_control_supervisor.supervisor_node import ControlSupervisorNode
+
+    order: list[str] = []
+
+    class FakePopen:
+        def __init__(self, name):
+            self.name, self.done = name, False
+
+        def poll(self):
+            return 0 if self.done else None
+
+        def terminate(self):
+            order.append(self.name)
+            self.done = True
+
+    children = [
+        _ManagedProc('rsp', FakePopen('rsp'), 'rsp'),
+        _ManagedProc('cm', FakePopen('cm'), 'cm'),
+        _ManagedProc('bridge_left', FakePopen('bridge_left'), 'bridge'),
+    ]
+    node = SimpleNamespace(
+        _children=children,
+        _clear_ready_marker=lambda: None,
+        BRIDGE_DRAIN_S=0.0,
+        TERMINATE_TIMEOUT_S=1.0,
+        get_logger=lambda: SimpleNamespace(warning=print),
+    )
+    node._stop_children = lambda c: ControlSupervisorNode._stop_children(node, c)
+    ControlSupervisorNode._terminate_children(node)
+    assert order == ['cm', 'rsp', 'bridge_left']
+    assert node._children == []
