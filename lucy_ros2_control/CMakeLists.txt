@@ -143,11 +143,12 @@ if(BUILD_TESTING)
     target_include_directories(test_shared_memory_channel PRIVATE
       ${PROJECT_SOURCE_DIR}/src/include
     )
+    target_link_libraries(test_shared_memory_channel rt)
 
     # LucySystemHardware state interfaces (temperature/effort/current/load),
     # driven directly through on_init/on_configure/read against a shm segment.
     ament_add_gtest(test_lucy_system_state test/test_lucy_system_state.cpp)
-    target_link_libraries(test_lucy_system_state lucy_ros2_control)
+    target_link_libraries(test_lucy_system_state lucy_ros2_control rt)
   endif()
 endif()
 
