@@ -26,6 +26,14 @@ def select_boards_to_process(data: dict, requested: list[str]) -> set[str] | Non
     return boards
 
 
+def _inside(root: Path, relative: str, name: str) -> Path:
+    root = root.resolve()
+    path = (root / relative).resolve()
+    if not path.is_relative_to(root):
+        raise ValueError(f'{name} must stay inside {root}')
+    return path
+
+
 def resolve_firmware_paths(data: dict, workspace_src: Path) -> FirmwarePaths:
     firmware = data.get('firmware', {})
     source_dir_raw = str(firmware.get('source_dir', '')).strip()
@@ -33,14 +41,8 @@ def resolve_firmware_paths(data: dict, workspace_src: Path) -> FirmwarePaths:
         raise ValueError('missing firmware.source_dir in mapping')
 
     build_dir_raw = str(firmware.get('build_dir', '')).strip() or 'build'
-    source_dir = Path(source_dir_raw)
-    if not source_dir.is_absolute():
-        source_dir = (workspace_src / source_dir).resolve()
-
-    build_dir = Path(build_dir_raw)
-    if not build_dir.is_absolute():
-        build_dir = (source_dir / build_dir).resolve()
-
+    source_dir = _inside(workspace_src, source_dir_raw, 'firmware.source_dir')
+    build_dir = _inside(source_dir, build_dir_raw, 'firmware.build_dir')
     return FirmwarePaths(source_dir=source_dir, build_dir=build_dir)
 
 

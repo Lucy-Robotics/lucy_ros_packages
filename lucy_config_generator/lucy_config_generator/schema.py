@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .safe_strings import check_safe_strings
+
 REQUIRED_ROOT = (
     'version',
     'robot_name',
@@ -512,6 +514,7 @@ def _validate_sensor_ranges(
 
 def validate_hardware_yaml(data: dict[str, Any]) -> None:
     """Raise ValueError if the mapping is structurally invalid."""
+    check_safe_strings(data)
     for key in REQUIRED_ROOT:
         if key not in data:
             raise ValueError(f'missing root key: {key}')

@@ -26,6 +26,7 @@ from .flash import run_flash_phase
 from .models import PipelinePaths
 from .selection import all_selected_serials_empty
 from .selection import board_build_plan
+from .selection import resolve_firmware_paths
 from .selection import resolve_mapping_input
 from .selection import select_boards_to_process
 from ..config_store import ConfigStore
@@ -380,10 +381,9 @@ class PipelineActionServer(Node):
         shutil.copy2(out_dir / ctrl_name, ctrl_dst)
 
     def _install_firmware_outputs(self, out_dir: Path, data: dict) -> None:
-        firmware_src_dir = str(data.get('firmware', {}).get('source_dir', '')).strip()
-        if not firmware_src_dir:
+        if not str(data.get('firmware', {}).get('source_dir', '')).strip():
             return
-        fw_cfg_dir = (self._paths.workspace_src / firmware_src_dir / 'config').resolve()
+        fw_cfg_dir = resolve_firmware_paths(data, self._paths.workspace_src).source_dir / 'config'
         fw_cfg_dir.mkdir(parents=True, exist_ok=True)
         for cfile in out_dir.glob('config_*.c'):
             shutil.copy2(cfile, fw_cfg_dir / cfile.name)
