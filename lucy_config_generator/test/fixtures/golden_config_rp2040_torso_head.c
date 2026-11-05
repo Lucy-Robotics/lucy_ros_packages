@@ -5,43 +5,42 @@
 
 const board_t boardtmp = {2};
 
-void dump_config(void)
-{
+void dump_config(void) {
   memset(boards, 0, sizeof(boards));
 
-  board_t * internal = &boards[0];
+  board_t *internal = &boards[0];
   internal->init = &internal_init;
   internal->on_joint_subscriber_update = &internal_on_joint_subscriber_update;
   internal->on_sensor_timer_tick = &internal_on_sensor_timer_tick;
 
-  board_t * adafruit = ++internal;
+  board_t *adafruit = ++internal;
   adafruit->pin.i2c.sda = INTERNAL_I2C_SDA;
   adafruit->pin.i2c.scl = INTERNAL_I2C_SCL;
   adafruit->pin.i2c.port = INTERNAL_I2C_PORT;
   adafruit->init = &adafruit_init;
   adafruit->on_joint_subscriber_update = &adafruit_on_joint_subscriber_update;
 
-  joint_t * joint = internal->data.internal.joints;
+  joint_t *joint = internal->data.internal.joints;
 
   /* torso_left_y */
-  joint->config.virtual_pin = 0;
-  joint->config.physical_pin = INTERNAL_SERVO_5;
-  joint->config.servo_type = SERVO_TYPE_270;
-  joint->config.security_min_angle = 0.0;
-  joint->config.security_max_angle = 4.71238898038;
-  joint->config.default_angle = 0.0;
-  joint->config.init_joint = &internal_joint_init;
-  joint->config.move_joint = &internal_joint_move;
+  joint->config.virtual_pin =         0;
+  joint->config.physical_pin =        INTERNAL_SERVO_5;
+  joint->config.servo_type =          SERVO_TYPE_270;
+  joint->config.security_min_angle =  0.0;
+  joint->config.security_max_angle =  4.71238898038;
+  joint->config.default_angle =       0.0;
+  joint->config.init_joint =          &internal_joint_init;
+  joint->config.move_joint =          &internal_joint_move;
   joint++;
   /* torso_right_y */
-  joint->config.virtual_pin = 1;
-  joint->config.physical_pin = INTERNAL_SERVO_6;
-  joint->config.servo_type = SERVO_TYPE_270;
-  joint->config.security_min_angle = 0.0;
-  joint->config.security_max_angle = 4.71238898038;
-  joint->config.default_angle = 0.0;
-  joint->config.init_joint = &internal_joint_init;
-  joint->config.move_joint = &internal_joint_move;
+  joint->config.virtual_pin =         1;
+  joint->config.physical_pin =        INTERNAL_SERVO_6;
+  joint->config.servo_type =          SERVO_TYPE_270;
+  joint->config.security_min_angle =  0.0;
+  joint->config.security_max_angle =  4.71238898038;
+  joint->config.default_angle =       0.0;
+  joint->config.init_joint =          &internal_joint_init;
+  joint->config.move_joint =          &internal_joint_move;
   joint++;
 
   joint = adafruit->data.adafruit.joints;
