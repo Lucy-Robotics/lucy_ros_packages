@@ -3,23 +3,24 @@
 #include "joint.h"
 #include "board.h"
 
-void dump_config(void) {
+void dump_config(void)
+{
   memset(boards, 0, sizeof(boards));
 
-  board_t *board = &boards[0];
+  board_t * board = &boards[0];
   board->init = &internal_init;
   board->on_joint_subscriber_update = &internal_on_joint_subscriber_update;
 
-  joint_t *joint = board->data.internal.joints;
+  joint_t * joint = board->data.internal.joints;
 
   /* right_a */
-  joint->config.virtual_pin =         0;
-  joint->config.physical_pin =        INTERNAL_SERVO_10;
-  joint->config.servo_type =          SERVO_TYPE_270;
-  joint->config.security_min_angle =  0.0;
-  joint->config.security_max_angle =  4.71238898038;
-  joint->config.default_angle =       2.35619449019;
-  joint->config.init_joint =          &internal_joint_init;
-  joint->config.move_joint =          &internal_joint_move;
+  joint->config.virtual_pin = 0;
+  joint->config.physical_pin = INTERNAL_SERVO_10;
+  joint->config.servo_type = SERVO_TYPE_270;
+  joint->config.security_min_angle = 0.0;
+  joint->config.security_max_angle = 4.71238898038;
+  joint->config.default_angle = 2.35619449019;
+  joint->config.init_joint = &internal_joint_init;
+  joint->config.move_joint = &internal_joint_move;
   joint++;
 }

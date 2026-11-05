@@ -37,7 +37,7 @@ flowchart LR
 
 All Servo2040 profiles share one board crate; banks gate on YAML/`GENERATED_HAS_*`.
 
-## End-to-end path (f64 SHM)
+## End-to-end path (f32 SHM)
 
 `joint_state_broadcaster` is a **controller** under `controller_manager` (not a child of the HI). It publishes `/joint_states` from HI **state interfaces**; the HI does not publish that topic.
 
@@ -47,7 +47,7 @@ flowchart TB
   Clients["Clients"]
   CM["controller_manager"]
   HI["LucySystemHardware"]
-  SHM["POSIX_SHM_f64_JointTable"]
+  SHM["POSIX_SHM_f32_JointTable"]
   LinuxFW["firmwares_linux"]
   Bridge["host_to_MCU_bridge"]
   FW["rp2040_servo2040"]
@@ -57,7 +57,7 @@ flowchart TB
   CM <-->|"cmd / state ifaces"| HI
   CM --> JS
   JS -->|"/joint_states"| Topic["/joint_states"]
-  HI <-->|"f64 rad + seq"| SHM
+  HI <-->|"f32 rad + seq"| SHM
   SHM <-->|"SO101 USB Feetech"| LinuxFW
   SHM <-->|"not_on_MCU"| Bridge
   Bridge <-->|"CDC_or_serial"| FW
@@ -67,19 +67,19 @@ flowchart TB
 ```text
 ActuatorSharedState / JointTable  (alignas 64; N = MAX_ACTUATORS or const N)
   command_seq:            atomic u64
-  hw_commands[N]:         f64 / double   // radians
-  hw_velocities[N]:       f64 / double
-  hw_accelerations[N]:    f64 / double
-  hw_torque_enabled[N]:   f64 / double
+  hw_commands[N]:         f32 / float    // radians
+  hw_velocities[N]:       f32 / float
+  hw_accelerations[N]:    f32 / float
+  hw_torque_enabled[N]:   f32 / float
   state_seq:              atomic u64
-  hw_positions[N]:        f64 / double   // radians
+  hw_positions[N]:        f32 / float    // radians
   heartbeat:              atomic u64
 ```
 
 | Item | Notes |
 |------|--------|
 | Segment | `/{node_name}` (sanitised HI `node_name`) |
-| Angle encoding | **`f64` radians** in SHM; YAML / HI joint space also radians |
+| Angle encoding | **`f32` radians** in SHM; YAML / HI joint space also radians |
 | Host Feetech | `firmwares/linux` mmaps SHM → USB serial STS (SO-ARM101) |
 | Servo2040 | Host↔MCU bridge carries commands; **UF2 never mmaps POSIX SHM** |
 | ABI | Nested Rust `JointTable<N>` vs flat C++ `ActuatorSharedState` — agree `N` |

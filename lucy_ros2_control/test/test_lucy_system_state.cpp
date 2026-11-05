@@ -256,16 +256,16 @@ TEST_F(LucySystemStateTest, ReadCopiesCurrentAndLoadFromShm)
   FirmwareMapping fw(shm_name_, joint_count_);
   ASSERT_TRUE(fw.ok());
 
-  (*fw).hw_currents()[0] = 0.42;
-  (*fw).hw_currents()[1] = -1.3;
-  (*fw).hw_loads()[0] = 0.25;
-  (*fw).hw_loads()[1] = -0.75;
+  (*fw).hw_currents()[0] = 0.42f;
+  (*fw).hw_currents()[1] = -1.3f;
+  (*fw).hw_loads()[0] = 0.25f;
+  (*fw).hw_loads()[1] = -0.75f;
 
   ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
-  EXPECT_DOUBLE_EQ(value("j0", "current"), 0.42);
-  EXPECT_DOUBLE_EQ(value("j1", "current"), -1.3);
-  EXPECT_DOUBLE_EQ(value("j0", "load"), 0.25);
-  EXPECT_DOUBLE_EQ(value("j1", "load"), -0.75);
+  EXPECT_FLOAT_EQ(value("j0", "current"), 0.42f);
+  EXPECT_FLOAT_EQ(value("j1", "current"), -1.3f);
+  EXPECT_FLOAT_EQ(value("j0", "load"), 0.25f);
+  EXPECT_FLOAT_EQ(value("j1", "load"), -0.75f);
 }
 
 TEST_F(LucySystemStateTest, ReadKeepsTelemetryArraysSeparate)
@@ -274,18 +274,18 @@ TEST_F(LucySystemStateTest, ReadKeepsTelemetryArraysSeparate)
   FirmwareMapping fw(shm_name_, joint_count_);
   ASSERT_TRUE(fw.ok());
 
-  (*fw).hw_positions()[0] = 12.0;
-  (*fw).hw_temperatures()[0] = 41.5;
-  (*fw).hw_efforts()[0] = 0.9;
-  (*fw).hw_currents()[0] = 0.33;
-  (*fw).hw_loads()[0] = 0.66;
+  (*fw).hw_positions()[0] = 12.0f;
+  (*fw).hw_temperatures()[0] = 41.5f;
+  (*fw).hw_efforts()[0] = 0.9f;
+  (*fw).hw_currents()[0] = 0.33f;
+  (*fw).hw_loads()[0] = 0.66f;
 
   ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
-  EXPECT_DOUBLE_EQ(value("j0", hardware_interface::HW_IF_POSITION), 12.0);
-  EXPECT_DOUBLE_EQ(value("j0", "temperature"), 41.5);
-  EXPECT_DOUBLE_EQ(value("j0", hardware_interface::HW_IF_EFFORT), 0.9);
-  EXPECT_DOUBLE_EQ(value("j0", "current"), 0.33);
-  EXPECT_DOUBLE_EQ(value("j0", "load"), 0.66);
+  EXPECT_FLOAT_EQ(value("j0", hardware_interface::HW_IF_POSITION), 12.0f);
+  EXPECT_FLOAT_EQ(value("j0", "temperature"), 41.5f);
+  EXPECT_FLOAT_EQ(value("j0", hardware_interface::HW_IF_EFFORT), 0.9f);
+  EXPECT_FLOAT_EQ(value("j0", "current"), 0.33f);
+  EXPECT_FLOAT_EQ(value("j0", "load"), 0.66f);
 }
 
 TEST_F(LucySystemStateTest, ReadIndexesShmByJointIndexNotVirtualPin)
@@ -295,16 +295,16 @@ TEST_F(LucySystemStateTest, ReadIndexesShmByJointIndexNotVirtualPin)
   FirmwareMapping fw(shm_name_, joint_count_);
   ASSERT_TRUE(fw.ok());
 
-  (*fw).hw_currents()[0] = 1.0;
-  (*fw).hw_currents()[1] = 2.0;
-  (*fw).hw_loads()[0] = 0.1;
-  (*fw).hw_loads()[1] = 0.2;
+  (*fw).hw_currents()[0] = 1.0f;
+  (*fw).hw_currents()[1] = 2.0f;
+  (*fw).hw_loads()[0] = 0.1f;
+  (*fw).hw_loads()[1] = 0.2f;
 
   ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
-  EXPECT_DOUBLE_EQ(value("j0", "current"), 1.0);
-  EXPECT_DOUBLE_EQ(value("j1", "current"), 2.0);
-  EXPECT_DOUBLE_EQ(value("j0", "load"), 0.1);
-  EXPECT_DOUBLE_EQ(value("j1", "load"), 0.2);
+  EXPECT_FLOAT_EQ(value("j0", "current"), 1.0f);
+  EXPECT_FLOAT_EQ(value("j1", "current"), 2.0f);
+  EXPECT_FLOAT_EQ(value("j0", "load"), 0.1f);
+  EXPECT_FLOAT_EQ(value("j1", "load"), 0.2f);
 }
 
 TEST_F(LucySystemStateTest, ReadTracksSuccessiveShmUpdates)
@@ -313,15 +313,15 @@ TEST_F(LucySystemStateTest, ReadTracksSuccessiveShmUpdates)
   FirmwareMapping fw(shm_name_, joint_count_);
   ASSERT_TRUE(fw.ok());
 
-  (*fw).hw_currents()[0] = 0.5;
-  (*fw).hw_loads()[0] = 0.5;
+  (*fw).hw_currents()[0] = 0.5f;
+  (*fw).hw_loads()[0] = 0.5f;
   ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
 
-  (*fw).hw_currents()[0] = 0.0;
-  (*fw).hw_loads()[0] = -0.2;
+  (*fw).hw_currents()[0] = 0.0f;
+  (*fw).hw_loads()[0] = -0.2f;
   ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
-  EXPECT_DOUBLE_EQ(value("j0", "current"), 0.0);
-  EXPECT_DOUBLE_EQ(value("j0", "load"), -0.2);
+  EXPECT_FLOAT_EQ(value("j0", "current"), 0.0f);
+  EXPECT_FLOAT_EQ(value("j0", "load"), -0.2f);
 }
 
 TEST_F(LucySystemStateTest, PassiveJointIgnoresShmCurrentAndLoad)
@@ -331,16 +331,16 @@ TEST_F(LucySystemStateTest, PassiveJointIgnoresShmCurrentAndLoad)
   ASSERT_TRUE(fw.ok());
 
   // Slot 0 belongs to the passive joint: nothing must be read from it.
-  (*fw).hw_currents()[0] = 9.0;
-  (*fw).hw_loads()[0] = 9.0;
-  (*fw).hw_currents()[1] = 0.8;
-  (*fw).hw_loads()[1] = 0.4;
+  (*fw).hw_currents()[0] = 9.0f;
+  (*fw).hw_loads()[0] = 9.0f;
+  (*fw).hw_currents()[1] = 0.8f;
+  (*fw).hw_loads()[1] = 0.4f;
 
   ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
   EXPECT_EQ(value("j0", "current"), 0.0);
   EXPECT_EQ(value("j0", "load"), 0.0);
-  EXPECT_DOUBLE_EQ(value("j1", "current"), 0.8);
-  EXPECT_DOUBLE_EQ(value("j1", "load"), 0.4);
+  EXPECT_FLOAT_EQ(value("j1", "current"), 0.8f);
+  EXPECT_FLOAT_EQ(value("j1", "load"), 0.4f);
 }
 
 TEST_F(LucySystemStateTest, LoopbackModeStillReportsCurrentAndLoad)
@@ -351,10 +351,10 @@ TEST_F(LucySystemStateTest, LoopbackModeStillReportsCurrentAndLoad)
   FirmwareMapping fw(shm_name_, joint_count_);
   ASSERT_TRUE(fw.ok());
 
-  (*fw).hw_currents()[0] = 0.12;
-  (*fw).hw_loads()[0] = 0.34;
+  (*fw).hw_currents()[0] = 0.12f;
+  (*fw).hw_loads()[0] = 0.34f;
 
   ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
-  EXPECT_DOUBLE_EQ(value("j0", "current"), 0.12);
-  EXPECT_DOUBLE_EQ(value("j0", "load"), 0.34);
+  EXPECT_FLOAT_EQ(value("j0", "current"), 0.12f);
+  EXPECT_FLOAT_EQ(value("j0", "load"), 0.34f);
 }

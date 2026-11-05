@@ -13,7 +13,7 @@ Conventions follow common packaging practice ([REP-149](https://www.ros.org/reps
 | Package | Responsibility |
 |---------|----------------|
 | `lucy_bringup` | Jetson **system bringup**: rosbridge, cameras, control include; attaches SHM consumers for real hardware. |
-| `lucy_ros2_control` | **Hardware** `ros2_control`: `LucySystemHardware` plugin (f64 rad POSIX SHM / `ActuatorSharedState`). |
+| `lucy_ros2_control` | **Hardware** `ros2_control`: `LucySystemHardware` plugin (f32 rad POSIX SHM / `ActuatorSharedState`). |
 | `lucy_config_generator` | Hardware YAML → RP2040 `config_*.yaml`, `ros2_control` xacro, `controllers.yaml`. |
 | `lucy_config_pipeline` | Config store + `ConfigurePipeline` (validate → generate → Cargo build → flash → reload). |
 | `camera_ros` | MJPEG → `sensor_msgs/msg/CompressedImage`; GStreamer pipeline; pytest. |
@@ -27,7 +27,7 @@ lucy_ros_packages/
 ├── docs/
 │   ├── DEVELOPER.md         # this file
 │   ├── ROS2_CONTROL.md      # ros2_control concepts + Lucy implementation
-│   └── architecture/        # pipeline + f64 SHM schematics
+│   └── architecture/        # pipeline + f32 SHM schematics
 ├── lucy_bringup/
 ├── lucy_ros2_control/
 ├── lucy_config_generator/
