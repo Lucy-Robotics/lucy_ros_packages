@@ -1,0 +1,11 @@
+# Request
+---
+# Response
+# unsupported, simulated, unreachable, no_adapter, ambiguous, selected_missing, open_failed,
+# bus_dead, no_serial, recovery, no_binding, offsets_differ, match
+string state
+string adapter_serial
+string matched_config         # preset bound to this adapter; empty if none
+bool config_active            # whether matched_config is the active preset
+bool control_allowed          # whether this state is safe to drive the robot in
+string message

@@ -512,9 +512,24 @@ def _validate_sensor_ranges(
             )
 
 
+def _validate_calibration_block(block: Any) -> None:
+    if not isinstance(block, dict):
+        raise ValueError('calibration must be a mapping')
+    serial = block.get('adapter_serial', '')
+    if not isinstance(serial, str):
+        raise ValueError('calibration.adapter_serial must be a string')
+    offsets = block.get('homing_offsets')
+    if not isinstance(offsets, dict) or not all(
+        isinstance(v, int) and not isinstance(v, bool) for v in offsets.values()
+    ):
+        raise ValueError('calibration.homing_offsets must map actuator ids to integers')
+
+
 def validate_hardware_yaml(data: dict[str, Any]) -> None:
     """Raise ValueError if the mapping is structurally invalid."""
     check_safe_strings(data)
+    if 'calibration' in data:
+        _validate_calibration_block(data['calibration'])
     for key in REQUIRED_ROOT:
         if key not in data:
             raise ValueError(f'missing root key: {key}')

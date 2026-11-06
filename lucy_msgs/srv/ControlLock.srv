@@ -1,0 +1,8 @@
+# Request
+string owner                  # who holds the lock, e.g. "calibration"
+bool acquire                  # true = keep everyone from taking control, false = release
+---
+# Response
+bool success                  # whether the request was applied
+string active_client          # current controller id ("" = nobody in control)
+string message
