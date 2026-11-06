@@ -75,6 +75,8 @@ flowchart TB
 
 - `node_name` must match the SHM segment consumers use.
 - `write()`: URDF clamp → joint→servo mapping as needed → write `hw_commands[]` radians and bump `command_seq`.
+- **Firmware link** (real hardware only, not with `publish_actuators:=false`): `read()` watches `link_state` and `heartbeat` (frozen after 250 ms). A lost link logs a warning and `read()` still returns `OK`, because `return_type::ERROR` would release the SHM and prevent reconnection. Positions stay frozen during the outage.
+- **Torque after an outage:** `write()` sends torque off while the link is down. A torque request seen during that time stays refused after reconnection, until `torque_enable` goes to 0 on a healthy link (Control Robot OFF, then ON). Otherwise the controllers' last command would be reapplied at once, at maximum speed with `velocity = 0`. This also applies to a request made before the firmware's first connection.
 
 > **Gazebo caveat.** Upstream `gz_ros2_control` (jazzy) may not apply `<command_interface>` min/max inside `write()`.
 

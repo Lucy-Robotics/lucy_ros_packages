@@ -59,6 +59,7 @@
 #include <std_msgs/msg/string.hpp>
 
 #include "joint_config.hpp"
+#include "link_monitor.hpp"
 #include "shared_memory_channel.hpp"
 
 namespace lucy_ros2_control
@@ -98,6 +99,8 @@ private:
   hardware_interface::CallbackReturn init_actuator_mappings();
   /// Last SHM write of torque off, then release the channel (error / deactivate).
   void drop_torque_and_release_shm();
+  /// Read the firmware liveness fields and log state changes (no-op in loopback).
+  void update_link_health();
 
   rclcpp::Node::SharedPtr node_;
 
@@ -109,6 +112,9 @@ private:
   // rclcpp::Clock::SharedPtr clock_;
 
   std::optional<SharedMemoryChannel> shared_memory_channel_;
+
+  LinkMonitor link_monitor_{LinkMonitor::Clock::now()};
+  LinkMonitor::Clock::time_point last_link_warning_{};
 
   // Store the command for the simulated robot
   std::vector<double> hw_torque_enabled_;
