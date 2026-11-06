@@ -29,8 +29,7 @@ struct ActuatorSharedState
   alignas(64) std::atomic<uint64_t> state_seq{0};
   alignas(64) std::atomic<uint64_t> heartbeat{0};
   uint32_t max_actuators{0};
-  // Mirrors `_pad2` in embed-rs `ShmHeader`: keeps the payload at offset 144.
-  uint32_t padding{0};
+  std::atomic<uint32_t> link_state{0};
   float payload[0];
 
   static constexpr std::size_t kArrays = 9;
@@ -84,6 +83,7 @@ struct ActuatorSharedState
 };
 
 static_assert(std::atomic<uint64_t>::is_always_lock_free, "uint64_t must be lock-free");
+static_assert(std::atomic<uint32_t>::is_always_lock_free, "uint32_t must be lock-free");
 
 class SharedMemoryChannel
 {
@@ -123,6 +123,13 @@ private:
     const std::string & node_name,
     std::size_t max_actuators);
   void release();
+
+  /// Independent atomics written by the firmware: no ``Access`` (command seqlock) needed.
+  uint64_t heartbeat() const {return actuators_state_->heartbeat.load(std::memory_order_acquire);}
+  uint32_t link_state() const
+  {
+    return actuators_state_->link_state.load(std::memory_order_acquire);
+  }
 
 private:
   SharedMemoryChannel();
