@@ -124,6 +124,12 @@ if(BUILD_TESTING)
       ${PROJECT_SOURCE_DIR}/src/include
     )
 
+    # Header-only liveness and torque-gating logic, driven with a fake time.
+    ament_add_gtest(test_link_monitor test/test_link_monitor.cpp)
+    target_include_directories(test_link_monitor PRIVATE
+      ${PROJECT_SOURCE_DIR}/src/include
+    )
+
     # Pure on_init helpers: compile the module straight into the test (no ROS node
     # needed); depends on hardware_interface for ComponentInfo / lexical_casts.
     ament_add_gtest(test_joint_config
