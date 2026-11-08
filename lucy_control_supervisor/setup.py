@@ -18,6 +18,11 @@ setup(
     maintainer_email="contact@lucy-robotics.com",
     description="Restart RSP + ros2_control_node + spawners after config pipeline reload.",
     license="GPL-3.0",
+    extras_require={
+        "test": [
+            "pytest",
+        ],
+    },
     entry_points={
         "console_scripts": [
             "control_supervisor_node = lucy_control_supervisor.supervisor_node:main",
