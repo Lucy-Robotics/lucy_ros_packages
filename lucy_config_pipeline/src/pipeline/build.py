@@ -27,18 +27,18 @@ def run_build_phase(
     total_steps = len(plan) + 1
     step_idx = 0
 
-    cmake_cache = paths.build_dir / 'CMakeCache.txt'
+    cmake_cache = paths.build_dir / "CMakeCache.txt"
     if not cmake_cache.exists():
         feedback(
-            phase='build',
+            phase="build",
             progress=step_idx / total_steps,
-            detail=f'running cmake in {paths.build_dir}',
-            board='',
+            detail=f"running cmake in {paths.build_dir}",
+            board="",
         )
         _run_command(
-            phase='build',
-            board='',
-            cmd=['cmake', '..'],
+            phase="build",
+            board="",
+            cmd=["cmake", ".."],
             cwd=paths.build_dir,
             timeout_seconds=timeout_seconds,
             feedback=feedback,
@@ -49,41 +49,41 @@ def run_build_phase(
     failed_boards: list[str] = []
     for board, target in plan:
         feedback(
-            phase='build',
+            phase="build",
             progress=step_idx / total_steps,
-            detail=f'building target {target}',
+            detail=f"building target {target}",
             board=board,
         )
         try:
             _run_command(
-                phase='build',
+                phase="build",
                 board=board,
-                cmd=['make', target],
+                cmd=["make", target],
                 cwd=paths.build_dir,
                 timeout_seconds=timeout_seconds,
                 feedback=feedback,
                 stream_progress=step_idx / total_steps,
             )
-            uf2 = paths.build_dir / f'{target}.uf2'
+            uf2 = paths.build_dir / f"{target}.uf2"
             if not uf2.exists():
-                raise RuntimeError(f'missing build artifact: {uf2}')
+                raise RuntimeError(f"missing build artifact: {uf2}")
         except Exception as exc:
             failed_boards.append(board)
-            log_error(f'Build failed for {board}: {exc}')
+            log_error(f"Build failed for {board}: {exc}")
             feedback(
-                phase='build',
+                phase="build",
                 progress=step_idx / total_steps,
-                detail=f'build failed for {board}: {exc}',
+                detail=f"build failed for {board}: {exc}",
                 board=board,
             )
         finally:
             step_idx += 1
 
     feedback(
-        phase='build',
+        phase="build",
         progress=1.0,
-        detail='build phase completed',
-        board='',
+        detail="build phase completed",
+        board="",
     )
     return failed_boards
 

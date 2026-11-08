@@ -20,13 +20,13 @@ import sys
 
 # Set up Python path at module level to ensure it's available before any imports
 # This is needed when running tests directly (not through colcon test)
-workspace_path = Path('/home/dev/lucy_ws')
-install_path = workspace_path / 'install' / 'camera_ros'
+workspace_path = Path("/home/dev/lucy_ws")
+install_path = workspace_path / "install" / "camera_ros"
 
 if install_path.exists():
-    python_version = f'{sys.version_info.major}.{sys.version_info.minor}'
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
     dist_packages = (
-        install_path / 'local' / 'lib' / f'python{python_version}' / 'dist-packages'
+        install_path / "local" / "lib" / f"python{python_version}" / "dist-packages"
     )
 
     if dist_packages.exists() and str(dist_packages) not in sys.path:
@@ -34,6 +34,6 @@ if install_path.exists():
 
 # Add scripts directory
 package_path = Path(__file__).parent.parent
-scripts_path = package_path / 'scripts'
+scripts_path = package_path / "scripts"
 if scripts_path.exists() and str(scripts_path) not in sys.path:
     sys.path.insert(0, str(scripts_path))

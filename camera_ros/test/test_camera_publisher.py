@@ -25,7 +25,7 @@ from std_msgs.msg import Int32
 from std_srvs.srv import SetBool
 
 # Add scripts directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 
 @pytest.fixture
@@ -39,8 +39,8 @@ def rclpy_init_shutdown():
 class TestCameraPublisher:
     """Unit tests for CameraPublisher node."""
 
-    @patch('cv2.VideoCapture')
-    @patch('subprocess.run')
+    @patch("cv2.VideoCapture")
+    @patch("subprocess.run")
     def test_camera_detection_webcamproduct(
         self, mock_subprocess, mock_videocapture, rclpy_init_shutdown
     ):
@@ -65,13 +65,13 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
 
         node = CameraPublisher()
 
-        assert node.camera_device == '/dev/video6'
+        assert node.camera_device == "/dev/video6"
         mock_videocapture.assert_called_once()
         topic_name = node.jpg_pub.topic_name
-        assert topic_name == '/ext_camera/jpg' or topic_name == 'ext_camera/jpg'
+        assert topic_name == "/ext_camera/jpg" or topic_name == "ext_camera/jpg"
 
-    @patch('cv2.VideoCapture')
-    @patch('subprocess.run')
+    @patch("cv2.VideoCapture")
+    @patch("subprocess.run")
     def test_camera_detection_fallback(
         self, mock_subprocess, mock_videocapture, rclpy_init_shutdown
     ):
@@ -92,10 +92,10 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         node = CameraPublisher()
 
         # Should use default device
-        assert node.camera_device == '/dev/video0'
+        assert node.camera_device == "/dev/video0"
 
-    @patch('cv2.VideoCapture')
-    @patch('subprocess.run')
+    @patch("cv2.VideoCapture")
+    @patch("subprocess.run")
     def test_camera_detection_nonzero_exit_code(
         self, mock_subprocess, mock_videocapture, rclpy_init_shutdown
     ):
@@ -123,11 +123,11 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         node = CameraPublisher()
 
         # Should still detect the camera despite non-zero return code
-        assert node.camera_device == '/dev/video6'
+        assert node.camera_device == "/dev/video6"
         mock_videocapture.assert_called_once()
 
-    @patch('cv2.VideoCapture')
-    @patch('subprocess.run')
+    @patch("cv2.VideoCapture")
+    @patch("subprocess.run")
     def test_camera_detection_no_output(
         self, mock_subprocess, mock_videocapture, rclpy_init_shutdown
     ):
@@ -136,7 +136,7 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
 
         # Mock v4l2-ctl with no output (truly unavailable)
         mock_subprocess.return_value.returncode = 1
-        mock_subprocess.return_value.stdout = ''
+        mock_subprocess.return_value.stdout = ""
 
         # Mock VideoCapture
         mock_cap = MagicMock()
@@ -146,10 +146,10 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         node = CameraPublisher()
 
         # Should fall back to default device when no output
-        assert node.camera_device == '/dev/video0'
+        assert node.camera_device == "/dev/video0"
 
-    @patch('cv2.VideoCapture')
-    @patch('subprocess.run')
+    @patch("cv2.VideoCapture")
+    @patch("subprocess.run")
     def test_start_streaming_service(
         self, mock_subprocess, mock_videocapture, rclpy_init_shutdown
     ):
@@ -159,7 +159,7 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         # Mock subprocess and VideoCapture
         mock_subprocess.return_value.returncode = 0
         mock_subprocess.return_value.stdout = (
-            'webcamproduct: usb-webcam:\n        /dev/video6\n'
+            "webcamproduct: usb-webcam:\n        /dev/video6\n"
         )
         mock_cap = MagicMock()
         mock_cap.isOpened.return_value = True
@@ -174,10 +174,10 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
 
         assert response.success is True
         assert node.is_streaming is True
-        assert 'started' in response.message.lower()
+        assert "started" in response.message.lower()
 
-    @patch('cv2.VideoCapture')
-    @patch('subprocess.run')
+    @patch("cv2.VideoCapture")
+    @patch("subprocess.run")
     def test_stop_streaming_service(
         self, mock_subprocess, mock_videocapture, rclpy_init_shutdown
     ):
@@ -187,7 +187,7 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         # Mock subprocess and VideoCapture
         mock_subprocess.return_value.returncode = 0
         mock_subprocess.return_value.stdout = (
-            'webcamproduct: usb-webcam:\n        /dev/video6\n'
+            "webcamproduct: usb-webcam:\n        /dev/video6\n"
         )
         mock_cap = MagicMock()
         mock_cap.isOpened.return_value = True
@@ -203,10 +203,10 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
 
         assert response.success is True
         assert node.is_streaming is False
-        assert 'stopped' in response.message.lower()
+        assert "stopped" in response.message.lower()
 
-    @patch('cv2.VideoCapture')
-    @patch('subprocess.run')
+    @patch("cv2.VideoCapture")
+    @patch("subprocess.run")
     def test_client_count_callback_start(
         self, mock_subprocess, mock_videocapture, rclpy_init_shutdown
     ):
@@ -216,7 +216,7 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         # Mock subprocess and VideoCapture
         mock_subprocess.return_value.returncode = 0
         mock_subprocess.return_value.stdout = (
-            'webcamproduct: usb-webcam:\n        /dev/video6\n'
+            "webcamproduct: usb-webcam:\n        /dev/video6\n"
         )
         mock_cap = MagicMock()
         mock_cap.isOpened.return_value = True
@@ -232,8 +232,8 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         assert node.is_streaming is True
         assert node.client_count == 1
 
-    @patch('cv2.VideoCapture')
-    @patch('subprocess.run')
+    @patch("cv2.VideoCapture")
+    @patch("subprocess.run")
     def test_client_count_callback_stop(
         self, mock_subprocess, mock_videocapture, rclpy_init_shutdown
     ):
@@ -243,7 +243,7 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         # Mock subprocess and VideoCapture
         mock_subprocess.return_value.returncode = 0
         mock_subprocess.return_value.stdout = (
-            'webcamproduct: usb-webcam:\n        /dev/video6\n'
+            "webcamproduct: usb-webcam:\n        /dev/video6\n"
         )
         mock_cap = MagicMock()
         mock_cap.isOpened.return_value = True
@@ -260,8 +260,8 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         assert node.is_streaming is False
         assert node.client_count == 0
 
-    @patch('cv2.VideoCapture')
-    @patch('subprocess.run')
+    @patch("cv2.VideoCapture")
+    @patch("subprocess.run")
     def test_topic_name_ext_camera(
         self, mock_subprocess, mock_videocapture, rclpy_init_shutdown
     ):
@@ -271,7 +271,7 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         # Mock subprocess and VideoCapture
         mock_subprocess.return_value.returncode = 0
         mock_subprocess.return_value.stdout = (
-            'webcamproduct: usb-webcam:\n        /dev/video6\n'
+            "webcamproduct: usb-webcam:\n        /dev/video6\n"
         )
         mock_cap = MagicMock()
         mock_cap.isOpened.return_value = True
@@ -281,4 +281,4 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
 
         # Topic name may have leading slash
         topic_name = node.jpg_pub.topic_name
-        assert topic_name == '/ext_camera/jpg' or topic_name == 'ext_camera/jpg'
+        assert topic_name == "/ext_camera/jpg" or topic_name == "ext_camera/jpg"

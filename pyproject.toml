@@ -1,6 +1,2 @@
 [tool.black]
 target-version = ["py312"]
-# ROS's ament_flake8 enforces single-quoted strings (flake8-quotes Q000) in
-# every package here; Black's default double-quote normalization fights
-# that directly. Leave quote style alone so the two tools agree.
-skip-string-normalization = true

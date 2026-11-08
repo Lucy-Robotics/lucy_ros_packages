@@ -22,13 +22,13 @@ from rclpy.qos import QoSReliabilityPolicy
 from std_msgs.msg import Int32
 from std_msgs.msg import String
 
-HEARTBEAT_TOPIC = '/lucy/client_heartbeat'
-GOODBYE_TOPIC = '/lucy/client_goodbye'
-BRIDGE_CLIENT_COUNT_TOPIC = '/client_count'
-CLIENT_COUNT_TOPIC = '/lucy/client_count'
-ACTIVE_CLIENT_TOPIC = '/lucy/active_client'
-GET_CLIENT_COUNT_SERVICE = '/lucy/get_client_count'
-CONTROL_SERVICE = '/lucy/control'
+HEARTBEAT_TOPIC = "/lucy/client_heartbeat"
+GOODBYE_TOPIC = "/lucy/client_goodbye"
+BRIDGE_CLIENT_COUNT_TOPIC = "/client_count"
+CLIENT_COUNT_TOPIC = "/lucy/client_count"
+ACTIVE_CLIENT_TOPIC = "/lucy/active_client"
+GET_CLIENT_COUNT_SERVICE = "/lucy/get_client_count"
+CONTROL_SERVICE = "/lucy/control"
 
 TICK_PERIOD_S = 1.0
 CLIENT_TTL_S = 10.0  # ~10 missed beats at the 1 Hz client cadence
@@ -53,13 +53,13 @@ class ClientRegistryNode(Node):
     """Single-writer registry for connected clients and the active controller."""
 
     def __init__(self) -> None:
-        super().__init__('lucy_client_registry')
+        super().__init__("lucy_client_registry")
 
         # client_id -> last-seen monotonic time.
         # Guarded by _state_lock: callbacks may run on different executor threads.
         # (Not _clients — Node uses that.)
         self._last_seen: dict[str, float] = {}
-        self._active_client: str = ''
+        self._active_client: str = ""
         self._bridge_clients: int | None = None
         self._state_lock = threading.Lock()
 
@@ -84,7 +84,7 @@ class ClientRegistryNode(Node):
 
         self._publish_count()
         self._publish_active()
-        self.get_logger().info('Client registry started')
+        self.get_logger().info("Client registry started")
 
     def _on_heartbeat(self, msg: String) -> None:
         client_id = msg.data
@@ -96,7 +96,7 @@ class ClientRegistryNode(Node):
             count = len(self._last_seen)
         if is_new:
             self.get_logger().info(
-                f'Client registered: {client_id} ({count} connected)'
+                f"Client registered: {client_id} ({count} connected)"
             )
             self._publish_count()
 
@@ -107,11 +107,11 @@ class ClientRegistryNode(Node):
                 return
             controller_lost = self._active_client == client_id
             if controller_lost:
-                self._active_client = ''
+                self._active_client = ""
             count = len(self._last_seen)
-        self.get_logger().info(f'Client left: {client_id} ({count} connected)')
+        self.get_logger().info(f"Client left: {client_id} ({count} connected)")
         if controller_lost:
-            self.get_logger().info('Active controller left; control released')
+            self.get_logger().info("Active controller left; control released")
         self._publish_count()
         self._publish_active()
 
@@ -126,7 +126,7 @@ class ClientRegistryNode(Node):
         def check() -> None:
             timer.cancel()
             self.destroy_timer(timer)
-            if self._drop_silent_since(dropped_at, 'disconnected'):
+            if self._drop_silent_since(dropped_at, "disconnected"):
                 self._publish_count()
                 self._publish_active()
 
@@ -141,16 +141,16 @@ class ClientRegistryNode(Node):
                 bool(self._active_client) and self._active_client not in self._last_seen
             )
             if controller_lost:
-                self._active_client = ''
+                self._active_client = ""
             count = len(self._last_seen)
         for cid in gone:
-            self.get_logger().info(f'Client {reason}: {cid} ({count} connected)')
+            self.get_logger().info(f"Client {reason}: {cid} ({count} connected)")
         if controller_lost:
-            self.get_logger().info(f'Active controller {reason}; control released')
+            self.get_logger().info(f"Active controller {reason}; control released")
         return gone
 
     def _on_tick(self) -> None:
-        self._drop_silent_since(time.monotonic() - CLIENT_TTL_S, 'expired')
+        self._drop_silent_since(time.monotonic() - CLIENT_TTL_S, "expired")
         # Republish so volatile subscribers (web via rosbridge) converge without a
         # dedicated query; subscribers dedupe by value.
         self._publish_count()
@@ -170,7 +170,7 @@ class ClientRegistryNode(Node):
             with self._state_lock:
                 res.active_client = self._active_client
             res.success = False
-            res.message = 'empty client_id'
+            res.message = "empty client_id"
             return res
         with self._state_lock:
             is_new = (
@@ -180,7 +180,7 @@ class ClientRegistryNode(Node):
             if req.acquire:
                 self._active_client = req.client_id
             elif self._active_client == req.client_id:
-                self._active_client = ''
+                self._active_client = ""
             res.active_client = self._active_client
         if is_new:
             self._publish_count()
@@ -189,7 +189,7 @@ class ClientRegistryNode(Node):
         )
         self._publish_active()
         res.success = True
-        res.message = 'ok'
+        res.message = "ok"
         return res
 
     def _publish_count(self) -> None:
@@ -213,5 +213,5 @@ def main() -> None:  # pragma: no cover
         rclpy.shutdown()
 
 
-if __name__ == '__main__':  # pragma: no cover
+if __name__ == "__main__":  # pragma: no cover
     main()
