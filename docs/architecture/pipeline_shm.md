@@ -39,7 +39,7 @@ GENERATE writes, per selected board, `config_<board_id>.yaml` into `lucy_embedde
 
 ## One interface and one bridge per board
 
-Each board with a non-empty `serial_id` gets one `LucySystemHardware` (`node_name` is the suffix after `rp2040_`) and one `mcu_bridge <node_name> <serial_id>`. InMoov has three because the YAML has three such boards. Empty `serial_id` skips flash and skips the bridge. The bridge forwards the `f64` table and does not read plugs.
+Each board with a non-empty `serial_id` gets one `LucySystemHardware` (`node_name` is the suffix after `rp2040_`) and one `mcu_bridge <node_name> <serial_id>`. InMoov has three because the YAML has three such boards. Empty `serial_id` skips flash and skips the bridge. The bridge forwards the `f32` table and does not read plugs.
 
 ## End-to-end path (f32 SHM)
 
