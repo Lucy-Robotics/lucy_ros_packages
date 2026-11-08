@@ -141,7 +141,10 @@ def pipeline_paths(tmp_path: Path):
 
 
 def _write_outputs(out_dir: Path) -> None:
-    (out_dir / "so_arm101_ros2_control.xacro").write_text("<robot/>", encoding="utf-8")
+    # Matches schema.py's "ros2_control_xacro" default, which this test's
+    # shared test_mapping.yaml fixture (same as test_sim_only.py) doesn't
+    # override — not derived from this test's own "so_arm101_urdf" robot_root.
+    (out_dir / "inmoov_ros2_control.xacro").write_text("<robot/>", encoding="utf-8")
     (out_dir / "controllers.yaml").write_text(
         "controller_manager:\n  ros__parameters:\n    update_rate: 100\n",
         encoding="utf-8",
