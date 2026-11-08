@@ -12,9 +12,17 @@ from unittest.mock import patch
 
 import pytest
 
-from src.pipeline.selection import all_selected_serials_empty
-
 pytest.importorskip("rclpy")
+
+import rclpy  # noqa: E402
+from src.pipeline.selection import all_selected_serials_empty  # noqa: E402
+
+
+@pytest.fixture
+def rclpy_init_shutdown():
+    rclpy.init()
+    yield
+    rclpy.shutdown()
 
 
 def test_all_selected_serials_empty_true_when_blank():
@@ -44,6 +52,7 @@ def test_all_selected_serials_empty_false_when_any_set():
 )
 def test_empty_serials_skip_build_flash_and_reload(
     pipeline_paths,
+    rclpy_init_shutdown,
 ):
     from src.pipeline.action_server import PipelineActionServer
     import yaml

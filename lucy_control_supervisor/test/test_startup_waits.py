@@ -34,7 +34,7 @@ def test_torque_commands_wait_for_dds_match_after_spawn():
 
 
 def test_robot_state_publisher_is_waited_for_by_topic():
-    assert "count_publishers('/robot_description')" in SRC
+    assert 'count_publishers("/robot_description")' in SRC
 
 
 def test_urdf_params_file_is_unlinked_with_its_child():

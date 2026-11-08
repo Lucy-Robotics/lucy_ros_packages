@@ -14,9 +14,18 @@ import pytest
 
 pytest.importorskip("rclpy")
 
+import rclpy  # noqa: E402
 from src.pipeline.action_server import PipelineActionServer  # noqa: E402
 from src.pipeline.models import PipelinePaths  # noqa: E402
 import yaml  # noqa: E402
+
+
+@pytest.fixture
+def rclpy_init_shutdown():
+    rclpy.init()
+    yield
+    rclpy.shutdown()
+
 
 _FIXTURE = (
     Path(__file__).resolve().parents[2]
@@ -60,6 +69,7 @@ def pipeline_paths(tmp_path: Path) -> PipelinePaths:
 )
 def test_simulation_only_skips_build_flash_and_calls_reload(
     pipeline_paths: PipelinePaths,
+    rclpy_init_shutdown,
 ):
     data = yaml.safe_load(_FIXTURE.read_text(encoding="utf-8"))
     config_yaml = yaml.dump(data)
