@@ -284,6 +284,18 @@ def _validate_boards(boards: dict[str, Any], errors: list[str]) -> None:
             )
         node_boards[node] = board_id
 
+    serial_boards: dict[str, str] = {}
+    for board_id, board in boards.items():
+        serial_id = board.get('serial_id')
+        if not isinstance(serial_id, str) or not serial_id:
+            continue
+        if serial_id in serial_boards:
+            errors.append(
+                f'boards {serial_boards[serial_id]} and {board_id} '
+                f'share the serial_id {serial_id!r}'
+            )
+        serial_boards[serial_id] = board_id
+
 
 def _validate_pca_addresses(
     board_id: str, board: dict[str, Any], slots: int, errors: list[str]

@@ -155,6 +155,19 @@ def test_schema_rejects_boards_sharing_a_node_name():
         validate_hardware_yaml(data)
 
 
+def test_schema_rejects_boards_sharing_a_serial_id():
+    data = _load_mapping()
+    first, second = list(data['boards'])[:2]
+    data['boards'][first]['serial_id'] = 'ABC123'
+    data['boards'][second]['serial_id'] = 'ABC123'
+    with pytest.raises(ValueError, match="share the serial_id 'ABC123'"):
+        validate_hardware_yaml(data)
+
+
+def test_schema_accepts_several_boards_without_serial_id():
+    validate_hardware_yaml(_load_mapping())
+
+
 def test_schema_rejects_two_driven_servos_on_one_mega_output():
     data = _mega_mapping()
     left = [a for a in data['actuators'] if a['board'] == 'rp2040_left_arm']
