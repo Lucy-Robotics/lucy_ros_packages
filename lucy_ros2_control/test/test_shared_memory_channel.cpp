@@ -239,7 +239,7 @@ TEST_F(ActuatorSharedStateSpans, WritingCurrentsAndLoadsLeavesOtherArraysUntouch
 // SharedMemoryChannel over a real POSIX segment
 // ---------------------------------------------------------------------------
 
-TEST_F(SharedMemoryChannelTest, CreateZeroFillsEveryArrayButMarksPositionsUnreported)
+TEST_F(SharedMemoryChannelTest, CreateZeroFillsEveryArrayAndLeavesPositionsUnreported)
 {
   constexpr std::size_t kN = 3;
   auto channel = SharedMemoryChannel::create(name_, kN);
