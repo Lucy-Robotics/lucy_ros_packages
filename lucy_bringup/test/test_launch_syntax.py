@@ -19,8 +19,8 @@ import py_compile
 
 
 def test_launch_py_files_compile():
-    launch_dir = Path(__file__).resolve().parents[1] / 'launch'
-    files = sorted(launch_dir.glob('*.py'))
-    assert files, 'expected launch/*.py'
+    launch_dir = Path(__file__).resolve().parents[1] / "launch"
+    files = sorted(launch_dir.glob("*.py"))
+    assert files, "expected launch/*.py"
     for path in files:
         py_compile.compile(str(path), doraise=True)

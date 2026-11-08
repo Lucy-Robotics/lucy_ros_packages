@@ -11,9 +11,9 @@ from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
 
 import yaml
 
-_PKG = Path(__file__).resolve().parents[1] / 'lucy_control_supervisor'
-SRC = (_PKG / 'supervisor_node.py').read_text(encoding='utf-8')
-SPAWN_SRC = (_PKG / 'controllers_spawn.py').read_text(encoding='utf-8')
+_PKG = Path(__file__).resolve().parents[1] / "lucy_control_supervisor"
+SRC = (_PKG / "supervisor_node.py").read_text(encoding="utf-8")
+SPAWN_SRC = (_PKG / "controllers_spawn.py").read_text(encoding="utf-8")
 
 _FIXTURE = """
 controller_manager:
@@ -52,12 +52,12 @@ class _FakePub:
 
 
 def _write(tmp_path: Path) -> Path:
-    path = tmp_path / 'controllers.yaml'
-    path.write_text(_FIXTURE, encoding='utf-8')
-    loaded = yaml.safe_load(path.read_text(encoding='utf-8'))
-    assert loaded['so_arm_torque_enable_controller']['ros__parameters']['interface_name'] == (
-        'torque_enable'
-    )
+    path = tmp_path / "controllers.yaml"
+    path.write_text(_FIXTURE, encoding="utf-8")
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert loaded["so_arm_torque_enable_controller"]["ros__parameters"][
+        "interface_name"
+    ] == ("torque_enable")
     return path
 
 
@@ -73,19 +73,19 @@ def _wait_for(predicate, timeout_s, poll_s=0.01):
 def test_gazebo_spawn_skips_torque_enable(tmp_path: Path):
     path = _write(tmp_path)
     assert controllers_to_spawn(path) == [
-        'joint_state_broadcaster',
-        'so_arm_controller',
+        "joint_state_broadcaster",
+        "so_arm_controller",
     ]
 
 
 def test_real_spawn_includes_torque_enable(tmp_path: Path):
     path = _write(tmp_path)
     assert controllers_to_spawn(path, include_torque_enable=True) == [
-        'joint_state_broadcaster',
-        'so_arm_controller',
-        'so_arm_torque_enable_controller',
+        "joint_state_broadcaster",
+        "so_arm_controller",
+        "so_arm_torque_enable_controller",
     ]
-    assert torque_enable_controllers(path) == [('so_arm_torque_enable_controller', 6)]
+    assert torque_enable_controllers(path) == [("so_arm_torque_enable_controller", 6)]
 
 
 def test_torque_command_is_one_value_per_joint():
@@ -95,21 +95,21 @@ def test_torque_command_is_one_value_per_joint():
 
 def test_post_spawn_waits_for_subscription_count():
     """Reload must not publish until DDS has matched the forward controller."""
-    assert '_publish_torque_after_match' in SRC
-    assert 'wait_for_torque_match' in SRC
-    assert 'get_subscription_count' in SPAWN_SRC
-    assert 'TORQUE_MATCH_TIMEOUT_S' in SRC
-    spawn = SRC.index('def _spawn_controllers')
-    next_method = SRC.index('def _on_active_client')
+    assert "_publish_torque_after_match" in SRC
+    assert "wait_for_torque_match" in SRC
+    assert "get_subscription_count" in SPAWN_SRC
+    assert "TORQUE_MATCH_TIMEOUT_S" in SRC
+    spawn = SRC.index("def _spawn_controllers")
+    next_method = SRC.index("def _on_active_client")
     body = SRC[spawn:next_method]
-    assert '_publish_torque_after_match' in body
-    assert 'self._publish_torque_commands()' not in body
+    assert "_publish_torque_after_match" in body
+    assert "self._publish_torque_commands()" not in body
 
 
 def test_wait_publishes_after_match():
     """Stored ON value is published once every publisher reports a subscriber."""
     pub = _FakePub(count=0)
-    pubs = {'so_arm_torque_enable_controller': (pub, 2)}
+    pubs = {"so_arm_torque_enable_controller": (pub, 2)}
     assert not torque_publishers_matched(pubs)
 
     def appear_then_wait(predicate, timeout_s):
@@ -125,16 +125,16 @@ def test_wait_publishes_after_match():
     assert wait_for_torque_match(pubs, appear_then_wait, 1.0)
     assert torque_publishers_matched(pubs)
     # Mimic supervisor: publish stored ON after match.
-    pub.publish(type('M', (), {'data': torque_command_values(True, 2)})())
+    pub.publish(type("M", (), {"data": torque_command_values(True, 2)})())
     assert pub.published == [[1.0, 1.0]]
 
 
 def test_wait_times_out_and_still_allows_publish():
     """Unmatched publishers return False; caller still publishes once."""
     pub = _FakePub(count=0)
-    pubs = {'so_arm_torque_enable_controller': (pub, 6)}
+    pubs = {"so_arm_torque_enable_controller": (pub, 6)}
     started = time.time()
     assert wait_for_torque_match(pubs, _wait_for, 0.15) is False
     assert time.time() - started < 1.0
-    pub.publish(type('M', (), {'data': torque_command_values(True, 6)})())
+    pub.publish(type("M", (), {"data": torque_command_values(True, 6)})())
     assert pub.published == [[1.0, 1.0, 1.0, 1.0, 1.0, 1.0]]

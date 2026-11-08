@@ -16,13 +16,13 @@ from .services.config_services_node import ConfigServicesNode
 
 
 def _infer_robot_source_root(robot_package: str, share_dir: Path) -> Path:
-    cwd_candidate = Path.cwd() / 'src' / robot_package
+    cwd_candidate = Path.cwd() / "src" / robot_package
     if cwd_candidate.is_dir():
         return cwd_candidate
 
     for p in share_dir.parents:
-        if p.name == 'install':
-            src_candidate = p.parent / 'src' / robot_package
+        if p.name == "install":
+            src_candidate = p.parent / "src" / robot_package
             if src_candidate.is_dir():
                 return src_candidate
     return share_dir
@@ -30,9 +30,9 @@ def _infer_robot_source_root(robot_package: str, share_dir: Path) -> Path:
 
 def _active_generated_files(cfg_dir: Path) -> dict[str, str]:
     """Generated-artifact filenames from the active preset (defaults if unreadable)."""
-    active = cfg_dir / 'active.yaml'
+    active = cfg_dir / "active.yaml"
     try:
-        data = yaml.safe_load(active.read_text(encoding='utf-8'))
+        data = yaml.safe_load(active.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             return resolve_generated_files(data)
     except (OSError, ValueError, yaml.YAMLError):
@@ -42,20 +42,24 @@ def _active_generated_files(cfg_dir: Path) -> dict[str, str]:
 
 def _find_workspace_src(robot_root: Path) -> Path:
     for p in robot_root.parents:
-        if p.name == 'src':
+        if p.name == "src":
             return p
-    raise RuntimeError(f'cannot infer workspace src from {robot_root}')
+    raise RuntimeError(f"cannot infer workspace src from {robot_root}")
 
 
 def _resolve_paths(robot_package: str, config_dir: str) -> PipelinePaths:
     share_dir = Path(get_package_share_directory(robot_package))
     robot_root = _infer_robot_source_root(robot_package, share_dir)
 
-    cfg_dir = Path(config_dir).resolve() if config_dir else (robot_root / 'config' / 'hardware')
+    cfg_dir = (
+        Path(config_dir).resolve()
+        if config_dir
+        else (robot_root / "config" / "hardware")
+    )
     names = _active_generated_files(cfg_dir)
     urdf_xacro, base_path, controller_config = resolve_robot_description_paths(
         robot_root,
-        controllers_basename=names['controllers_yaml'],
+        controllers_basename=names["controllers_yaml"],
     )
 
     return PipelinePaths(
@@ -71,11 +75,15 @@ def _resolve_paths(robot_package: str, config_dir: str) -> PipelinePaths:
 def main() -> None:
     rclpy.init()
 
-    bootstrap = rclpy.create_node('lucy_config_pipeline_bootstrap')
-    bootstrap.declare_parameter('robot_package', 'thais_urdf')
-    bootstrap.declare_parameter('config_dir', '')
-    robot_package = bootstrap.get_parameter('robot_package').get_parameter_value().string_value
-    config_dir = bootstrap.get_parameter('config_dir').get_parameter_value().string_value
+    bootstrap = rclpy.create_node("lucy_config_pipeline_bootstrap")
+    bootstrap.declare_parameter("robot_package", "thais_urdf")
+    bootstrap.declare_parameter("config_dir", "")
+    robot_package = (
+        bootstrap.get_parameter("robot_package").get_parameter_value().string_value
+    )
+    config_dir = (
+        bootstrap.get_parameter("config_dir").get_parameter_value().string_value
+    )
     paths = _resolve_paths(robot_package, config_dir)
     bootstrap.destroy_node()
 
@@ -107,5 +115,5 @@ def main() -> None:
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

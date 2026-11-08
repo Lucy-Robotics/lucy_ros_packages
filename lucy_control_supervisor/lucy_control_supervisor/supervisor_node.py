@@ -34,7 +34,7 @@ from lucy_control_supervisor.controllers_spawn import torque_command_values
 from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
 from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
 
-_WINDOWS_EXEC_SUFFIXES = ('.exe', '.bat', '.cmd')
+_WINDOWS_EXEC_SUFFIXES = (".exe", ".bat", ".cmd")
 
 
 def _control_ready_file() -> Path:
@@ -43,11 +43,11 @@ def _control_ready_file() -> Path:
     Lets the launcher's readiness probe be a file read rather than a graph query
     charged a Pixi activation and an rclpy node.
     """
-    override = os.environ.get('LUCY_CONTROL_READY_FILE')
+    override = os.environ.get("LUCY_CONTROL_READY_FILE")
     if override:
         return Path(override)
-    uid = getattr(os, 'getuid', lambda: 0)()
-    return Path(tempfile.gettempdir()) / f'lucy_control_ready.{uid}'
+    uid = getattr(os, "getuid", lambda: 0)()
+    return Path(tempfile.gettempdir()) / f"lucy_control_ready.{uid}"
 
 
 def node_argv(package: str, executable: str) -> list[str]:
@@ -58,16 +58,18 @@ def node_argv(package: str, executable: str) -> list[str]:
     """
     from ament_index_python.packages import get_package_prefix
 
-    lib_dir = Path(get_package_prefix(package)) / 'lib' / package
+    lib_dir = Path(get_package_prefix(package)) / "lib" / package
     matches = sorted(
-        (p for p in lib_dir.glob('*') if p.is_file() and p.stem == executable),
+        (p for p in lib_dir.glob("*") if p.is_file() and p.stem == executable),
         # Prefer something the OS can exec over a script needing an interpreter.
-        key=lambda p: 0 if not p.suffix or p.suffix.lower() in _WINDOWS_EXEC_SUFFIXES else 1,
+        key=lambda p: (
+            0 if not p.suffix or p.suffix.lower() in _WINDOWS_EXEC_SUFFIXES else 1
+        ),
     )
     if not matches:
-        raise RuntimeError(f'{package}/{executable} not found in {lib_dir}')
+        raise RuntimeError(f"{package}/{executable} not found in {lib_dir}")
     best = matches[0]
-    if os.name == 'nt' and best.suffix.lower() not in _WINDOWS_EXEC_SUFFIXES:
+    if os.name == "nt" and best.suffix.lower() not in _WINDOWS_EXEC_SUFFIXES:
         return [sys.executable, str(best)]
     return [str(best)]
 
@@ -95,30 +97,30 @@ class _StackConfig:
 
 
 class ControlSupervisorNode(Node):
-    RESTART_SERVICE = '/lucy_control/restart'
-    GAZEBO_RUNNING_TOPIC = '/lucy/gazebo_running'
+    RESTART_SERVICE = "/lucy_control/restart"
+    GAZEBO_RUNNING_TOPIC = "/lucy/gazebo_running"
     # Latched by lucy_client_registry. Non-empty means Control Robot is ON.
-    ACTIVE_CLIENT_TOPIC = '/lucy/active_client'
+    ACTIVE_CLIENT_TOPIC = "/lucy/active_client"
     TERMINATE_TIMEOUT_S = 10.0
     READY_TIMEOUT_S = 60.0
     CONTROL_READY_FILE = _control_ready_file()
     CHILD_LOG_TAIL = 50
     DISCOVERY_SETTLE_S = 2.0
-    CONTROLLER_MANAGER_NODE = 'controller_manager'
+    CONTROLLER_MANAGER_NODE = "controller_manager"
     SPAWNER_TIMEOUT_S = 60.0
     # ForwardCommandController ~/commands is volatile; wait for DDS match after spawn.
     TORQUE_MATCH_TIMEOUT_S = 2.0
 
     def __init__(self) -> None:
-        super().__init__('lucy_control_supervisor')
-        self.declare_parameter('urdf_path', '')
-        self.declare_parameter('base_path', '')
-        self.declare_parameter('controllers_yaml', '')
-        self.declare_parameter('use_gazebo_sim', False)
-        self.declare_parameter('use_mock_hardware', False)
-        self.declare_parameter('gazebo_only', False)
-        self.declare_parameter('autostart', True)
-        self.declare_parameter('ros2_control_file', 'inmoov_ros2_control.xacro')
+        super().__init__("lucy_control_supervisor")
+        self.declare_parameter("urdf_path", "")
+        self.declare_parameter("base_path", "")
+        self.declare_parameter("controllers_yaml", "")
+        self.declare_parameter("use_gazebo_sim", False)
+        self.declare_parameter("use_mock_hardware", False)
+        self.declare_parameter("gazebo_only", False)
+        self.declare_parameter("autostart", True)
+        self.declare_parameter("ros2_control_file", "inmoov_ros2_control.xacro")
 
         self._children: List[_ManagedProc] = []
         self._restart_lock = False
@@ -140,14 +142,14 @@ class ControlSupervisorNode(Node):
         self.create_subscription(
             String, self.ACTIVE_CLIENT_TOPIC, self._on_active_client, latched_qos
         )
-        if self.get_parameter('autostart').value:
+        if self.get_parameter("autostart").value:
             ok, msg = self._restart_stack()
             if not ok:
                 self.get_logger().error(msg)
 
     def _publish_gazebo_running(self) -> None:
         msg = Bool()
-        msg.data = bool(self.get_parameter('use_gazebo_sim').value)
+        msg.data = bool(self.get_parameter("use_gazebo_sim").value)
         self._gazebo_running_pub.publish(msg)
 
     def destroy_node(self) -> bool:
@@ -156,39 +158,44 @@ class ControlSupervisorNode(Node):
 
     def _cfg(self) -> _StackConfig:
         return _StackConfig(
-            urdf_path=Path(self.get_parameter('urdf_path').value).resolve(),
-            base_path=Path(self.get_parameter('base_path').value).resolve(),
-            controllers_yaml=Path(self.get_parameter('controllers_yaml').value).resolve(),
-            use_gazebo_sim=bool(self.get_parameter('use_gazebo_sim').value),
-            use_mock_hardware=bool(self.get_parameter('use_mock_hardware').value),
-            gazebo_only=bool(self.get_parameter('gazebo_only').value),
+            urdf_path=Path(self.get_parameter("urdf_path").value).resolve(),
+            base_path=Path(self.get_parameter("base_path").value).resolve(),
+            controllers_yaml=Path(
+                self.get_parameter("controllers_yaml").value
+            ).resolve(),
+            use_gazebo_sim=bool(self.get_parameter("use_gazebo_sim").value),
+            use_mock_hardware=bool(self.get_parameter("use_mock_hardware").value),
+            gazebo_only=bool(self.get_parameter("gazebo_only").value),
             ros2_control_file=str(
-                self.get_parameter('ros2_control_file').value or 'inmoov_ros2_control.xacro'
+                self.get_parameter("ros2_control_file").value
+                or "inmoov_ros2_control.xacro"
             ).strip(),
         )
 
     def _xacro_cmd(self, cfg: _StackConfig) -> list[str]:
         tail = [
             str(cfg.urdf_path),
-            f'base_path:={cfg.base_path}',
-            f'controller_config:={cfg.controllers_yaml}',
+            f"base_path:={cfg.base_path}",
+            f"controller_config:={cfg.controllers_yaml}",
             f"use_gazebo_sim:={'true' if cfg.use_gazebo_sim else 'false'}",
             f"use_mock_hardware:={'true' if cfg.use_mock_hardware else 'false'}",
-            f'ros2_control_file:={cfg.ros2_control_file}',
+            f"ros2_control_file:={cfg.ros2_control_file}",
         ]
         try:
-            return [*node_argv('xacro', 'xacro'), *tail]
+            return [*node_argv("xacro", "xacro"), *tail]
         except (RuntimeError, KeyError):  # KeyError: package not in the index
             pass
-        if shutil.which('xacro'):
-            return ['xacro', *tail]
-        raise RuntimeError('xacro not found')
+        if shutil.which("xacro"):
+            return ["xacro", *tail]
+        raise RuntimeError("xacro not found")
 
     def _expand_robot_description(self, cfg: _StackConfig) -> str:
         cmd = self._xacro_cmd(cfg)
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
+        r = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=120, check=False
+        )
         if r.returncode != 0:
-            raise RuntimeError(f'xacro failed: {r.stderr or r.stdout}')
+            raise RuntimeError(f"xacro failed: {r.stderr or r.stdout}")
         return r.stdout
 
     def _clear_ready_marker(self) -> None:
@@ -212,7 +219,7 @@ class ControlSupervisorNode(Node):
                 time.sleep(0.1)
         for child in self._children:
             if child.popen.poll() is None:
-                self.get_logger().warning(f'{child.name} ignored terminate; killing')
+                self.get_logger().warning(f"{child.name} ignored terminate; killing")
                 try:
                     child.popen.kill()
                 except OSError:
@@ -231,7 +238,7 @@ class ControlSupervisorNode(Node):
         Two of them command the same joints, so the robot follows whichever
         wrote last. Usually a stack left over from an earlier run.
         """
-        if any(c.kind == 'cm' and c.popen.poll() is None for c in self._children):
+        if any(c.kind == "cm" and c.popen.poll() is None for c in self._children):
             return []
         # Nothing of ours is running, so give discovery a moment to report
         # anyone else's before concluding the graph is clear.
@@ -259,22 +266,22 @@ class ControlSupervisorNode(Node):
 
     def _start_rsp(self, cfg: _StackConfig, urdf_xml: str) -> None:
         payload = {
-            'robot_state_publisher': {
-                'ros__parameters': {
-                    'robot_description': urdf_xml,
-                    'use_sim_time': bool(cfg.use_gazebo_sim),
+            "robot_state_publisher": {
+                "ros__parameters": {
+                    "robot_description": urdf_xml,
+                    "use_sim_time": bool(cfg.use_gazebo_sim),
                 }
             }
         }
         with tempfile.NamedTemporaryFile(
-            mode='w', suffix='.yaml', delete=False, encoding='utf-8'
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
         ) as f:
             yaml.safe_dump(payload, f, sort_keys=False)
             params_file = f.name
         cmd = [
-            *node_argv('robot_state_publisher', 'robot_state_publisher'),
-            '--ros-args',
-            '--params-file',
+            *node_argv("robot_state_publisher", "robot_state_publisher"),
+            "--ros-args",
+            "--params-file",
             params_file,
         ]
         popen = subprocess.Popen(
@@ -283,15 +290,15 @@ class ControlSupervisorNode(Node):
             stderr=subprocess.STDOUT,
             env=os.environ.copy(),
         )
-        self._track('robot_state_publisher', popen, 'rsp', cleanup_paths=(params_file,))
+        self._track("robot_state_publisher", popen, "rsp", cleanup_paths=(params_file,))
         ready = self._wait_for(
-            lambda: self.count_publishers('/robot_description') > 0,
+            lambda: self.count_publishers("/robot_description") > 0,
             self.READY_TIMEOUT_S,
         )
         if not ready:
             self.get_logger().warning(
-                'robot_state_publisher did not publish /robot_description within '
-                f'{self.READY_TIMEOUT_S:.0f}s'
+                "robot_state_publisher did not publish /robot_description within "
+                f"{self.READY_TIMEOUT_S:.0f}s"
             )
 
     def _track(
@@ -312,11 +319,11 @@ class ControlSupervisorNode(Node):
 
         def pump() -> None:
             try:
-                for line in iter(popen.stdout.readline, b''):
-                    text = line.decode('utf-8', 'replace').rstrip()
+                for line in iter(popen.stdout.readline, b""):
+                    text = line.decode("utf-8", "replace").rstrip()
                     if text:
                         tail.append(text)
-                        self.get_logger().debug(f'[{name}] {text}')
+                        self.get_logger().debug(f"[{name}] {text}")
             except (OSError, ValueError):
                 pass
             # poll rather than wait: _terminate_children polls these same handles.
@@ -326,20 +333,20 @@ class ControlSupervisorNode(Node):
                 time.sleep(0.1)
                 code = popen.poll()
             if code and not child.stopping:
-                self.get_logger().error(f'{name} exited with code {code}')
+                self.get_logger().error(f"{name} exited with code {code}")
                 for text in tail:
-                    self.get_logger().error(f'[{name}] {text}')
+                    self.get_logger().error(f"[{name}] {text}")
 
-        threading.Thread(target=pump, name=f'pump-{name}', daemon=True).start()
+        threading.Thread(target=pump, name=f"pump-{name}", daemon=True).start()
 
     def _start_cm(self, cfg: _StackConfig) -> None:
         cmd = [
-            *node_argv('controller_manager', 'ros2_control_node'),
-            '--ros-args',
-            '--params-file',
+            *node_argv("controller_manager", "ros2_control_node"),
+            "--ros-args",
+            "--params-file",
             str(cfg.controllers_yaml),
-            '-r',
-            '~/robot_description:=/robot_description',
+            "-r",
+            "~/robot_description:=/robot_description",
         ]
         popen = subprocess.Popen(
             cmd,
@@ -347,16 +354,16 @@ class ControlSupervisorNode(Node):
             stderr=subprocess.STDOUT,
             env=os.environ.copy(),
         )
-        self._track('ros2_control_node', popen, 'cm')
+        self._track("ros2_control_node", popen, "cm")
         # Spawners hold a global lock while waiting for this service, so starting
         # them before it answers costs each one a full 20s lock attempt.
         if not self._wait_for(
-            lambda: self._service_available('/controller_manager/list_controllers'),
+            lambda: self._service_available("/controller_manager/list_controllers"),
             self.READY_TIMEOUT_S,
         ):
             self.get_logger().warning(
-                'controller_manager did not offer list_controllers within '
-                f'{self.READY_TIMEOUT_S:.0f}s; spawners may block on the lock'
+                "controller_manager did not offer list_controllers within "
+                f"{self.READY_TIMEOUT_S:.0f}s; spawners may block on the lock"
             )
 
     def _spawn_controllers(self, cfg: _StackConfig) -> None:
@@ -372,17 +379,17 @@ class ControlSupervisorNode(Node):
         )
         if not names:
             self.get_logger().warning(
-                f'no controllers to spawn in {cfg.controllers_yaml}'
+                f"no controllers to spawn in {cfg.controllers_yaml}"
             )
             return
         for name in names:
             cmd = [
-                *node_argv('controller_manager', 'spawner'),
+                *node_argv("controller_manager", "spawner"),
                 name,
-                '--switch-timeout',
-                '10',
+                "--switch-timeout",
+                "10",
             ]
-            self.get_logger().info(f'spawning controller {name}')
+            self.get_logger().info(f"spawning controller {name}")
             r = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -392,10 +399,10 @@ class ControlSupervisorNode(Node):
                 env=os.environ.copy(),
             )
             if r.returncode != 0:
-                detail = (r.stderr or r.stdout or '').strip()
+                detail = (r.stderr or r.stdout or "").strip()
                 raise RuntimeError(
-                    f'spawner for {name} failed (exit {r.returncode})'
-                    + (f': {detail}' if detail else '')
+                    f"spawner for {name} failed (exit {r.returncode})"
+                    + (f": {detail}" if detail else "")
                 )
         self._bind_torque_controllers(cfg)
         self._publish_torque_after_match()
@@ -412,7 +419,7 @@ class ControlSupervisorNode(Node):
         for name, count in torque_enable_controllers(cfg.controllers_yaml):
             pub, _old = self._torque_pubs.get(name, (None, None))
             if pub is None:
-                pub = self.create_publisher(Float64MultiArray, f'/{name}/commands', 10)
+                pub = self.create_publisher(Float64MultiArray, f"/{name}/commands", 10)
             self._torque_pubs[name] = (pub, count)
 
     def _publish_torque_after_match(self) -> None:
@@ -426,8 +433,8 @@ class ControlSupervisorNode(Node):
         )
         if not matched:
             self.get_logger().warning(
-                'torque_enable command publishers unmatched after '
-                f'{self.TORQUE_MATCH_TIMEOUT_S:.0f}s; publishing anyway'
+                "torque_enable command publishers unmatched after "
+                f"{self.TORQUE_MATCH_TIMEOUT_S:.0f}s; publishing anyway"
             )
         self._publish_torque_commands()
 
@@ -440,26 +447,28 @@ class ControlSupervisorNode(Node):
 
     def _restart_stack(self) -> tuple[bool, str]:
         if self._restart_lock:
-            return False, 'restart already in progress'
+            return False, "restart already in progress"
         self._restart_lock = True
         try:
             cfg = self._cfg()
             # config_pipeline_node generates the ros2_control xacro, so these can
             # legitimately not exist yet; waiting replaces a guessed launch delay.
             inputs = (cfg.urdf_path, cfg.base_path, cfg.controllers_yaml)
-            self._wait_for(lambda: all(p.exists() for p in inputs), self.READY_TIMEOUT_S)
+            self._wait_for(
+                lambda: all(p.exists() for p in inputs), self.READY_TIMEOUT_S
+            )
             for p in inputs:
                 if not p.exists():
-                    return False, f'missing path: {p}'
+                    return False, f"missing path: {p}"
 
             if not cfg.use_gazebo_sim and not cfg.gazebo_only:
                 foreign = self._foreign_controller_managers()
                 if foreign:
                     return False, (
                         f"controller_manager already running ({', '.join(foreign)}) "
-                        'and not owned by this supervisor. Two of them drive the '
-                        'same joints, so refusing to start a second. Stop the '
-                        'other Lucy stack, then retry.'
+                        "and not owned by this supervisor. Two of them drive the "
+                        "same joints, so refusing to start a second. Stop the "
+                        "other Lucy stack, then retry."
                     )
 
             self._terminate_children()
@@ -471,19 +480,21 @@ class ControlSupervisorNode(Node):
                     self._start_cm(cfg)
                     self._spawn_controllers(cfg)
 
-            note = ''
+            note = ""
             if cfg.use_gazebo_sim:
                 note = (
-                    ' Gazebo: if URDF hardware topology changed, restart Gazebo '
-                    '(gz_ros2_control loads URDF at spawn).'
+                    " Gazebo: if URDF hardware topology changed, restart Gazebo "
+                    "(gz_ros2_control loads URDF at spawn)."
                 )
-            return True, f'control stack restarted.{note}'
+            return True, f"control stack restarted.{note}"
         except Exception as e:
             return False, str(e)
         finally:
             self._restart_lock = False
 
-    def _on_restart(self, _request: Trigger.Request, response: Trigger.Response) -> Trigger.Response:
+    def _on_restart(
+        self, _request: Trigger.Request, response: Trigger.Response
+    ) -> Trigger.Response:
         ok, msg = self._restart_stack()
         response.success = ok
         response.message = msg
@@ -506,5 +517,5 @@ def main() -> None:
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -33,19 +33,19 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description():
     robot_package_arg = DeclareLaunchArgument(
-        'robot_package',
-        default_value='thais_urdf',
+        "robot_package",
+        default_value="thais_urdf",
         description=(
-            'Robot package share used for hardware YAML paths '
-            'in lucy_config_pipeline'
+            "Robot package share used for hardware YAML paths "
+            "in lucy_config_pipeline"
         ),
     )
     config_dir_arg = DeclareLaunchArgument(
-        'config_dir',
-        default_value='',
+        "config_dir",
+        default_value="",
         description=(
-            'Override hardware config directory for lucy_config_pipeline '
-            '(empty = <robot_package>/config/hardware)'
+            "Override hardware config directory for lucy_config_pipeline "
+            "(empty = <robot_package>/config/hardware)"
         ),
     )
 
@@ -57,39 +57,45 @@ def generate_launch_description():
             [
                 PathJoinSubstitution(
                     [
-                        FindPackageShare('rosbridge_server'),
-                        'launch',
-                        'rosbridge_websocket_launch.xml',
+                        FindPackageShare("rosbridge_server"),
+                        "launch",
+                        "rosbridge_websocket_launch.xml",
                     ]
                 )
             ]
         ),
         launch_arguments=[
-            ('default_call_service_timeout', '60.0'),
-            ('max_message_size', '50000000'),
-            ('call_services_in_new_thread', 'true'),
-            ('send_action_goals_in_new_thread', 'true'),
-            ('address', LaunchConfiguration('rosbridge_address', default='127.0.0.1')),
+            ("default_call_service_timeout", "60.0"),
+            ("max_message_size", "50000000"),
+            ("call_services_in_new_thread", "true"),
+            ("send_action_goals_in_new_thread", "true"),
+            ("address", LaunchConfiguration("rosbridge_address", default="127.0.0.1")),
         ],
     )
 
     config_pipeline_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('lucy_config_pipeline'),
-                'launch',
-                'config_pipeline.launch.py',
-            ])
-        ]),
+        PythonLaunchDescriptionSource(
+            [
+                PathJoinSubstitution(
+                    [
+                        FindPackageShare("lucy_config_pipeline"),
+                        "launch",
+                        "config_pipeline.launch.py",
+                    ]
+                )
+            ]
+        ),
         launch_arguments=[
-            ('robot_package', LaunchConfiguration('robot_package')),
-            ('config_dir', LaunchConfiguration('config_dir')),
+            ("robot_package", LaunchConfiguration("robot_package")),
+            ("config_dir", LaunchConfiguration("config_dir")),
         ],
     )
 
-    return LaunchDescription([
-        robot_package_arg,
-        config_dir_arg,
-        rosbridge,
-        config_pipeline_launch,
-    ])
+    return LaunchDescription(
+        [
+            robot_package_arg,
+            config_dir_arg,
+            rosbridge,
+            config_pipeline_launch,
+        ]
+    )

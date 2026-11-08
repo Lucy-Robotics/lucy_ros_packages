@@ -59,9 +59,9 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
-_LINUX_FIRMWARE_BIN = 'lucy-embedded-firmware-linux'
-_SO101_HOST_NODE = 'so_arm'
-_SO101_ROBOT_PACKAGE = 'so_arm101_urdf'
+_LINUX_FIRMWARE_BIN = "lucy-embedded-firmware-linux"
+_SO101_HOST_NODE = "so_arm"
+_SO101_ROBOT_PACKAGE = "so_arm101_urdf"
 
 
 def resolve_linux_firmware_binary() -> Path:
@@ -72,23 +72,27 @@ def resolve_linux_firmware_binary() -> Path:
     ``src/lucy_embedded_firmware/target/release/<bin>`` under the workspace
     (walk from cwd and from the ``lucy_bringup`` share directory).
     """
-    env = os.environ.get('LUCY_EMBEDDED_FIRMWARE_LINUX', '').strip()
+    env = os.environ.get("LUCY_EMBEDDED_FIRMWARE_LINUX", "").strip()
     if env:
         path = Path(env).expanduser()
         if path.is_file():
             return path.resolve()
-        raise RuntimeError(
-            f'LUCY_EMBEDDED_FIRMWARE_LINUX={env!r} is not a file'
-        )
+        raise RuntimeError(f"LUCY_EMBEDDED_FIRMWARE_LINUX={env!r} is not a file")
 
     which = shutil.which(_LINUX_FIRMWARE_BIN)
     if which:
         return Path(which).resolve()
 
-    rel = Path('src') / 'lucy_embedded_firmware' / 'target' / 'release' / _LINUX_FIRMWARE_BIN
+    rel = (
+        Path("src")
+        / "lucy_embedded_firmware"
+        / "target"
+        / "release"
+        / _LINUX_FIRMWARE_BIN
+    )
     search_roots: list[Path] = [Path.cwd(), *Path.cwd().parents]
     try:
-        share = Path(get_package_share_directory('lucy_bringup'))
+        share = Path(get_package_share_directory("lucy_bringup"))
         search_roots.extend([share, *share.parents])
     except Exception:
         pass
@@ -106,22 +110,22 @@ def resolve_linux_firmware_binary() -> Path:
             return candidate.resolve()
 
     raise RuntimeError(
-        f'{_LINUX_FIRMWARE_BIN} not found. Build it with '
-        f'`cargo build --release -p lucy-embedded-firmware-linux` '
-        f'(from lucy_embedded_firmware), put it on PATH, or set '
-        f'LUCY_EMBEDDED_FIRMWARE_LINUX to the absolute path.'
+        f"{_LINUX_FIRMWARE_BIN} not found. Build it with "
+        f"`cargo build --release -p lucy-embedded-firmware-linux` "
+        f"(from lucy_embedded_firmware), put it on PATH, or set "
+        f"LUCY_EMBEDDED_FIRMWARE_LINUX to the absolute path."
     )
 
 
 def _infer_robot_source_root(robot_package: str, share_dir: str) -> Path:
     """Prefer workspace src tree (pipeline writes) over install share."""
-    cwd_candidate = Path.cwd() / 'src' / robot_package
+    cwd_candidate = Path.cwd() / "src" / robot_package
     if cwd_candidate.is_dir():
         return cwd_candidate
     share = Path(share_dir)
     for parent in share.parents:
-        if parent.name == 'install':
-            src_candidate = parent.parent / 'src' / robot_package
+        if parent.name == "install":
+            src_candidate = parent.parent / "src" / robot_package
             if src_candidate.is_dir():
                 return src_candidate
     return share
@@ -138,9 +142,9 @@ def _discover_robot_packages():
 
     found = []
     for pkg, prefix in get_packages_with_prefixes().items():
-        share = Path(prefix) / 'share' / pkg
-        if (share / 'launch' / 'control.launch.py').is_file() and (
-            share / 'description'
+        share = Path(prefix) / "share" / pkg
+        if (share / "launch" / "control.launch.py").is_file() and (
+            share / "description"
         ).is_dir():
             found.append(pkg)
     return sorted(found)
@@ -157,16 +161,16 @@ def _default_robot_package():
     pkgs = _discover_robot_packages()
     if len(pkgs) == 1:
         return pkgs[0]
-    if 'inmoov_urdf' in pkgs:
-        return 'inmoov_urdf'
+    if "inmoov_urdf" in pkgs:
+        return "inmoov_urdf"
     if pkgs:
         return pkgs[0]
-    return ''
+    return ""
 
 
 def _load_robot_launch_defaults(robot_root: Path) -> dict[str, str]:
     """Relative path defaults from ``config/control.launch.yaml`` when present."""
-    config_path = robot_root / 'config' / 'control.launch.yaml'
+    config_path = robot_root / "config" / "control.launch.yaml"
     if not config_path.is_file():
         return {}
     try:
@@ -174,13 +178,13 @@ def _load_robot_launch_defaults(robot_root: Path) -> dict[str, str]:
     except ImportError:
         return {}
     try:
-        data = yaml.safe_load(config_path.read_text(encoding='utf-8')) or {}
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError):
         return {}
     if not isinstance(data, dict):
         return {}
     out: dict[str, str] = {}
-    for key in ('urdf_path', 'base_path', 'controllers_yaml'):
+    for key in ("urdf_path", "base_path", "controllers_yaml"):
         value = data.get(key)
         if isinstance(value, str) and value.strip():
             out[key] = value.strip()
@@ -200,7 +204,7 @@ def _resolve_robot_paths(context):
     """
     from launch.actions import SetLaunchConfiguration
 
-    robot_package = LaunchConfiguration('robot_package').perform(context).strip()
+    robot_package = LaunchConfiguration("robot_package").perform(context).strip()
     if not robot_package:
         # _validate_lucy_launch already raised; nothing to resolve.
         return []
@@ -214,19 +218,15 @@ def _resolve_robot_paths(context):
             return str(p)
         return str((robot_root / p).resolve())
 
-    urdf_rel = launch_defaults.get(
-        'urdf_path', 'description/urdf/robot.urdf.xacro'
-    )
-    base_rel = launch_defaults.get('base_path', 'description')
-    controllers_rel = launch_defaults.get(
-        'controllers_yaml', 'config/controllers.yaml'
-    )
+    urdf_rel = launch_defaults.get("urdf_path", "description/urdf/robot.urdf.xacro")
+    base_rel = launch_defaults.get("base_path", "description")
+    controllers_rel = launch_defaults.get("controllers_yaml", "config/controllers.yaml")
 
     defaults = {
-        'urdf_path': _abs(urdf_rel),
+        "urdf_path": _abs(urdf_rel),
         # Goes into a file:// URI in the xacro, so it must be posix.
-        'base_path': Path(_abs(base_rel)).as_posix(),
-        'controllers_yaml': _abs(controllers_rel),
+        "base_path": Path(_abs(base_rel)).as_posix(),
+        "controllers_yaml": _abs(controllers_rel),
     }
     actions = []
     for key, default_value in defaults.items():
@@ -236,25 +236,25 @@ def _resolve_robot_paths(context):
 
 
 def _validate_lucy_launch(context):
-    gz = LaunchConfiguration('gazebo').perform(context).lower()
-    real = LaunchConfiguration('real').perform(context).lower()
-    robot_package = LaunchConfiguration('robot_package').perform(context).strip()
+    gz = LaunchConfiguration("gazebo").perform(context).lower()
+    real = LaunchConfiguration("real").perform(context).lower()
+    robot_package = LaunchConfiguration("robot_package").perform(context).strip()
 
     if not robot_package:
         raise RuntimeError(
-            'lucy.launch.py: no robot-description package found in the workspace '
-            '(expected one with launch/control.launch.py + description/, e.g. '
-            'inmoov_urdf). Clone/build a robot package, or pass one '
-            'explicitly with robot_package:=<pkg>.'
+            "lucy.launch.py: no robot-description package found in the workspace "
+            "(expected one with launch/control.launch.py + description/, e.g. "
+            "inmoov_urdf). Clone/build a robot package, or pass one "
+            "explicitly with robot_package:=<pkg>."
         )
 
     def _is_true(val):
-        return val in ('true', '1', 'yes')
+        return val in ("true", "1", "yes")
 
     if _is_true(gz) and _is_true(real):
         raise RuntimeError(
-            'lucy.launch.py: gazebo:=true conflicts with real:=true. '
-            'Use real:=false for simulation (e.g. '
+            "lucy.launch.py: gazebo:=true conflicts with real:=true. "
+            "Use real:=false for simulation (e.g. "
             '"ros2 launch lucy_bringup lucy.launch.py gazebo:=true real:=false").'
         )
     return []
@@ -262,26 +262,26 @@ def _validate_lucy_launch(context):
 
 def _real_hardware_stack(context, *args, **kwargs):
     """Start host SHM consumers when ``real`` is true (lazy package load)."""
-    real = LaunchConfiguration('real').perform(context).lower().strip()
-    if real not in ('true', '1', 'yes'):
+    real = LaunchConfiguration("real").perform(context).lower().strip()
+    if real not in ("true", "1", "yes"):
         return []
     out = []
-    robot_package = LaunchConfiguration('robot_package').perform(context).strip()
+    robot_package = LaunchConfiguration("robot_package").perform(context).strip()
     if robot_package == _SO101_ROBOT_PACKAGE:
         binary = resolve_linux_firmware_binary()
         out.append(
             LogInfo(
                 msg=(
-                    f'lucy.launch: starting {_LINUX_FIRMWARE_BIN} '
-                    f'node_name={_SO101_HOST_NODE} ({binary})'
+                    f"lucy.launch: starting {_LINUX_FIRMWARE_BIN} "
+                    f"node_name={_SO101_HOST_NODE} ({binary})"
                 )
             )
         )
         out.append(
             ExecuteProcess(
                 cmd=[str(binary), _SO101_HOST_NODE],
-                name='lucy_embedded_firmware_linux',
-                output='screen',
+                name="lucy_embedded_firmware_linux",
+                output="screen",
             )
         )
     return out
@@ -290,90 +290,90 @@ def _real_hardware_stack(context, *args, **kwargs):
 def generate_launch_description():
     """Generate launch description for Lucy robot system."""
     audio_sample_rate_arg = DeclareLaunchArgument(
-        'audio_sample_rate',
-        default_value='48000',
-        description='Audio sample rate in Hz (e.g., 44100, 48000)',
+        "audio_sample_rate",
+        default_value="48000",
+        description="Audio sample rate in Hz (e.g., 44100, 48000)",
     )
 
     audio_capture_device_arg = DeclareLaunchArgument(
-        'audio_capture_device',
-        default_value='-1',
-        description='Audio capture device index (-1 for default)',
+        "audio_capture_device",
+        default_value="-1",
+        description="Audio capture device index (-1 for default)",
     )
 
     audio_playback_device_arg = DeclareLaunchArgument(
-        'audio_playback_device',
-        default_value='-1',
-        description='Audio playback device index (-1 for default)',
+        "audio_playback_device",
+        default_value="-1",
+        description="Audio playback device index (-1 for default)",
     )
 
     robot_package_arg = DeclareLaunchArgument(
-        'robot_package',
+        "robot_package",
         default_value=_default_robot_package(),
         description=(
-            'Robot package: control.launch.py + config paths + RViz config + URDF. '
-            'Defaults to the only installed robot package when just one is present, '
-            'else inmoov_urdf.'
+            "Robot package: control.launch.py + config paths + RViz config + URDF. "
+            "Defaults to the only installed robot package when just one is present, "
+            "else inmoov_urdf."
         ),
     )
 
     config_dir_arg = DeclareLaunchArgument(
-        'config_dir',
-        default_value='',
+        "config_dir",
+        default_value="",
         description=(
-            'Override hardware config directory for lucy_config_pipeline '
-            '(empty = <robot_package>/config/hardware)'
+            "Override hardware config directory for lucy_config_pipeline "
+            "(empty = <robot_package>/config/hardware)"
         ),
     )
 
     real_arg = DeclareLaunchArgument(
-        'real',
-        default_value='false',
-        description='If true: micro-ROS agents, USB webcam, RealSense',
+        "real",
+        default_value="false",
+        description="If true: micro-ROS agents, USB webcam, RealSense",
     )
 
     rviz_arg = DeclareLaunchArgument(
-        'rviz',
-        default_value='false',
-        description='If true: RViz (or start_rviz when gazebo:=true)',
+        "rviz",
+        default_value="false",
+        description="If true: RViz (or start_rviz when gazebo:=true)",
     )
 
     gazebo_arg = DeclareLaunchArgument(
-        'gazebo',
-        default_value='false',
-        description='If true: <robot_package> gazebo sim (requires real:=false)',
+        "gazebo",
+        default_value="false",
+        description="If true: <robot_package> gazebo sim (requires real:=false)",
     )
 
     headless_arg = DeclareLaunchArgument(
-        'headless',
-        default_value='false',
+        "headless",
+        default_value="false",
         description=(
-            'Only with gazebo:=true. Server-only gz-sim with EGL rendering '
-            '(-s -r --headless-rendering); cameras still work without an X server.'
+            "Only with gazebo:=true. Server-only gz-sim with EGL rendering "
+            "(-s -r --headless-rendering); cameras still work without an X server."
         ),
     )
 
     urdf_path_arg = DeclareLaunchArgument(
-        'urdf_path',
-        default_value='',
+        "urdf_path",
+        default_value="",
         description=(
-            'Top-level robot xacro. Empty -> value from '
-            '<robot_package>/config/control.launch.yaml '
-            '(fallback: description/urdf/robot.urdf.xacro)'
+            "Top-level robot xacro. Empty -> value from "
+            "<robot_package>/config/control.launch.yaml "
+            "(fallback: description/urdf/robot.urdf.xacro)"
         ),
     )
     base_path_arg = DeclareLaunchArgument(
-        'base_path',
-        default_value='',
-        description='xacro base_path. Empty -> <robot_package>/description',
+        "base_path",
+        default_value="",
+        description="xacro base_path. Empty -> <robot_package>/description",
     )
-    urdf_path = LaunchConfiguration('urdf_path')
-    base_path = LaunchConfiguration('base_path')
+    urdf_path = LaunchConfiguration("urdf_path")
+    base_path = LaunchConfiguration("base_path")
     controllers_yaml_arg = DeclareLaunchArgument(
-        'controllers_yaml',
-        default_value='',
+        "controllers_yaml",
+        default_value="",
         description=(
-            'controllers.yaml path. Empty -> <robot_package>/config/controllers.yaml'
+            "controllers.yaml path. Empty -> <robot_package>/config/controllers.yaml"
         ),
     )
 
@@ -385,28 +385,28 @@ def generate_launch_description():
             [
                 PathJoinSubstitution(
                     [
-                        FindPackageShare('lucy_bringup'),
-                        'launch',
-                        'web_ros_api.launch.py',
+                        FindPackageShare("lucy_bringup"),
+                        "launch",
+                        "web_ros_api.launch.py",
                     ]
                 )
             ]
         ),
         launch_arguments=[
-            ('robot_package', LaunchConfiguration('robot_package')),
-            ('config_dir', LaunchConfiguration('config_dir')),
+            ("robot_package", LaunchConfiguration("robot_package")),
+            ("config_dir", LaunchConfiguration("config_dir")),
         ],
     )
 
-    controllers_yaml = LaunchConfiguration('controllers_yaml')
+    controllers_yaml = LaunchConfiguration("controllers_yaml")
 
     # use_mock_hardware := (not gazebo) and (not real) — RViz-only mock_components path.
     use_mock_hardware = PythonExpression(
         [
             "'true' if ('",
-            LaunchConfiguration('gazebo'),
+            LaunchConfiguration("gazebo"),
             "'.lower() not in ('true','1','yes') and '",
-            LaunchConfiguration('real'),
+            LaunchConfiguration("real"),
             "'.lower() not in ('true','1','yes')) else 'false'",
         ]
     )
@@ -414,104 +414,104 @@ def generate_launch_description():
     robot_description = ParameterValue(
         Command(
             [
-                'xacro ',
+                "xacro ",
                 urdf_path,
-                ' base_path:=',
+                " base_path:=",
                 base_path,
-                ' use_gazebo_sim:=',
-                LaunchConfiguration('gazebo'),
-                ' use_mock_hardware:=',
+                " use_gazebo_sim:=",
+                LaunchConfiguration("gazebo"),
+                " use_mock_hardware:=",
                 use_mock_hardware,
-                ' controller_config:=',
+                " controller_config:=",
                 controllers_yaml,
             ]
         ),
         value_type=str,
     )
-    robot_description_dict = {'robot_description': robot_description}
+    robot_description_dict = {"robot_description": robot_description}
 
     robot_state_publisher = Node(
-        condition=IfCondition(LaunchConfiguration('gazebo')),
-        package='robot_state_publisher',
-        executable='robot_state_publisher',
-        name='robot_state_publisher',
-        output='screen',
+        condition=IfCondition(LaunchConfiguration("gazebo")),
+        package="robot_state_publisher",
+        executable="robot_state_publisher",
+        name="robot_state_publisher",
+        output="screen",
         parameters=[
             robot_description_dict,
-            {'use_sim_time': LaunchConfiguration('gazebo')},
+            {"use_sim_time": LaunchConfiguration("gazebo")},
         ],
     )
 
     real_hardware = OpaqueFunction(function=_real_hardware_stack)
-    use_sim_time = LaunchConfiguration('gazebo')
+    use_sim_time = LaunchConfiguration("gazebo")
 
     rviz = GroupAction(
-        condition=IfCondition(LaunchConfiguration('rviz')),
+        condition=IfCondition(LaunchConfiguration("rviz")),
         actions=[
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     [
                         PathJoinSubstitution(
                             [
-                                FindPackageShare(LaunchConfiguration('robot_package')),
-                                'launch',
-                                'rviz.launch.py',
+                                FindPackageShare(LaunchConfiguration("robot_package")),
+                                "launch",
+                                "rviz.launch.py",
                             ]
                         )
                     ]
                 ),
                 launch_arguments=[
-                    ('use_sim_time', use_sim_time),
+                    ("use_sim_time", use_sim_time),
                 ],
             ),
         ],
     )
 
     gazebo = GroupAction(
-        condition=IfCondition(LaunchConfiguration('gazebo')),
+        condition=IfCondition(LaunchConfiguration("gazebo")),
         actions=[
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     [
                         PathJoinSubstitution(
                             [
-                                FindPackageShare(LaunchConfiguration('robot_package')),
-                                'launch',
-                                'gazebo.launch.py',
+                                FindPackageShare(LaunchConfiguration("robot_package")),
+                                "launch",
+                                "gazebo.launch.py",
                             ]
                         )
                     ]
                 ),
                 launch_arguments=[
-                    ('urdf_path', LaunchConfiguration('urdf_path')),
-                    ('base_path', LaunchConfiguration('base_path')),
-                    ('controllers_yaml', controllers_yaml),
-                    ('headless', LaunchConfiguration('headless')),
+                    ("urdf_path", LaunchConfiguration("urdf_path")),
+                    ("base_path", LaunchConfiguration("base_path")),
+                    ("controllers_yaml", controllers_yaml),
+                    ("headless", LaunchConfiguration("headless")),
                 ],
             ),
         ],
     )
 
     ros2_control_launch = GroupAction(
-        condition=UnlessCondition(LaunchConfiguration('gazebo')),
+        condition=UnlessCondition(LaunchConfiguration("gazebo")),
         actions=[
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     [
                         PathJoinSubstitution(
                             [
-                                FindPackageShare(LaunchConfiguration('robot_package')),
-                                'launch',
-                                'control.launch.py',
+                                FindPackageShare(LaunchConfiguration("robot_package")),
+                                "launch",
+                                "control.launch.py",
                             ]
                         )
                     ]
                 ),
                 launch_arguments=[
-                    ('urdf_path', LaunchConfiguration('urdf_path')),
-                    ('base_path', LaunchConfiguration('base_path')),
-                    ('controllers_yaml', controllers_yaml),
-                    ('use_mock_hardware', use_mock_hardware),
+                    ("urdf_path", LaunchConfiguration("urdf_path")),
+                    ("base_path", LaunchConfiguration("base_path")),
+                    ("controllers_yaml", controllers_yaml),
+                    ("use_mock_hardware", use_mock_hardware),
                 ],
             ),
         ],
@@ -533,15 +533,15 @@ def generate_launch_description():
             controllers_yaml_arg,
             validate,
             resolve_robot_paths,
-            LogInfo(msg='========================================'),
-            LogInfo(msg='Starting lucy_bringup lucy.launch.py'),
-            LogInfo(msg='========================================'),
+            LogInfo(msg="========================================"),
+            LogInfo(msg="Starting lucy_bringup lucy.launch.py"),
+            LogInfo(msg="========================================"),
             web_ros_api_launch,
             real_hardware,
             robot_state_publisher,
             ros2_control_launch,
             rviz,
             gazebo,
-            LogInfo(msg='========================================'),
+            LogInfo(msg="========================================"),
         ]
     )

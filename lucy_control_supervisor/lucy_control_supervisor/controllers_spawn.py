@@ -6,11 +6,11 @@ from pathlib import Path
 
 import yaml
 
-TORQUE_ENABLE_INTERFACE = 'torque_enable'
+TORQUE_ENABLE_INTERFACE = "torque_enable"
 
 
 def _load(controllers_yaml_path: Path) -> dict:
-    data = yaml.safe_load(controllers_yaml_path.read_text(encoding='utf-8')) or {}
+    data = yaml.safe_load(controllers_yaml_path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         return {}
     return data
@@ -22,12 +22,12 @@ def torque_enable_controllers(controllers_yaml_path: Path) -> list[tuple[str, in
     for name, body in _load(controllers_yaml_path).items():
         if not isinstance(body, dict):
             continue
-        params = body.get('ros__parameters')
+        params = body.get("ros__parameters")
         if not isinstance(params, dict):
             continue
-        if params.get('interface_name') != TORQUE_ENABLE_INTERFACE:
+        if params.get("interface_name") != TORQUE_ENABLE_INTERFACE:
             continue
-        joints = params.get('joints') or []
+        joints = params.get("joints") or []
         found.append((str(name), len(joints)))
     return found
 
@@ -70,14 +70,16 @@ def controllers_to_spawn(
     interface. The real supervisor passes ``include_torque_enable=True``.
     """
     data = _load(controllers_yaml_path)
-    cm_params = data.get('controller_manager', {}).get('ros__parameters', {})
+    cm_params = data.get("controller_manager", {}).get("ros__parameters", {})
     if not isinstance(cm_params, dict):
         return []
-    names = [name for name in cm_params.keys() if name != 'update_rate']
+    names = [name for name in cm_params.keys() if name != "update_rate"]
     if not include_torque_enable:
-        torque_names = {name for name, _count in torque_enable_controllers(controllers_yaml_path)}
+        torque_names = {
+            name for name, _count in torque_enable_controllers(controllers_yaml_path)
+        }
         names = [name for name in names if name not in torque_names]
-    jsb = 'joint_state_broadcaster'
+    jsb = "joint_state_broadcaster"
     if jsb in names:
         names.remove(jsb)
         return [jsb, *names]
