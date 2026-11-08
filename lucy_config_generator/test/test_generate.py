@@ -154,14 +154,18 @@ def test_schema_rejects_sensor_min_value_greater_than_max_value():
     data = _load_mapping()
     data['sensors'][0]['min_value'] = 2000
     data['sensors'][0]['max_value'] = 0
-    with pytest.raises(ValueError, match=r'sensor .*: min_value .* must be <= max_value'):
+    with pytest.raises(
+        ValueError, match=r'sensor .*: min_value .* must be <= max_value'
+    ):
         validate_hardware_yaml(data)
 
 
 def test_schema_reports_missing_virtual_pin_when_gap_exists():
     data = _load_mapping()
     data['actuators'][2]['virtual_pin'] = 3
-    with pytest.raises(ValueError, match=r'board .*: missing virtual_pin indices \[[0-9, ]+\]'):
+    with pytest.raises(
+        ValueError, match=r'board .*: missing virtual_pin indices \[[0-9, ]+\]'
+    ):
         validate_hardware_yaml(data)
 
 
@@ -178,45 +182,53 @@ def test_schema_suppresses_sensor_contiguity_when_sensor_has_item_error():
 
 def test_golden_firmware_left_arm():
     data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
-        'config_rp2040_left_arm.c'
-    ]
-    expected = (_FIXTURES / 'golden_config_rp2040_left_arm.c').read_text(encoding='utf-8')
+    got = generate_from_xacro_string_for_tests(
+        data, _fixture_urdf_xml(), {'firmware'}, None
+    )['config_rp2040_left_arm.c']
+    expected = (_FIXTURES / 'golden_config_rp2040_left_arm.c').read_text(
+        encoding='utf-8'
+    )
     assert got == expected
 
 
 def test_golden_firmware_right_arm():
     data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
-        'config_rp2040_right_arm.c'
-    ]
-    expected = (_FIXTURES / 'golden_config_rp2040_right_arm.c').read_text(encoding='utf-8')
+    got = generate_from_xacro_string_for_tests(
+        data, _fixture_urdf_xml(), {'firmware'}, None
+    )['config_rp2040_right_arm.c']
+    expected = (_FIXTURES / 'golden_config_rp2040_right_arm.c').read_text(
+        encoding='utf-8'
+    )
     assert got == expected
 
 
 def test_golden_firmware_torso():
     data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)[
-        'config_rp2040_torso_head.c'
-    ]
-    expected = (_FIXTURES / 'golden_config_rp2040_torso_head.c').read_text(encoding='utf-8')
+    got = generate_from_xacro_string_for_tests(
+        data, _fixture_urdf_xml(), {'firmware'}, None
+    )['config_rp2040_torso_head.c']
+    expected = (_FIXTURES / 'golden_config_rp2040_torso_head.c').read_text(
+        encoding='utf-8'
+    )
     assert got == expected
 
 
 def test_golden_ros2_control():
     data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'ros2_control'}, None)[
-        GENERATED_FILES_DEFAULTS['ros2_control_xacro']
-    ]
-    expected = (_FIXTURES / 'golden_inmoov_ros2_control.xacro').read_text(encoding='utf-8')
+    got = generate_from_xacro_string_for_tests(
+        data, _fixture_urdf_xml(), {'ros2_control'}, None
+    )[GENERATED_FILES_DEFAULTS['ros2_control_xacro']]
+    expected = (_FIXTURES / 'golden_inmoov_ros2_control.xacro').read_text(
+        encoding='utf-8'
+    )
     assert got == expected
 
 
 def test_ros2_control_emits_urdf_limits_on_command_interface():
     data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'ros2_control'}, None)[
-        GENERATED_FILES_DEFAULTS['ros2_control_xacro']
-    ]
+    got = generate_from_xacro_string_for_tests(
+        data, _fixture_urdf_xml(), {'ros2_control'}, None
+    )[GENERATED_FILES_DEFAULTS['ros2_control_xacro']]
     assert 'name="left_shoulder_y_link_joint"' in got
     assert '<param name="min">0.0</param>' in got
     assert '<param name="max">1.0</param>' in got
@@ -227,9 +239,9 @@ def test_ros2_control_emits_urdf_limits_on_command_interface():
 
 def test_golden_controllers_extra_joints():
     data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'controllers'}, None)[
-        GENERATED_FILES_DEFAULTS['controllers_yaml']
-    ]
+    got = generate_from_xacro_string_for_tests(
+        data, _fixture_urdf_xml(), {'controllers'}, None
+    )[GENERATED_FILES_DEFAULTS['controllers_yaml']]
     expected = (_FIXTURES / 'golden_controllers.yaml').read_text(encoding='utf-8')
     assert got == expected
 

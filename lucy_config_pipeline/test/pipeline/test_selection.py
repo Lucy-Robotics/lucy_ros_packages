@@ -48,10 +48,18 @@ def test_select_boards_to_process():
 
 
 def test_resolve_firmware_paths_relative(tmp_path: Path):
-    data = {'firmware': {'source_dir': 'micro_ros_raspberrypi_pico_sdk', 'build_dir': 'build'}}
+    data = {
+        'firmware': {
+            'source_dir': 'micro_ros_raspberrypi_pico_sdk',
+            'build_dir': 'build',
+        }
+    }
     paths = resolve_firmware_paths(data, tmp_path)
     assert paths.source_dir == (tmp_path / 'micro_ros_raspberrypi_pico_sdk').resolve()
-    assert paths.build_dir == (tmp_path / 'micro_ros_raspberrypi_pico_sdk' / 'build').resolve()
+    assert (
+        paths.build_dir
+        == (tmp_path / 'micro_ros_raspberrypi_pico_sdk' / 'build').resolve()
+    )
 
 
 def test_resolve_firmware_paths_requires_source_dir(tmp_path: Path):
@@ -95,12 +103,17 @@ def test_all_selected_serials_empty():
     assert all_selected_serials_empty(data, {'rp2040_left_arm'}) is False
 
 
-@pytest.mark.parametrize('firmware', [
-    {'source_dir': '/etc'},
-    {'source_dir': '../outside'},
-    {'source_dir': 'fw', 'build_dir': '../../outside'},
-    {'source_dir': 'fw', 'build_dir': '/tmp/build'},
-])
-def test_resolve_firmware_paths_stays_inside_the_workspace(tmp_path: Path, firmware: dict):
+@pytest.mark.parametrize(
+    'firmware',
+    [
+        {'source_dir': '/etc'},
+        {'source_dir': '../outside'},
+        {'source_dir': 'fw', 'build_dir': '../../outside'},
+        {'source_dir': 'fw', 'build_dir': '/tmp/build'},
+    ],
+)
+def test_resolve_firmware_paths_stays_inside_the_workspace(
+    tmp_path: Path, firmware: dict
+):
     with pytest.raises(ValueError, match='must stay inside'):
         resolve_firmware_paths({'firmware': firmware}, tmp_path)

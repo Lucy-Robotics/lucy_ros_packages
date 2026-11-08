@@ -24,7 +24,9 @@ def test_run_build_phase_requires_source_dir(tmp_path: Path):
         )
 
 
-def test_run_build_phase_reports_missing_uf2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_run_build_phase_reports_missing_uf2(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     fw_src = tmp_path / 'fw'
     fw_src.mkdir(parents=True)
     errors: list[str] = []

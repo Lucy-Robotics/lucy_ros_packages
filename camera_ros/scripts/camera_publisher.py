@@ -46,10 +46,18 @@ class CameraPublisher(Node):
 
         # Get parameter values
         self.target_fps = self.get_parameter('fps').get_parameter_value().double_value
-        self.camera_device = self.get_parameter('device').get_parameter_value().string_value
-        self.vendor_id = self.get_parameter('vendor_id').get_parameter_value().string_value
-        self.product_id = self.get_parameter('product_id').get_parameter_value().string_value
-        self.serial_number = self.get_parameter('serial_number').get_parameter_value().string_value
+        self.camera_device = (
+            self.get_parameter('device').get_parameter_value().string_value
+        )
+        self.vendor_id = (
+            self.get_parameter('vendor_id').get_parameter_value().string_value
+        )
+        self.product_id = (
+            self.get_parameter('product_id').get_parameter_value().string_value
+        )
+        self.serial_number = (
+            self.get_parameter('serial_number').get_parameter_value().string_value
+        )
 
         # Find camera by vendor ID/serial if provided, or by default look for
         # "webcamproduct: usb-webcam". If no specific ID provided, try to find
@@ -76,7 +84,9 @@ class CameraPublisher(Node):
                     f'{self.camera_device}'
                 )
             else:
-                self.get_logger().info(f'Using default device path: {self.camera_device}')
+                self.get_logger().info(
+                    f'Using default device path: {self.camera_device}'
+                )
 
         # Initialize camera hardware
         self.init_cap()
@@ -96,7 +106,9 @@ class CameraPublisher(Node):
         self.create_service(SetBool, 'start_streaming', self.start_streaming_callback)
         self.create_service(SetBool, 'stop_streaming', self.stop_streaming_callback)
         # Subscribe to client count for automatic control
-        self.create_subscription(Int32, '/lucy/client_count', self.client_count_callback, 10)
+        self.create_subscription(
+            Int32, '/lucy/client_count', self.client_count_callback, 10
+        )
 
         self.get_logger().info(
             f'Camera publisher node started using device {self.camera_device} '
@@ -182,13 +194,17 @@ class CameraPublisher(Node):
             # List all video devices
             result = subprocess.run(
                 ['v4l2-ctl', '--list-devices'],
-                capture_output=True, text=True, timeout=5
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             # Check if stdout contains valid device information
             # v4l2-ctl may return non-zero if it can't open /dev/video0,
             # but still provide valid output for other devices
             if not result.stdout or 'video' not in result.stdout.lower():
-                self.get_logger().warn('v4l2-ctl not available or no output, using device path')
+                self.get_logger().warn(
+                    'v4l2-ctl not available or no output, using device path'
+                )
                 return None
 
             # Parse output to find matching device
@@ -222,8 +238,10 @@ class CameraPublisher(Node):
                     match = re.search(r'/dev/video\d+', line)
                     if match:
                         # If we're in a section with a device name, associate it
-                        if (current_device_name and
-                                'webcamproduct' in current_device_name.lower()):
+                        if (
+                            current_device_name
+                            and 'webcamproduct' in current_device_name.lower()
+                        ):
                             self.get_logger().info(
                                 f'Found external camera device: {match.group(0)}'
                             )
@@ -283,7 +301,9 @@ class CameraPublisher(Node):
             )
             return
         else:
-            self.get_logger().info(f'Camera on {self.camera_device} opened successfully')
+            self.get_logger().info(
+                f'Camera on {self.camera_device} opened successfully'
+            )
 
         # Optimize OpenCV settings for Jetson
         try:
@@ -303,8 +323,7 @@ class CameraPublisher(Node):
         ret, frame = self.cap.read()
         if not ret or frame is None:
             self.get_logger().error(
-                f'Frame read failed on {self.camera_device}, '
-                f'reconnecting camera...'
+                f'Frame read failed on {self.camera_device}, ' f'reconnecting camera...'
             )
             self.cap.release()
             self.init_cap()

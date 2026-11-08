@@ -14,7 +14,9 @@ def rclpy_init_shutdown():
 
 
 class TestConfigServicesNode:
-    def test_get_config_missing_returns_failure(self, rclpy_init_shutdown, tmp_path: Path):
+    def test_get_config_missing_returns_failure(
+        self, rclpy_init_shutdown, tmp_path: Path
+    ):
         """Unknown/active config on an empty store fails gracefully."""
         from lucy_msgs.srv import GetConfig
 

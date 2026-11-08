@@ -58,7 +58,9 @@ def pipeline_paths(tmp_path: Path) -> PipelinePaths:
     not Path('/opt/ros/jazzy').exists(),
     reason='ROS 2 Jazzy overlay required for lucy_msgs/rclpy',
 )
-def test_simulation_only_skips_build_flash_and_calls_reload(pipeline_paths: PipelinePaths):
+def test_simulation_only_skips_build_flash_and_calls_reload(
+    pipeline_paths: PipelinePaths,
+):
     data = yaml.safe_load(_FIXTURE.read_text(encoding='utf-8'))
     config_yaml = yaml.dump(data)
 

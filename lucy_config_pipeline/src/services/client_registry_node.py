@@ -64,10 +64,16 @@ class ClientRegistryNode(Node):
         self._state_lock = threading.Lock()
 
         self._count_pub = self.create_publisher(Int32, CLIENT_COUNT_TOPIC, _LATCHED_QOS)
-        self._active_pub = self.create_publisher(String, ACTIVE_CLIENT_TOPIC, _LATCHED_QOS)
+        self._active_pub = self.create_publisher(
+            String, ACTIVE_CLIENT_TOPIC, _LATCHED_QOS
+        )
 
-        self.create_subscription(String, HEARTBEAT_TOPIC, self._on_heartbeat, _HEARTBEAT_QOS)
-        self.create_subscription(String, GOODBYE_TOPIC, self._on_goodbye, _HEARTBEAT_QOS)
+        self.create_subscription(
+            String, HEARTBEAT_TOPIC, self._on_heartbeat, _HEARTBEAT_QOS
+        )
+        self.create_subscription(
+            String, GOODBYE_TOPIC, self._on_goodbye, _HEARTBEAT_QOS
+        )
         self.create_subscription(
             Int32, BRIDGE_CLIENT_COUNT_TOPIC, self._on_bridge_client_count, _LATCHED_QOS
         )
@@ -89,7 +95,9 @@ class ClientRegistryNode(Node):
             self._last_seen[client_id] = time.monotonic()
             count = len(self._last_seen)
         if is_new:
-            self.get_logger().info(f'Client registered: {client_id} ({count} connected)')
+            self.get_logger().info(
+                f'Client registered: {client_id} ({count} connected)'
+            )
             self._publish_count()
 
     def _on_goodbye(self, msg: String) -> None:
@@ -165,7 +173,9 @@ class ClientRegistryNode(Node):
             res.message = 'empty client_id'
             return res
         with self._state_lock:
-            is_new = req.client_id not in self._last_seen  # a request also proves liveness
+            is_new = (
+                req.client_id not in self._last_seen
+            )  # a request also proves liveness
             self._last_seen[req.client_id] = time.monotonic()
             if req.acquire:
                 self._active_client = req.client_id

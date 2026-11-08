@@ -21,7 +21,6 @@ def test_flake8():
             category=DeprecationWarning,
         )
         rc, errors = main_with_errors(argv=targets)
-    assert rc == 0, (
-        'Found %d code style errors / warnings:\n' % len(errors)
-        + '\n'.join(errors)
-    )
+    assert rc == 0, 'Found %d code style errors / warnings:\n' % len(
+        errors
+    ) + '\n'.join(errors)

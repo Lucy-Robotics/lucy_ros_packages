@@ -24,9 +24,7 @@ from unittest.mock import patch
 import pytest
 
 # Import helpers without executing generate_launch_description ROS wiring.
-_LAUNCH = (
-    Path(__file__).resolve().parents[1] / 'launch' / 'lucy.launch.py'
-)
+_LAUNCH = Path(__file__).resolve().parents[1] / 'launch' / 'lucy.launch.py'
 
 
 def _load_launch_module():

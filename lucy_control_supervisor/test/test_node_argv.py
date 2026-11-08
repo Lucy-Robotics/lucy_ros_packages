@@ -7,9 +7,8 @@ controller_manager on it.
 
 from pathlib import Path
 
-import pytest
-
 from lucy_control_supervisor.supervisor_node import node_argv
+import pytest
 
 NODES = [
     ('controller_manager', 'ros2_control_node'),

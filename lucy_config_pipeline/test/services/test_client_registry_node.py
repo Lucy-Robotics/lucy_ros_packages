@@ -77,7 +77,8 @@ class TestClientRegistryNode:
         from lucy_msgs.srv import GetInt
 
         node._on_control(
-            ClientControl.Request(client_id='cli_1', acquire=True), ClientControl.Response()
+            ClientControl.Request(client_id='cli_1', acquire=True),
+            ClientControl.Response(),
         )
 
         res = node._on_get_client_count(GetInt.Request(), GetInt.Response())
@@ -89,7 +90,8 @@ class TestClientRegistryNode:
 
         node._on_heartbeat(String(data='cli_1'))
         node._on_control(
-            ClientControl.Request(client_id='cp_2', acquire=True), ClientControl.Response()
+            ClientControl.Request(client_id='cp_2', acquire=True),
+            ClientControl.Response(),
         )
         node._on_goodbye(String(data='cp_2'))
 
@@ -102,7 +104,8 @@ class TestClientRegistryNode:
 
         node._on_heartbeat(String(data='cp_2'))
         node._on_control(
-            ClientControl.Request(client_id='cli_1', acquire=True), ClientControl.Response()
+            ClientControl.Request(client_id='cli_1', acquire=True),
+            ClientControl.Response(),
         )
         node._on_goodbye(String(data='cp_2'))
         node._on_goodbye(String(data='unknown'))
@@ -124,7 +127,8 @@ class TestClientRegistryNode:
         from lucy_msgs.srv import ClientControl
 
         node._on_control(
-            ClientControl.Request(client_id='cli_1', acquire=True), ClientControl.Response()
+            ClientControl.Request(client_id='cli_1', acquire=True),
+            ClientControl.Response(),
         )
         assert node._active_client == 'cli_1'
 

@@ -211,7 +211,9 @@ def _validate_boards(boards: dict[str, Any], errors: list[str]) -> None:
             for key in ('name', 'type'):
                 value = controller[key]
                 if not isinstance(value, str) or not value.strip():
-                    errors.append(f'board {board_id}: controller.{key} must be a non-empty string')
+                    errors.append(
+                        f'board {board_id}: controller.{key} must be a non-empty string'
+                    )
 
         board_class = board['board_class']
         if board_class not in BOARD_CLASSES:
@@ -445,7 +447,9 @@ def _validate_sensor(
 
     associated_actuator = sensor['associated_actuator']
     if associated_actuator not in actuator_ids:
-        errors.append(f'sensor {sid}: associated_actuator {associated_actuator} not found')
+        errors.append(
+            f'sensor {sid}: associated_actuator {associated_actuator} not found'
+        )
         valid = False
 
     try:
@@ -474,7 +478,9 @@ def _validate_sensor(
             valid = False
 
     if valid and min_num is not None and max_num is not None and min_num > max_num:
-        errors.append(f'sensor {sid}: min_value {min_value} must be <= max_value {max_value}')
+        errors.append(
+            f'sensor {sid}: min_value {min_value} must be <= max_value {max_value}'
+        )
         valid = False
 
     if valid:

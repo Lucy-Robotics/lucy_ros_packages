@@ -103,9 +103,7 @@ class CameraStreamController(Node):
                 response = future.result()
                 if response.success:
                     self.is_streaming = False
-                    self.get_logger().info(
-                        'Camera streaming stopped (no clients)'
-                    )
+                    self.get_logger().info('Camera streaming stopped (no clients)')
                 else:
                     self.get_logger().warn(
                         f'Failed to stop streaming: {response.message}'

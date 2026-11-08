@@ -27,7 +27,11 @@ def format_error_line(line: str) -> str:
     text = line.strip()
     if not text:
         return json.dumps(
-            {'field': 'unknown', 'field_path': ['unknown'], 'message': 'empty error line'}
+            {
+                'field': 'unknown',
+                'field_path': ['unknown'],
+                'message': 'empty error line',
+            }
         )
 
     m = _MISSING_ROOT_RE.match(text)
@@ -56,21 +60,27 @@ def format_error_line(line: str) -> str:
         board_id, tail = m.groups()
         field_tail = _pick_field_from_tail(tail)
         field = f'boards.{board_id}.{field_tail}'
-        return json.dumps({'field': field, 'field_path': field.split('.'), 'message': tail})
+        return json.dumps(
+            {'field': field, 'field_path': field.split('.'), 'message': tail}
+        )
 
     m = _ACTUATOR_RE.match(text)
     if m:
         act_id, tail = m.groups()
         field_tail = _pick_field_from_tail(tail)
         field = f'actuators.{act_id}.{field_tail}'
-        return json.dumps({'field': field, 'field_path': field.split('.'), 'message': tail})
+        return json.dumps(
+            {'field': field, 'field_path': field.split('.'), 'message': tail}
+        )
 
     m = _SENSOR_RE.match(text)
     if m:
         sensor_id, tail = m.groups()
         field_tail = _pick_field_from_tail(tail)
         field = f'sensors.{sensor_id}.{field_tail}'
-        return json.dumps({'field': field, 'field_path': field.split('.'), 'message': tail})
+        return json.dumps(
+            {'field': field, 'field_path': field.split('.'), 'message': tail}
+        )
 
     return json.dumps({'field': 'unknown', 'field_path': ['unknown'], 'message': text})
 

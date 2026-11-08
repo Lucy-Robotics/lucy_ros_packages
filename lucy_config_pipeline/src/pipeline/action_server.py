@@ -36,7 +36,9 @@ from ..validation import validate_schema
 
 
 class PipelineActionServer(Node):
-    _BUILD_TIMEOUT_SECONDS = int(os.environ.get('LUCY_PIPELINE_BUILD_TIMEOUT_SEC', '300'))
+    _BUILD_TIMEOUT_SECONDS = int(
+        os.environ.get('LUCY_PIPELINE_BUILD_TIMEOUT_SEC', '300')
+    )
     _RELOAD_SERVICE = '/lucy_control/restart'
     _RELOAD_TIMEOUT_SECONDS = 15.0
 
@@ -106,7 +108,9 @@ class PipelineActionServer(Node):
         goal_handle.publish_feedback(fb)
 
     def _call_reload_service(self, goal_handle) -> tuple[bool, str]:
-        if not self._reload_client.wait_for_service(timeout_sec=self._RELOAD_TIMEOUT_SECONDS):
+        if not self._reload_client.wait_for_service(
+            timeout_sec=self._RELOAD_TIMEOUT_SECONDS
+        ):
             return False, f'service {self._RELOAD_SERVICE} not available'
 
         self._feedback(
@@ -172,9 +176,13 @@ class PipelineActionServer(Node):
 
         try:
             goal = goal_handle.request
-            result.config_name, config_yaml = resolve_mapping_input(self._store, goal.mapping_file)
+            result.config_name, config_yaml = resolve_mapping_input(
+                self._store, goal.mapping_file
+            )
 
-            self._feedback(goal_handle, phase='validate', progress=0.1, detail='schema validation')
+            self._feedback(
+                goal_handle, phase='validate', progress=0.1, detail='schema validation'
+            )
             data = validate_schema(config_yaml)
 
             for path in (
@@ -185,7 +193,9 @@ class PipelineActionServer(Node):
                 if not path.exists():
                     raise FileNotFoundError(path)
 
-            self._feedback(goal_handle, phase='validate', progress=0.6, detail='urdf cross-check')
+            self._feedback(
+                goal_handle, phase='validate', progress=0.6, detail='urdf cross-check'
+            )
             report = urdf_crosscheck(
                 data,
                 self._paths.urdf_xacro,
@@ -282,17 +292,26 @@ class PipelineActionServer(Node):
             if not goal.dry_run and goal.build_only and build_failed_boards:
                 result.errors.extend(
                     format_error_lines(
-                        [f"build failed for boards: {', '.join(sorted(build_failed_boards))}"]
+                        [
+                            f"build failed for boards: {', '.join(sorted(build_failed_boards))}"
+                        ]
                     )
                 )
                 result.message = 'build failed'
                 goal_handle.abort()
                 return result
 
-            if not goal.dry_run and plan_set and not built_ok and not goal.simulation_only:
+            if (
+                not goal.dry_run
+                and plan_set
+                and not built_ok
+                and not goal.simulation_only
+            ):
                 result.errors.extend(
                     format_error_lines(
-                        [f"build failed for boards: {', '.join(sorted(build_failed_boards))}"]
+                        [
+                            f"build failed for boards: {', '.join(sorted(build_failed_boards))}"
+                        ]
                     )
                 )
                 result.message = 'build failed'
@@ -302,7 +321,9 @@ class PipelineActionServer(Node):
             if build_failed_boards:
                 result.errors.extend(
                     format_error_lines(
-                        [f"build failed for boards: {', '.join(sorted(build_failed_boards))}"]
+                        [
+                            f"build failed for boards: {', '.join(sorted(build_failed_boards))}"
+                        ]
                     )
                 )
 
@@ -332,7 +353,9 @@ class PipelineActionServer(Node):
                 if flash_failed:
                     result.errors.extend(
                         format_error_lines(
-                            [f"flash failed for boards: {', '.join(sorted(flash_failed))}"]
+                            [
+                                f"flash failed for boards: {', '.join(sorted(flash_failed))}"
+                            ]
                         )
                     )
                     result.message = 'flash failed'
@@ -371,9 +394,7 @@ class PipelineActionServer(Node):
         names = resolve_generated_files(data)
         xacro_name = names['ros2_control_xacro']
         ctrl_name = names['controllers_yaml']
-        xacro_dst = (
-            self._paths.robot_root / 'description' / 'ros2_control' / xacro_name
-        )
+        xacro_dst = self._paths.robot_root / 'description' / 'ros2_control' / xacro_name
         ctrl_dst = self._paths.robot_root / 'config' / ctrl_name
         xacro_dst.parent.mkdir(parents=True, exist_ok=True)
         ctrl_dst.parent.mkdir(parents=True, exist_ok=True)
@@ -383,7 +404,10 @@ class PipelineActionServer(Node):
     def _install_firmware_outputs(self, out_dir: Path, data: dict) -> None:
         if not str(data.get('firmware', {}).get('source_dir', '')).strip():
             return
-        fw_cfg_dir = resolve_firmware_paths(data, self._paths.workspace_src).source_dir / 'config'
+        fw_cfg_dir = (
+            resolve_firmware_paths(data, self._paths.workspace_src).source_dir
+            / 'config'
+        )
         fw_cfg_dir.mkdir(parents=True, exist_ok=True)
         for cfile in out_dir.glob('config_*.c'):
             shutil.copy2(cfile, fw_cfg_dir / cfile.name)

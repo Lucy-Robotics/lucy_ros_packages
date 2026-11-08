@@ -11,6 +11,7 @@ Responsibilities:
 - Handling raw keyboard input with timeouts.
 - Maintaining a persistent input buffer across screen refreshes.
 """
+
 import os
 import select
 import sys
@@ -24,6 +25,7 @@ INPUT_BUFFER = ''
 # Only effective on POSIX, where select() watches it.
 _wake_r, _wake_w = os.pipe()
 
+
 def notify_event():
     """Wake a blocked get_user_input() so the TUI can redraw on a state change.
 
@@ -34,6 +36,7 @@ def notify_event():
     except OSError:
         pass
 
+
 def clear_screen():
     """Clears the terminal screen using ANSI escape codes for a flicker-free update."""
     if os.name == 'posix':
@@ -41,6 +44,7 @@ def clear_screen():
         sys.stdout.flush()
     else:
         os.system('cls')
+
 
 def render_sensor_graph(history, height: int = 12, width: int = 60) -> str:
     """Renders a list of recent sensor values as an ASCII line graph.
@@ -87,6 +91,7 @@ def render_sensor_graph(history, height: int = 12, width: int = 60) -> str:
     lines.append(' ' * label_width + ' +' + '-' * cols + '+')
     return '\n'.join(lines)
 
+
 def get_user_input(prompt: str, timeout: float = 1.0) -> str | None:
     """
     Waits for user input with a timeout, preserving typed characters.
@@ -116,6 +121,7 @@ def get_user_input(prompt: str, timeout: float = 1.0) -> str | None:
 
     import termios
     import tty
+
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     try:
@@ -133,24 +139,24 @@ def get_user_input(prompt: str, timeout: float = 1.0) -> str | None:
         if sys.stdin in ready:
             while True:
                 char = sys.stdin.read(1)
-                if char == '\n' or char == '\r': # Enter pressed
+                if char == '\n' or char == '\r':  # Enter pressed
                     result = INPUT_BUFFER
                     INPUT_BUFFER = ''
                     sys.stdout.write('\n')
                     return result
-                elif char == '\x7f' or char == '\b': # Backspace
+                elif char == '\x7f' or char == '\b':  # Backspace
                     if INPUT_BUFFER:
                         INPUT_BUFFER = INPUT_BUFFER[:-1]
                         # Move cursor back, write space, move back again
                         sys.stdout.write('\b \b')
                         sys.stdout.flush()
-                elif char == '\x03': # Ctrl+C
+                elif char == '\x03':  # Ctrl+C
                     raise KeyboardInterrupt
                 elif char.isprintable():
                     INPUT_BUFFER += char
                     sys.stdout.write(char)
                     sys.stdout.flush()
-                
+
                 # Check if more characters are available to be read immediately
                 if not select.select([sys.stdin], [], [], 0)[0]:
                     break
@@ -158,9 +164,10 @@ def get_user_input(prompt: str, timeout: float = 1.0) -> str | None:
             return ''
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-    
+
     # Timeout occurred
     return None
+
 
 def display_control_status(state: dict):
     """Prints the control-status banner shown on every TUI screen.
@@ -184,6 +191,7 @@ def display_control_status(state: dict):
         print('No client has control.')
     print("Type 'c' to take control.")
 
+
 def display_help_screen():
     """Displays a static help message and waits for user confirmation."""
     clear_screen()
@@ -194,7 +202,9 @@ def display_help_screen():
     print("  'q'         - Quit the application.")
     print('\n[Main Menu]')
     print('  <number>    - Select an actuator group to view and edit its joints.')
-    print("  'c'         - Toggle control: take control of the robot, or release it if you already hold it.")
+    print(
+        "  'c'         - Toggle control: take control of the robot, or release it if you already hold it."
+    )
     print('\n[Joint Menu]')
     print('  <number>    - Select a joint to modify its angle.')
     print("  'b'         - Go back to the main menu.")
@@ -203,6 +213,7 @@ def display_help_screen():
     print("  'b'         - Go back to the main menu.")
     print('\nPress Enter to return...')
     input()
+
 
 def display_control_taken_popup(controller_id: str):
     """Full-screen notice shown when another client takes control from us.
@@ -220,6 +231,7 @@ def display_control_taken_popup(controller_id: str):
     print('  Press ENTER to continue...')
     input()
 
+
 def display_main_menu(state: dict):
     """
     Renders the main menu screen.
@@ -233,13 +245,14 @@ def display_main_menu(state: dict):
     print(f"Connected Clients: {state.get('client_count', 'N/A')}")
     if state.get('autorefresh'):
         print('[Auto-Refresh: ON]')
-    
+
     display_control_status(state)
 
     print('\nSelect an actuator group:')
     for i, name in enumerate(state.get('actuator_groups', [])):
         print(f'{i+1}. {name}')
     print("\nEnter 'q' to quit or 'h' for help.")
+
 
 def display_category_menu(state: dict, group_name: str):
     """
@@ -255,7 +268,10 @@ def display_category_menu(state: dict, group_name: str):
 
     print('1. Actuators')
     print('2. Sensors')
-    print("\nEnter a number to select a category, 'b' to go back, 'h' for help, or 'q' to quit.")
+    print(
+        "\nEnter a number to select a category, 'b' to go back, 'h' for help, or 'q' to quit."
+    )
+
 
 def display_sensor_menu(state: dict, group_name: str):
     """
@@ -273,10 +289,17 @@ def display_sensor_menu(state: dict, group_name: str):
     for i, sensor in enumerate(sensors):
         min_value = sensor.get('min_value')
         max_value = sensor.get('max_value')
-        range_str = f'{min_value} - {max_value}' if min_value is not None or max_value is not None else 'N/A'
+        range_str = (
+            f'{min_value} - {max_value}'
+            if min_value is not None or max_value is not None
+            else 'N/A'
+        )
         print(f"{i+1}. {sensor['name']} ({sensor['type']}) - (Range: {range_str})")
 
-    print("\nEnter sensor number to view details, 'b' to go back, 'h' for help, or 'q' to quit.")
+    print(
+        "\nEnter sensor number to view details, 'b' to go back, 'h' for help, or 'q' to quit."
+    )
+
 
 def display_joint_menu(state: dict, group_name: str):
     """
@@ -292,12 +315,17 @@ def display_joint_menu(state: dict, group_name: str):
 
     joints = state.get('actuators', {}).get(group_name, {}).get('joints', [])
     for i, joint in enumerate(joints):
-        print(f"{i+1}. {joint['name']}: {joint['value']:.1f}° (Min: {joint['min']:.0f}, Max: {joint['max']:.0f})")
-    
+        print(
+            f"{i+1}. {joint['name']}: {joint['value']:.1f}° (Min: {joint['min']:.0f}, Max: {joint['max']:.0f})"
+        )
+
     if state.get('has_control'):
-        print("\nEnter joint number to edit, 'b' to go back, 'h' for help, or 'q' to quit.")
+        print(
+            "\nEnter joint number to edit, 'b' to go back, 'h' for help, or 'q' to quit."
+        )
     else:
         print("\nEnter 'b' to go back, 'h' for help, or 'q' to quit.")
+
 
 def get_new_joint_value(joint_name: str) -> float | None:
     """
@@ -312,7 +340,7 @@ def get_new_joint_value(joint_name: str) -> float | None:
         The new value as a float, or None if input is invalid.
     """
     global INPUT_BUFFER
-    INPUT_BUFFER = '' # Clear buffer before this prompt
+    INPUT_BUFFER = ''  # Clear buffer before this prompt
     try:
         value_str = input(f'Enter new value for {joint_name} (in degrees): ')
         return float(value_str)

@@ -8,7 +8,6 @@ from lucy_control_supervisor.controllers_spawn import torque_command_values
 from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
 from lucy_control_supervisor.controllers_spawn import torque_publishers_matched
 from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
-
 import yaml
 
 _PKG = Path(__file__).resolve().parents[1] / 'lucy_control_supervisor'
@@ -55,9 +54,9 @@ def _write(tmp_path: Path) -> Path:
     path = tmp_path / 'controllers.yaml'
     path.write_text(_FIXTURE, encoding='utf-8')
     loaded = yaml.safe_load(path.read_text(encoding='utf-8'))
-    assert loaded['so_arm_torque_enable_controller']['ros__parameters']['interface_name'] == (
-        'torque_enable'
-    )
+    assert loaded['so_arm_torque_enable_controller']['ros__parameters'][
+        'interface_name'
+    ] == ('torque_enable')
     return path
 
 

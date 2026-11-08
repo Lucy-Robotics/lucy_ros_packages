@@ -22,4 +22,6 @@ def check_safe_strings(node: Any, path: str = '') -> None:
         for i, item in enumerate(node):
             check_safe_strings(item, f'{path}[{i}]')
     elif isinstance(node, str) and not SAFE_STRING.fullmatch(node):
-        raise ValueError(f'{path or "key"}: {node!r} has characters outside {SAFE_STRING.pattern}')
+        raise ValueError(
+            f'{path or "key"}: {node!r} has characters outside {SAFE_STRING.pattern}'
+        )

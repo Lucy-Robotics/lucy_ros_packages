@@ -77,15 +77,19 @@ def resolve_linux_firmware_binary() -> Path:
         path = Path(env).expanduser()
         if path.is_file():
             return path.resolve()
-        raise RuntimeError(
-            f'LUCY_EMBEDDED_FIRMWARE_LINUX={env!r} is not a file'
-        )
+        raise RuntimeError(f'LUCY_EMBEDDED_FIRMWARE_LINUX={env!r} is not a file')
 
     which = shutil.which(_LINUX_FIRMWARE_BIN)
     if which:
         return Path(which).resolve()
 
-    rel = Path('src') / 'lucy_embedded_firmware' / 'target' / 'release' / _LINUX_FIRMWARE_BIN
+    rel = (
+        Path('src')
+        / 'lucy_embedded_firmware'
+        / 'target'
+        / 'release'
+        / _LINUX_FIRMWARE_BIN
+    )
     search_roots: list[Path] = [Path.cwd(), *Path.cwd().parents]
     try:
         share = Path(get_package_share_directory('lucy_bringup'))
@@ -214,13 +218,9 @@ def _resolve_robot_paths(context):
             return str(p)
         return str((robot_root / p).resolve())
 
-    urdf_rel = launch_defaults.get(
-        'urdf_path', 'description/urdf/robot.urdf.xacro'
-    )
+    urdf_rel = launch_defaults.get('urdf_path', 'description/urdf/robot.urdf.xacro')
     base_rel = launch_defaults.get('base_path', 'description')
-    controllers_rel = launch_defaults.get(
-        'controllers_yaml', 'config/controllers.yaml'
-    )
+    controllers_rel = launch_defaults.get('controllers_yaml', 'config/controllers.yaml')
 
     defaults = {
         'urdf_path': _abs(urdf_rel),

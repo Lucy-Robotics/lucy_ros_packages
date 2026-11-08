@@ -2,6 +2,7 @@
 Entry point for the Lucy CLI TUI actuator node: connects the ROS layer
 (ros_interface.py) to the terminal UI (tui.py) and runs the menu loops.
 """
+
 import argparse
 from collections import deque
 import math
@@ -33,6 +34,7 @@ GRAPH_WIDTH = 60
 # 'was_ours' is whether we held control at the previous change.
 _control_takeover = {'by': None, 'was_ours': False}
 
+
 def _consume_control_takeover() -> bool:
     """Show the takeover popup if another client just grabbed control.
 
@@ -46,11 +48,15 @@ def _consume_control_takeover() -> bool:
     display_control_taken_popup(controller_id)
     return True
 
+
 def _actuator_deg_to_joint_rad(actuator_deg: float, mapping: dict) -> float:
     """Servo degrees -> URDF joint radians. Mirrors LCP's actuatorDegToJointRad
     so commands from the CLI land where LCP would put them."""
-    joint_deg = (actuator_deg - mapping['offset_deg']) * mapping['direction'] * mapping['scale']
+    joint_deg = (
+        (actuator_deg - mapping['offset_deg']) * mapping['direction'] * mapping['scale']
+    )
     return math.radians(joint_deg)
+
 
 def _joint_rad_to_actuator_deg(joint_rad: float, mapping: dict) -> float:
     """URDF joint radians -> servo degrees. Mirrors LCP's jointRadToActuatorDeg
@@ -59,6 +65,7 @@ def _joint_rad_to_actuator_deg(joint_rad: float, mapping: dict) -> float:
     if denom == 0:
         return mapping['offset_deg']
     return math.degrees(joint_rad) / denom + mapping['offset_deg']
+
 
 def _build_state(ros: LucyROSInterface, actuators: dict, autorefresh: bool) -> dict:
     """Snapshots the current UI state passed to the rendering functions.
@@ -74,7 +81,9 @@ def _build_state(ros: LucyROSInterface, actuators: dict, autorefresh: bool) -> d
         for joint in group['joints']:
             position_rad = live_positions_rad.get(joint['name'])
             if position_rad is not None:
-                joint['value'] = _joint_rad_to_actuator_deg(position_rad, joint['mapping'])
+                joint['value'] = _joint_rad_to_actuator_deg(
+                    position_rad, joint['mapping']
+                )
     return {
         'autorefresh': autorefresh,
         'client_count': ros.client_count,
@@ -84,7 +93,10 @@ def _build_state(ros: LucyROSInterface, actuators: dict, autorefresh: bool) -> d
         'actuators': actuators,
     }
 
-def _build_sensor_state(ros: LucyROSInterface, sensors: dict, autorefresh: bool) -> dict:
+
+def _build_sensor_state(
+    ros: LucyROSInterface, sensors: dict, autorefresh: bool
+) -> dict:
     """Snapshots the UI state passed to the sensor menu rendering function.
 
     No live sensor values yet (ros.get_sensor_values() isn't wired up); this
@@ -99,6 +111,7 @@ def _build_sensor_state(ros: LucyROSInterface, sensors: dict, autorefresh: bool)
         'sensors': sensors,
     }
 
+
 def _prompt_choice(autorefresh: bool) -> str | None:
     """Reads one menu choice, returning None when the user typed nothing.
 
@@ -111,6 +124,7 @@ def _prompt_choice(autorefresh: bool) -> str | None:
     if choice is None or choice == '':
         return None
     return choice.lower()
+
 
 def _toggle_control(ros: LucyROSInterface, has_control: bool):
     """Takes or releases control, whichever the current state calls for.
@@ -126,8 +140,10 @@ def _toggle_control(ros: LucyROSInterface, has_control: bool):
         print('Requesting control...')
     time.sleep(0.5)
 
-def _handle_common_command(ros: LucyROSInterface, choice: str, autorefresh: bool,
-                           has_control: bool) -> tuple[bool, bool, bool]:
+
+def _handle_common_command(
+    ros: LucyROSInterface, choice: str, autorefresh: bool, has_control: bool
+) -> tuple[bool, bool, bool]:
     """Handles keys shared by every menu (quit / help / auto-refresh / control).
 
     Returns (handled, autorefresh, quit): `handled` is False when `choice` is not
@@ -147,6 +163,7 @@ def _handle_common_command(ros: LucyROSInterface, choice: str, autorefresh: bool
         _toggle_control(ros, has_control)
         return True, autorefresh, False
     return False, autorefresh, False
+
 
 def run_tui(ros: LucyROSInterface, actuators: dict, sensors: dict, autorefresh: bool):
     """
@@ -171,7 +188,8 @@ def run_tui(ros: LucyROSInterface, actuators: dict, sensors: dict, autorefresh: 
             continue
 
         handled, autorefresh, quit_app = _handle_common_command(
-            ros, choice, autorefresh, state['has_control'])
+            ros, choice, autorefresh, state['has_control']
+        )
         if quit_app:
             break
         if handled:
@@ -188,12 +206,20 @@ def run_tui(ros: LucyROSInterface, actuators: dict, sensors: dict, autorefresh: 
             continue
 
         group_name = state['actuator_groups'][idx]
-        autorefresh, quit_app = handle_category_menu(ros, actuators, sensors, group_name, autorefresh)
+        autorefresh, quit_app = handle_category_menu(
+            ros, actuators, sensors, group_name, autorefresh
+        )
         if quit_app:
             break
 
-def handle_category_menu(ros: LucyROSInterface, actuators: dict, sensors: dict, group_name: str,
-                         autorefresh: bool) -> tuple[bool, bool]:
+
+def handle_category_menu(
+    ros: LucyROSInterface,
+    actuators: dict,
+    sensors: dict,
+    group_name: str,
+    autorefresh: bool,
+) -> tuple[bool, bool]:
     """Handles the category sub-menu for a board group: choose actuators or sensors.
 
     Returns (autorefresh, quit): `quit` is True when the user asked to quit the
@@ -215,18 +241,23 @@ def handle_category_menu(ros: LucyROSInterface, actuators: dict, sensors: dict, 
             return autorefresh, False
 
         handled, autorefresh, quit_app = _handle_common_command(
-            ros, choice, autorefresh, state['has_control'])
+            ros, choice, autorefresh, state['has_control']
+        )
         if quit_app:
             return autorefresh, True
         if handled:
             continue
 
         if choice == '1':
-            autorefresh, quit_app = handle_actuator_menu(ros, actuators, group_name, autorefresh)
+            autorefresh, quit_app = handle_actuator_menu(
+                ros, actuators, group_name, autorefresh
+            )
             if quit_app:
                 return autorefresh, True
         elif choice == '2':
-            autorefresh, quit_app = handle_sensor_menu(ros, sensors, group_name, autorefresh)
+            autorefresh, quit_app = handle_sensor_menu(
+                ros, sensors, group_name, autorefresh
+            )
             if quit_app:
                 return autorefresh, True
         else:
@@ -235,8 +266,10 @@ def handle_category_menu(ros: LucyROSInterface, actuators: dict, sensors: dict, 
 
     return autorefresh, False
 
-def handle_sensor_menu(ros: LucyROSInterface, sensors: dict, group_name: str,
-                       autorefresh: bool) -> tuple[bool, bool]:
+
+def handle_sensor_menu(
+    ros: LucyROSInterface, sensors: dict, group_name: str, autorefresh: bool
+) -> tuple[bool, bool]:
     """Handles the sub-menu for viewing a board group's sensors.
 
     Read-only listing (no live values yet, no editing): just numbers the
@@ -261,7 +294,8 @@ def handle_sensor_menu(ros: LucyROSInterface, sensors: dict, group_name: str,
             return autorefresh, False
 
         handled, autorefresh, quit_app = _handle_common_command(
-            ros, choice, autorefresh, state['has_control'])
+            ros, choice, autorefresh, state['has_control']
+        )
         if quit_app:
             return autorefresh, True
         if handled:
@@ -272,8 +306,14 @@ def handle_sensor_menu(ros: LucyROSInterface, sensors: dict, group_name: str,
 
     return autorefresh, False
 
-def _monitor_sensor(ros: LucyROSInterface, sensors: dict, group_name: str, choice: str,
-                    autorefresh: bool):
+
+def _monitor_sensor(
+    ros: LucyROSInterface,
+    sensors: dict,
+    group_name: str,
+    choice: str,
+    autorefresh: bool,
+):
     """Continuously displays one sensor's live value until the user goes back.
 
     Read-only: unlike _edit_joint, there's nothing to write, so this loops
@@ -316,8 +356,10 @@ def _monitor_sensor(ros: LucyROSInterface, sensors: dict, group_name: str, choic
         if choice == 'c':
             _toggle_control(ros, state['has_control'])
 
-def handle_actuator_menu(ros: LucyROSInterface, actuators: dict, group_name: str,
-                      autorefresh: bool) -> tuple[bool, bool]:
+
+def handle_actuator_menu(
+    ros: LucyROSInterface, actuators: dict, group_name: str, autorefresh: bool
+) -> tuple[bool, bool]:
     """Handles the sub-menu for a specific actuator group.
 
     Returns (autorefresh, quit): `quit` is True when the user asked to quit the
@@ -339,7 +381,8 @@ def handle_actuator_menu(ros: LucyROSInterface, actuators: dict, group_name: str
             return autorefresh, False
 
         handled, autorefresh, quit_app = _handle_common_command(
-            ros, choice, autorefresh, state['has_control'])
+            ros, choice, autorefresh, state['has_control']
+        )
         if quit_app:
             return autorefresh, True
         if handled:
@@ -350,6 +393,7 @@ def handle_actuator_menu(ros: LucyROSInterface, actuators: dict, group_name: str
             _edit_joint(ros, state, group_name, choice)
 
     return autorefresh, False
+
 
 def _edit_joint(ros: LucyROSInterface, state: dict, group_name: str, choice: str):
     """Prompts for and publishes a new value for the chosen joint, if valid."""
@@ -369,7 +413,9 @@ def _edit_joint(ros: LucyROSInterface, state: dict, group_name: str, choice: str
         return  # get_new_joint_value already reported the error.
 
     if not (selected_joint['min'] <= new_val <= selected_joint['max']):
-        print(f"Value out of range ({selected_joint['min']} - {selected_joint['max']}).")
+        print(
+            f"Value out of range ({selected_joint['min']} - {selected_joint['max']})."
+        )
         time.sleep(1)
         return
 
@@ -381,7 +427,10 @@ def _edit_joint(ros: LucyROSInterface, state: dict, group_name: str, choice: str
     print('Value updated successfully. Refreshing...')
     time.sleep(1)
 
-def _yaml_angle_deg(actuator: dict, rad_key: str, deg_key: str, default_deg: float) -> float:
+
+def _yaml_angle_deg(
+    actuator: dict, rad_key: str, deg_key: str, default_deg: float
+) -> float:
     """Read one actuator angle as degrees.
 
     Current hardware YAML stores radians (`offset`, `limit_min`, `limit_max`,
@@ -394,72 +443,117 @@ def _yaml_angle_deg(actuator: dict, rad_key: str, deg_key: str, default_deg: flo
         return float(actuator[deg_key])
     return default_deg
 
+
 def parse_actuators_yaml(yaml_string: str) -> dict:
     """Parses the hardware config YAML and builds the ACTUATORS dictionary."""
-    if not yaml_string: return {}
+    if not yaml_string:
+        return {}
     try:
         doc = yaml.safe_load(yaml_string)
-        if not isinstance(doc, dict): return {}
+        if not isinstance(doc, dict):
+            return {}
         boards, actuators_list = doc.get('boards', {}), doc.get('actuators', [])
         parsed_actuators = {}
         for board_id, bdef in boards.items():
-            if not isinstance(bdef, dict): continue
+            if not isinstance(bdef, dict):
+                continue
             ctrl_name = bdef.get('controller', {}).get('name')
-            if not ctrl_name: continue
-            board_actuators = sorted([a for a in actuators_list if isinstance(a, dict) and a.get('board') == board_id], key=lambda a: a.get('virtual_pin', 0))
+            if not ctrl_name:
+                continue
+            board_actuators = sorted(
+                [
+                    a
+                    for a in actuators_list
+                    if isinstance(a, dict) and a.get('board') == board_id
+                ],
+                key=lambda a: a.get('virtual_pin', 0),
+            )
             joints = []
             for actuator in board_actuators:
                 urdf_joint = actuator.get('urdf_joint')
-                if not urdf_joint: continue
-                joints.append({
-                    'name': urdf_joint,
-                    'min': _yaml_angle_deg(actuator, 'limit_min', 'servo_min_deg', 0.0),
-                    'max': _yaml_angle_deg(actuator, 'limit_max', 'servo_max_deg', 180.0),
-                    'value': _yaml_angle_deg(actuator, 'default', 'servo_default_deg', 90.0),
-                    # Servo<->URDF calibration (defaults match LCP: identity map).
-                    # The menu still speaks degrees; hardware YAML stores radians.
-                    'mapping': {
-                        'offset_deg': _yaml_angle_deg(actuator, 'offset', 'offset_deg', 0.0),
-                        'direction': float(actuator.get('direction', 1.0)),
-                        'scale': float(actuator.get('scale', 1.0)),
-                    },
-                })
+                if not urdf_joint:
+                    continue
+                joints.append(
+                    {
+                        'name': urdf_joint,
+                        'min': _yaml_angle_deg(
+                            actuator, 'limit_min', 'servo_min_deg', 0.0
+                        ),
+                        'max': _yaml_angle_deg(
+                            actuator, 'limit_max', 'servo_max_deg', 180.0
+                        ),
+                        'value': _yaml_angle_deg(
+                            actuator, 'default', 'servo_default_deg', 90.0
+                        ),
+                        # Servo<->URDF calibration (defaults match LCP: identity map).
+                        # The menu still speaks degrees; hardware YAML stores radians.
+                        'mapping': {
+                            'offset_deg': _yaml_angle_deg(
+                                actuator, 'offset', 'offset_deg', 0.0
+                            ),
+                            'direction': float(actuator.get('direction', 1.0)),
+                            'scale': float(actuator.get('scale', 1.0)),
+                        },
+                    }
+                )
             if joints:
                 group_name = board_id.replace('rp2040_', '').replace('_', ' ').title()
-                parsed_actuators[group_name] = {'topic': f'/{ctrl_name}/joint_trajectory', 'joints': joints}
+                parsed_actuators[group_name] = {
+                    'topic': f'/{ctrl_name}/joint_trajectory',
+                    'joints': joints,
+                }
         return parsed_actuators
     except yaml.YAMLError as e:
         print(f'Error parsing YAML: {e}')
         return {}
 
+
 def parse_sensors_yaml(yaml_string: str) -> dict:
     """Parses the hardware config YAML and builds the SENSORS dictionary."""
-    if not yaml_string: return {}
+    if not yaml_string:
+        return {}
     try:
         doc = yaml.safe_load(yaml_string)
-        if not isinstance(doc, dict): return {}
+        if not isinstance(doc, dict):
+            return {}
         boards, sensors_list = doc.get('boards', {}), doc.get('sensors', [])
         parsed_sensors = {}
         for board_id, bdef in boards.items():
-            if not isinstance(bdef, dict): continue
+            if not isinstance(bdef, dict):
+                continue
             topic_sensor = bdef.get('topic_sensors', {})
-            if not topic_sensor: continue
-            board_sensors = sorted([s for s in sensors_list if isinstance(s, dict) and s.get('board') == board_id], key=lambda s: s.get('virtual_pin', 0))
+            if not topic_sensor:
+                continue
+            board_sensors = sorted(
+                [
+                    s
+                    for s in sensors_list
+                    if isinstance(s, dict) and s.get('board') == board_id
+                ],
+                key=lambda s: s.get('virtual_pin', 0),
+            )
             sensors = []
             for sensor in board_sensors:
                 sensor_type = sensor.get('type')
-                if not sensor_type: continue
+                if not sensor_type:
+                    continue
                 min_value = sensor.get('min_value')
                 max_value = sensor.get('max_value')
                 enabled = sensor.get('enabled')
-                sensors.append({
-                    'name': sensor.get('id', 'Unknown'),
-                    'type': sensor_type,
-                    'associated_actuator': sensor.get('associated_actuator', None),
-                    'min_value': float(min_value) if min_value is not None else None,
-                    'max_value': float(max_value) if max_value is not None else None,
-                    'enabled': bool(enabled) if enabled is not None else None,
-                })
+                sensors.append(
+                    {
+                        'name': sensor.get('id', 'Unknown'),
+                        'type': sensor_type,
+                        'associated_actuator': sensor.get('associated_actuator', None),
+                        'min_value': (
+                            float(min_value) if min_value is not None else None
+                        ),
+                        'max_value': (
+                            float(max_value) if max_value is not None else None
+                        ),
+                        'enabled': bool(enabled) if enabled is not None else None,
+                    }
+                )
             if sensors:
                 group_name = board_id.replace('rp2040_', '').replace('_', ' ').title()
                 parsed_sensors[group_name] = {'topic': topic_sensor, 'sensors': sensors}
@@ -472,6 +566,7 @@ def parse_sensors_yaml(yaml_string: str) -> dict:
 # The file the launcher's readiness_check tests for: created only once the TUI is up, so the launcher reports LOADING during startup and RUNNING from the main menu on.
 READY_MARKER = '/tmp/lucy_cli.ready'
 
+
 def _set_ready_marker():
     try:
         with open(READY_MARKER, 'w') as f:
@@ -479,11 +574,13 @@ def _set_ready_marker():
     except OSError:
         pass
 
+
 def _clear_ready_marker():
     try:
         os.remove(READY_MARKER)
     except OSError:
         pass
+
 
 def _fail(ros: LucyROSInterface, message: str):
     """Reports a startup failure, tears down ROS, and exits non-zero."""
@@ -493,13 +590,19 @@ def _fail(ros: LucyROSInterface, message: str):
     rclpy.try_shutdown()
     sys.exit(1)
 
+
 def main(args=None):
     parser = argparse.ArgumentParser(description='Lucy TUI Actuator Node')
-    parser.add_argument('-a', '--autorefresh', action='store_true', help='Enable auto-refresh for the TUI screen')
-    
+    parser.add_argument(
+        '-a',
+        '--autorefresh',
+        action='store_true',
+        help='Enable auto-refresh for the TUI screen',
+    )
+
     sys_args = sys.argv[1:] if args is None else args
     parsed_args, ros_args = parser.parse_known_args(sys_args)
-    
+
     # Drop any stale marker from a previous run before we start fetching, so the launcher shows LOADING until this run reaches the main menu.
     _clear_ready_marker()
 
@@ -517,7 +620,7 @@ def main(args=None):
     def on_control_change(controller_id):
         # Show the takeover popup only when we held control and another client now holds it.
         # An empty controller_id means control was released.
-        now_ours = (controller_id == ros_interface.client_id)
+        now_ours = controller_id == ros_interface.client_id
         taken_by_other = bool(controller_id) and not now_ours
         if _control_takeover['was_ours'] and taken_by_other:
             _control_takeover['by'] = controller_id
@@ -531,12 +634,18 @@ def main(args=None):
     print('Fetching active hardware configuration...')
     config_yaml = ros_interface.get_hardware_config_yaml()
     if not config_yaml:
-        _fail(ros_interface, 'Could not retrieve hardware configuration. Is lucy_config_pipeline running?')
+        _fail(
+            ros_interface,
+            'Could not retrieve hardware configuration. Is lucy_config_pipeline running?',
+        )
 
     actuators = parse_actuators_yaml(config_yaml)
     sensors = parse_sensors_yaml(config_yaml)
     if not actuators:
-        _fail(ros_interface, 'Failed to parse hardware configuration or no actuators found.')
+        _fail(
+            ros_interface,
+            'Failed to parse hardware configuration or no actuators found.',
+        )
 
     ros_interface.setup_sensor_subscriptions(sensors)
 
@@ -555,6 +664,7 @@ def main(args=None):
         print('\nShutting down...')
         ros_interface.shutdown()
         rclpy.try_shutdown()
+
 
 if __name__ == '__main__':
     main()

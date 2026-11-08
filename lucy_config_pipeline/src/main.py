@@ -51,7 +51,11 @@ def _resolve_paths(robot_package: str, config_dir: str) -> PipelinePaths:
     share_dir = Path(get_package_share_directory(robot_package))
     robot_root = _infer_robot_source_root(robot_package, share_dir)
 
-    cfg_dir = Path(config_dir).resolve() if config_dir else (robot_root / 'config' / 'hardware')
+    cfg_dir = (
+        Path(config_dir).resolve()
+        if config_dir
+        else (robot_root / 'config' / 'hardware')
+    )
     names = _active_generated_files(cfg_dir)
     urdf_xacro, base_path, controller_config = resolve_robot_description_paths(
         robot_root,
@@ -74,8 +78,12 @@ def main() -> None:
     bootstrap = rclpy.create_node('lucy_config_pipeline_bootstrap')
     bootstrap.declare_parameter('robot_package', 'thais_urdf')
     bootstrap.declare_parameter('config_dir', '')
-    robot_package = bootstrap.get_parameter('robot_package').get_parameter_value().string_value
-    config_dir = bootstrap.get_parameter('config_dir').get_parameter_value().string_value
+    robot_package = (
+        bootstrap.get_parameter('robot_package').get_parameter_value().string_value
+    )
+    config_dir = (
+        bootstrap.get_parameter('config_dir').get_parameter_value().string_value
+    )
     paths = _resolve_paths(robot_package, config_dir)
     bootstrap.destroy_node()
 

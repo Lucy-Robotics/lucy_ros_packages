@@ -75,7 +75,9 @@ def controllers_to_spawn(
         return []
     names = [name for name in cm_params.keys() if name != 'update_rate']
     if not include_torque_enable:
-        torque_names = {name for name, _count in torque_enable_controllers(controllers_yaml_path)}
+        torque_names = {
+            name for name, _count in torque_enable_controllers(controllers_yaml_path)
+        }
         names = [name for name in names if name not in torque_names]
     jsb = 'joint_state_broadcaster'
     if jsb in names:

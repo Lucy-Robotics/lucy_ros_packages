@@ -74,22 +74,28 @@ def generate_launch_description():
     )
 
     config_pipeline_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('lucy_config_pipeline'),
-                'launch',
-                'config_pipeline.launch.py',
-            ])
-        ]),
+        PythonLaunchDescriptionSource(
+            [
+                PathJoinSubstitution(
+                    [
+                        FindPackageShare('lucy_config_pipeline'),
+                        'launch',
+                        'config_pipeline.launch.py',
+                    ]
+                )
+            ]
+        ),
         launch_arguments=[
             ('robot_package', LaunchConfiguration('robot_package')),
             ('config_dir', LaunchConfiguration('config_dir')),
         ],
     )
 
-    return LaunchDescription([
-        robot_package_arg,
-        config_dir_arg,
-        rosbridge,
-        config_pipeline_launch,
-    ])
+    return LaunchDescription(
+        [
+            robot_package_arg,
+            config_dir_arg,
+            rosbridge,
+            config_pipeline_launch,
+        ]
+    )

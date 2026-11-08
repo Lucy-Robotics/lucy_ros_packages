@@ -61,7 +61,9 @@ def _parse(xacro_xml: str) -> ET.Element:
     return ET.fromstring(xacro_xml)
 
 
-def _find_joint_command_interface(joint_el: ET.Element, name: str = 'position') -> ET.Element:
+def _find_joint_command_interface(
+    joint_el: ET.Element, name: str = 'position'
+) -> ET.Element:
     for cmd in joint_el.findall('command_interface'):
         if cmd.attrib.get('name') == name:
             return cmd
@@ -104,12 +106,16 @@ def test_every_actuated_joint_emits_position_limits():
         seen.add(name)
         cmd = _find_joint_command_interface(joint_el)
         params = {p.attrib['name']: p.text for p in cmd.findall('param')}
-        assert 'min' in params, f'joint {name!r} command_interface missing <param name="min">'
-        assert 'max' in params, f'joint {name!r} command_interface missing <param name="max">'
+        assert (
+            'min' in params
+        ), f'joint {name!r} command_interface missing <param name="min">'
+        assert (
+            'max' in params
+        ), f'joint {name!r} command_interface missing <param name="max">'
 
-    assert seen == actuator_joints, (
-        f'actuator joints not present in generated xacro: {actuator_joints - seen}'
-    )
+    assert (
+        seen == actuator_joints
+    ), f'actuator joints not present in generated xacro: {actuator_joints - seen}'
 
 
 def test_position_limits_match_urdf():
@@ -179,9 +185,9 @@ def test_position_limits_identical_between_simulation_and_hardware_modes():
                 out[name] = (params['min'], params['max'])
         return out
 
-    assert collect(xacro_hw) == collect(xacro_sim), (
-        'URDF limits must match across simulation_only and hardware modes'
-    )
+    assert collect(xacro_hw) == collect(
+        xacro_sim
+    ), 'URDF limits must match across simulation_only and hardware modes'
 
 
 def test_lucy_plugin_used_for_both_real_and_mock_hardware():

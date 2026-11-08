@@ -18,6 +18,10 @@ import threading
 import time
 from typing import List
 
+from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
+from lucy_control_supervisor.controllers_spawn import torque_command_values
+from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
+from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy
@@ -28,11 +32,6 @@ from std_msgs.msg import Float64MultiArray
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 import yaml
-
-from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
-from lucy_control_supervisor.controllers_spawn import torque_command_values
-from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
-from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
 
 _WINDOWS_EXEC_SUFFIXES = ('.exe', '.bat', '.cmd')
 
@@ -62,7 +61,9 @@ def node_argv(package: str, executable: str) -> list[str]:
     matches = sorted(
         (p for p in lib_dir.glob('*') if p.is_file() and p.stem == executable),
         # Prefer something the OS can exec over a script needing an interpreter.
-        key=lambda p: 0 if not p.suffix or p.suffix.lower() in _WINDOWS_EXEC_SUFFIXES else 1,
+        key=lambda p: (
+            0 if not p.suffix or p.suffix.lower() in _WINDOWS_EXEC_SUFFIXES else 1
+        ),
     )
     if not matches:
         raise RuntimeError(f'{package}/{executable} not found in {lib_dir}')
@@ -158,12 +159,15 @@ class ControlSupervisorNode(Node):
         return _StackConfig(
             urdf_path=Path(self.get_parameter('urdf_path').value).resolve(),
             base_path=Path(self.get_parameter('base_path').value).resolve(),
-            controllers_yaml=Path(self.get_parameter('controllers_yaml').value).resolve(),
+            controllers_yaml=Path(
+                self.get_parameter('controllers_yaml').value
+            ).resolve(),
             use_gazebo_sim=bool(self.get_parameter('use_gazebo_sim').value),
             use_mock_hardware=bool(self.get_parameter('use_mock_hardware').value),
             gazebo_only=bool(self.get_parameter('gazebo_only').value),
             ros2_control_file=str(
-                self.get_parameter('ros2_control_file').value or 'inmoov_ros2_control.xacro'
+                self.get_parameter('ros2_control_file').value
+                or 'inmoov_ros2_control.xacro'
             ).strip(),
         )
 
@@ -186,7 +190,9 @@ class ControlSupervisorNode(Node):
 
     def _expand_robot_description(self, cfg: _StackConfig) -> str:
         cmd = self._xacro_cmd(cfg)
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
+        r = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=120, check=False
+        )
         if r.returncode != 0:
             raise RuntimeError(f'xacro failed: {r.stderr or r.stdout}')
         return r.stdout
@@ -447,7 +453,9 @@ class ControlSupervisorNode(Node):
             # config_pipeline_node generates the ros2_control xacro, so these can
             # legitimately not exist yet; waiting replaces a guessed launch delay.
             inputs = (cfg.urdf_path, cfg.base_path, cfg.controllers_yaml)
-            self._wait_for(lambda: all(p.exists() for p in inputs), self.READY_TIMEOUT_S)
+            self._wait_for(
+                lambda: all(p.exists() for p in inputs), self.READY_TIMEOUT_S
+            )
             for p in inputs:
                 if not p.exists():
                     return False, f'missing path: {p}'
@@ -483,7 +491,9 @@ class ControlSupervisorNode(Node):
         finally:
             self._restart_lock = False
 
-    def _on_restart(self, _request: Trigger.Request, response: Trigger.Response) -> Trigger.Response:
+    def _on_restart(
+        self, _request: Trigger.Request, response: Trigger.Response
+    ) -> Trigger.Response:
         ok, msg = self._restart_stack()
         response.success = ok
         response.message = msg

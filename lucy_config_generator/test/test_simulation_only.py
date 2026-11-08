@@ -33,8 +33,9 @@ def test_simulation_only_keeps_three_controllers_and_per_board_blocks():
         targets={'ros2_control', 'controllers'},
         simulation_only=True,
     )
-    assert not any(k.startswith('config_') for k in out), \
-        'simulation_only must not produce firmware'
+    assert not any(
+        k.startswith('config_') for k in out
+    ), 'simulation_only must not produce firmware'
 
     xacro = out['inmoov_ros2_control.xacro']
     expected_boards = list(data['boards'].keys())
@@ -60,7 +61,9 @@ def test_simulation_only_keeps_three_controllers_and_per_board_blocks():
     for name in expected_controllers:
         assert name in cm, f'controller {name!r} missing from controller_manager params'
         torque = torque_enable_controller_name(name)
-        assert cm[torque]['type'] == 'forward_command_controller/ForwardCommandController'
+        assert (
+            cm[torque]['type'] == 'forward_command_controller/ForwardCommandController'
+        )
         torque_params = ctrl_yaml[torque]['ros__parameters']
         traj_params = ctrl_yaml[name]['ros__parameters']
         assert torque_params['interface_name'] == 'torque_enable'

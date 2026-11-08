@@ -16,11 +16,14 @@ def _mapping() -> dict:
     return yaml.safe_load(_FIXTURE.read_text(encoding='utf-8'))
 
 
-@pytest.mark.parametrize('name', [
-    'x"><xacro:property name="p" value="${1}"/><r a="',
-    '${python.os}',
-    'a\nb',
-])
+@pytest.mark.parametrize(
+    'name',
+    [
+        'x"><xacro:property name="p" value="${1}"/><r a="',
+        '${python.os}',
+        'a\nb',
+    ],
+)
 def test_robot_name_with_markup_is_rejected(name):
     data = _mapping()
     data['robot_name'] = name

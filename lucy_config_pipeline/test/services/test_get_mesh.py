@@ -54,6 +54,7 @@ class TestGetMesh:
             assert res.success is True
             assert res.encoding == MESH_ENCODING_ZLIB_BASE64
             import base64
+
             inflated = zlib.decompress(base64.b64decode(res.data))
             assert inflated == raw
         finally:
@@ -84,7 +85,9 @@ class TestGetMesh:
         finally:
             node.destroy_node()
 
-    def test_path_outside_description_rejected(self, rclpy_init_shutdown, tmp_path: Path):
+    def test_path_outside_description_rejected(
+        self, rclpy_init_shutdown, tmp_path: Path
+    ):
         from lucy_msgs.srv import GetMesh
 
         desc = tmp_path / 'description'

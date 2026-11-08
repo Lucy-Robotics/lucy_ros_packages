@@ -97,7 +97,9 @@ def run_flash_phase(
             # ``picotool load`` already reboots the board into application mode; a
             # follow-up ``picotool reboot`` races USB re-enumeration and often
             # fails (e.g. exit 249) while the device is offline.
-            post_load_delay = float(os.environ.get('LUCY_PIPELINE_FLASH_POST_LOAD_DELAY_SEC', '1'))
+            post_load_delay = float(
+                os.environ.get('LUCY_PIPELINE_FLASH_POST_LOAD_DELAY_SEC', '1')
+            )
             if post_load_delay > 0:
                 time.sleep(post_load_delay)
             feedback(
@@ -230,14 +232,18 @@ def _run_command(
             if not text:
                 continue
             if emitted < 200:
-                feedback(phase=phase, progress=stream_progress, detail=text, board=board)
+                feedback(
+                    phase=phase, progress=stream_progress, detail=text, board=board
+                )
             emitted += 1
         return_code = process.wait()
     finally:
         timed_out = not watchdog.is_alive()
         watchdog.cancel()
     if timed_out:
-        raise TimeoutError(f"command timed out after {timeout_seconds}s: {' '.join(cmd)}")
+        raise TimeoutError(
+            f"command timed out after {timeout_seconds}s: {' '.join(cmd)}"
+        )
     if return_code != 0:
         raise RuntimeError(f"command failed ({return_code}): {' '.join(cmd)}")
 

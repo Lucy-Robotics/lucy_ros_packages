@@ -3,8 +3,11 @@
 from pathlib import Path
 import time
 
-SRC = (Path(__file__).resolve().parents[1]
-       / 'lucy_control_supervisor' / 'supervisor_node.py').read_text()
+SRC = (
+    Path(__file__).resolve().parents[1]
+    / 'lucy_control_supervisor'
+    / 'supervisor_node.py'
+).read_text()
 
 
 def test_no_fixed_sleep_in_startup():
@@ -41,7 +44,7 @@ def test_urdf_params_file_is_unlinked_with_its_child():
     as /robot_description has a publisher deletes it under a still-starting child
     whenever some other node is already publishing.
     """
-    assert "cleanup_paths=(params_file,)" in SRC
+    assert 'cleanup_paths=(params_file,)' in SRC
     assert 'os.unlink(path)' in SRC
 
 
@@ -78,8 +81,10 @@ def test_wait_returns_as_soon_as_the_condition_holds():
     graph = _FakeGraph(appear_after=0.0)
     started = time.time()
     ok = _wait_for(
-        lambda: any(n == '/controller_manager/list_controllers'
-                    for n, _ in graph.get_service_names_and_types()),
+        lambda: any(
+            n == '/controller_manager/list_controllers'
+            for n, _ in graph.get_service_names_and_types()
+        ),
         timeout_s=5.0,
     )
     assert ok and time.time() - started < 0.5
@@ -88,9 +93,14 @@ def test_wait_returns_as_soon_as_the_condition_holds():
 def test_wait_gives_up_at_the_deadline():
     graph = _FakeGraph(appear_after=99.0)
     started = time.time()
-    assert _wait_for(
-        lambda: any(n == '/controller_manager/list_controllers'
-                    for n, _ in graph.get_service_names_and_types()),
-        timeout_s=0.3,
-    ) is False
+    assert (
+        _wait_for(
+            lambda: any(
+                n == '/controller_manager/list_controllers'
+                for n, _ in graph.get_service_names_and_types()
+            ),
+            timeout_s=0.3,
+        )
+        is False
+    )
     assert time.time() - started < 2.0

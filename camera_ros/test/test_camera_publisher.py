@@ -49,8 +49,7 @@ class TestCameraPublisher:
 
         # Mock v4l2-ctl output
         mock_subprocess.return_value.returncode = 0
-        mock_subprocess.return_value.stdout = (
-            """NVIDIA Tegra Video Input Device (platform:tegra-camrtc-ca):
+        mock_subprocess.return_value.stdout = """NVIDIA Tegra Video Input Device (platform:tegra-camrtc-ca):
         /dev/media0
 
 webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
@@ -58,7 +57,6 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         /dev/video7
         /dev/media3
 """
-        )
 
         # Mock VideoCapture
         mock_cap = MagicMock()
@@ -108,8 +106,7 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         # This simulates the real behavior where v4l2-ctl returns 1 if it
         # can't open /dev/video0, but still lists available devices
         mock_subprocess.return_value.returncode = 1
-        mock_subprocess.return_value.stdout = (
-            """NVIDIA Tegra Video Input Device (platform:tegra-camrtc-ca):
+        mock_subprocess.return_value.stdout = """NVIDIA Tegra Video Input Device (platform:tegra-camrtc-ca):
         /dev/media0
 
 webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
@@ -117,7 +114,6 @@ webcamproduct: usb-webcam (usb-3610000.usb-4.1.2.2):
         /dev/video7
         /dev/media3
 """
-        )
 
         # Mock VideoCapture
         mock_cap = MagicMock()

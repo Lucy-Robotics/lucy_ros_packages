@@ -170,7 +170,9 @@ class ConfigServicesNode(Node):
                 return True
         return False
 
-    def _on_get_mesh(self, req: GetMesh.Request, res: GetMesh.Response) -> GetMesh.Response:
+    def _on_get_mesh(
+        self, req: GetMesh.Request, res: GetMesh.Response
+    ) -> GetMesh.Response:
         # Serves the mesh files referenced by the URDF (file:// / package:// /
         # absolute) so the web viewer can fetch them over ROS instead of the
         # filesystem. Reads are confined to the robot's description tree(s).
@@ -210,10 +212,10 @@ class ConfigServicesNode(Node):
     def _mesh_path_from_ref(self, ref: str) -> Path:
         """Resolve a URDF mesh reference to an absolute filesystem path."""
         if ref.startswith('file://'):
-            return Path(ref[len('file://'):]).resolve()
+            return Path(ref.removeprefix('file://')).resolve()
         if ref.startswith('package://'):
             # package://<pkg>/<rel> — prefer ament share, fall back to robot root.
-            rest = ref[len('package://'):]
+            rest = ref.removeprefix('package://')
             pkg, _, rel = rest.partition('/')
             if not pkg or not rel:
                 raise ValueError(f'invalid package:// URI: {ref}')

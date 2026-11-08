@@ -46,12 +46,18 @@ def resolve_firmware_paths(data: dict, workspace_src: Path) -> FirmwarePaths:
     return FirmwarePaths(source_dir=source_dir, build_dir=build_dir)
 
 
-def board_build_plan(data: dict, selected_boards: set[str] | None) -> list[tuple[str, str]]:
+def board_build_plan(
+    data: dict, selected_boards: set[str] | None
+) -> list[tuple[str, str]]:
     boards_map = data.get('boards', {})
-    board_ids = sorted(selected_boards) if selected_boards else sorted(boards_map.keys())
+    board_ids = (
+        sorted(selected_boards) if selected_boards else sorted(boards_map.keys())
+    )
     plan: list[tuple[str, str]] = []
     for board in board_ids:
-        firmware_target = str(boards_map.get(board, {}).get('firmware_target', '')).strip()
+        firmware_target = str(
+            boards_map.get(board, {}).get('firmware_target', '')
+        ).strip()
         if not firmware_target:
             raise ValueError(f"missing firmware_target for board '{board}'")
         plan.append((board, firmware_target))
@@ -66,7 +72,9 @@ def all_selected_serials_empty(data: dict, selected_boards: set[str] | None) -> 
     (e.g. so101 host-linux path with ``serial_id: ''``).
     """
     boards_map = data.get('boards', {}) or {}
-    board_ids = sorted(selected_boards) if selected_boards else sorted(boards_map.keys())
+    board_ids = (
+        sorted(selected_boards) if selected_boards else sorted(boards_map.keys())
+    )
     if not board_ids:
         return True
     for board in board_ids:

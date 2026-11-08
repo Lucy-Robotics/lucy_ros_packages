@@ -59,7 +59,9 @@ def test_run_flash_phase_skips_board_without_serial(
     assert 'E6617C93E37A6629' in calls[0]
 
 
-def test_run_flash_phase_skips_board_not_built_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_run_flash_phase_skips_board_not_built_ok(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     monkeypatch.setenv('LUCY_PIPELINE_FLASH_POST_LOAD_DELAY_SEC', '0')
     fw_src = tmp_path / 'fw'
     fw_build = fw_src / 'build'
@@ -120,7 +122,9 @@ def test_run_flash_phase_missing_uf2(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 def test_uptime_topic_from_yaml_and_env(monkeypatch: pytest.MonkeyPatch):
     assert pipeline_flash._uptime_topic({'topic_uptime': 'ns/uptime'}) == '/ns/uptime'
-    assert pipeline_flash._uptime_topic({'topic_uptime': '/abs/uptime'}) == '/abs/uptime'
+    assert (
+        pipeline_flash._uptime_topic({'topic_uptime': '/abs/uptime'}) == '/abs/uptime'
+    )
     monkeypatch.delenv('LUCY_PIPELINE_UPTIME_TOPIC', raising=False)
     assert pipeline_flash._uptime_topic({}) == '/uptime_publisher'
     monkeypatch.setenv('LUCY_PIPELINE_UPTIME_TOPIC', 'custom/uptime')

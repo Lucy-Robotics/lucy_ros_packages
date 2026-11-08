@@ -25,7 +25,9 @@ install_path = workspace_path / 'install' / 'camera_ros'
 
 if install_path.exists():
     python_version = f'{sys.version_info.major}.{sys.version_info.minor}'
-    dist_packages = install_path / 'local' / 'lib' / f'python{python_version}' / 'dist-packages'
+    dist_packages = (
+        install_path / 'local' / 'lib' / f'python{python_version}' / 'dist-packages'
+    )
 
     if dist_packages.exists() and str(dist_packages) not in sys.path:
         sys.path.insert(0, str(dist_packages))
