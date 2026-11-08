@@ -1,0 +1,18 @@
+coverage:
+  status:
+    project:
+      default:
+        # No verified baseline for this repo yet (ran without a ROS/colcon
+        # environment to hand): gate on "don't regress vs. the base branch"
+        # rather than guessing a fixed target. Once a few runs land on dev,
+        # replace `target: auto` with a real fixed % floor.
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+
+comment:
+  layout: "diff, flags, files"
+  require_changes: true
