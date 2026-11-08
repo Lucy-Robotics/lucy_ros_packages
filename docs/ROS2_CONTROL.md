@@ -24,7 +24,7 @@ Clients talk to **controllers**, not microcontrollers. On Lucy, the plugin write
 |--------|---------|--------|
 | **`LucySystemHardware`** | `lucy_ros2_control` | SHM writer for real hardware (`f32` rad + seq). |
 | **`SharedMemoryChannel` / `ActuatorSharedState`** | `lucy_ros2_control` | HI ↔ host consumers layout. |
-| **`firmwares/linux`** | `lucy_embedded_firmware` | Host USB Feetech consumer of f64 SHM (SO-ARM101). |
+| **`firmwares/linux`** | `lucy_embedded_firmware` | Host USB Feetech consumer of f32 SHM (SO-ARM101). |
 | **`firmwares/rp2040`** | `lucy_embedded_firmware` | One UF2 per Servo2040 board. Header PWM and PCA9685. One `mcu_bridge` per board. |
 | Controllers YAML / xacro | robot package | From `lucy_config_generator` / pipeline. |
 
