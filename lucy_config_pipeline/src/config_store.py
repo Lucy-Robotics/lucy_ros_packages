@@ -2,10 +2,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import os
 from pathlib import Path
 import shutil
+import tempfile
 
 import yaml
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """Replace ``path`` in one step, so a crash leaves the old content or the new."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as out:
+            out.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 @dataclass(frozen=True)
@@ -30,6 +44,21 @@ class ConfigStore:
     @property
     def backups_dir(self) -> Path:
         return self.config_dir / "backups"
+
+    @property
+    def bindings_yaml(self) -> Path:
+        return self.config_dir / "adapter_bindings.yaml"
+
+    @property
+    def session_journal(self) -> Path:
+        return self.config_dir / ".calibration_session.yaml"
+
+    @property
+    def calibration_profile_yaml(self) -> Path:
+        return self.config_dir / "calibration_profile.yaml"
+
+    def lerobot_json_path(self, config_name: str) -> Path:
+        return self._named_path(config_name).with_suffix(".lerobot.json")
 
     def ensure_layout(self) -> None:
         self.config_dir.mkdir(parents=True, exist_ok=True)
@@ -57,8 +86,8 @@ class ConfigStore:
             val = str(meta.get(key, "")).strip()
             if val:
                 lines.append(f'{key}: "{val}"')
-        self.active_meta_yaml.write_text(
-            "\n".join(lines) + ("\n" if lines else ""), encoding="utf-8"
+        atomic_write_text(
+            self.active_meta_yaml, "\n".join(lines) + ("\n" if lines else "")
         )
 
     def get_active_name(self) -> str:
@@ -97,8 +126,68 @@ class ConfigStore:
     def write_named_yaml(self, config_name: str, config_yaml: str) -> Path:
         self.ensure_layout()
         path = self._named_path(config_name)
-        path.write_text(config_yaml, encoding="utf-8")
+        atomic_write_text(path, config_yaml)
         return path
+
+    def read_calibration_block(self, config_name: str) -> dict:
+        """Return the preset's ``calibration:`` block, empty if it has none or can't be read."""
+        try:
+            data = yaml.safe_load(self.read_named_yaml(config_name))
+        except (OSError, ValueError, yaml.YAMLError):
+            return {}
+        block = data.get("calibration") if isinstance(data, dict) else None
+        return block if isinstance(block, dict) else {}
+
+    def _read_mapping(self, path: Path) -> dict:
+        if not path.is_file():
+            return {}
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except yaml.YAMLError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def read_bindings(self) -> dict:
+        """Which preset each USB adapter last activated, plus any chosen adapter."""
+        return self._read_mapping(self.bindings_yaml)
+
+    def _write_bindings(self, bindings: dict) -> None:
+        self.ensure_layout()
+        atomic_write_text(self.bindings_yaml, yaml.safe_dump(bindings, sort_keys=True))
+
+    def bound_config(self, adapter_serial: str) -> str:
+        """Return the preset last activated for this adapter, or ''."""
+        adapters = self.read_bindings().get("adapters") or {}
+        entry = adapters.get(adapter_serial) or {}
+        return str(entry.get("config_name") or "")
+
+    def bind_adapter(self, adapter_serial: str, config_name: str) -> None:
+        bindings = self.read_bindings()
+        bindings.setdefault("adapters", {})[adapter_serial] = {
+            "config_name": config_name,
+            "activated_at": f"{datetime.utcnow().isoformat()}Z",
+        }
+        self._write_bindings(bindings)
+
+    def selected_adapter(self) -> str:
+        """Return the adapter chosen when several are connected, or ''."""
+        return str(self.read_bindings().get("selected_adapter") or "")
+
+    def select_adapter(self, adapter_serial: str) -> None:
+        bindings = self.read_bindings()
+        bindings["selected_adapter"] = adapter_serial
+        self._write_bindings(bindings)
+
+    def read_journal(self) -> dict:
+        """Return the unfinished calibration session, empty if there is none."""
+        return self._read_mapping(self.session_journal)
+
+    def write_journal(self, journal: dict) -> None:
+        self.ensure_layout()
+        atomic_write_text(self.session_journal, yaml.safe_dump(journal, sort_keys=True))
+
+    def clear_journal(self) -> None:
+        self.session_journal.unlink(missing_ok=True)
 
     def activate(self, config_name: str) -> str:
         self.ensure_layout()
@@ -113,11 +202,17 @@ class ConfigStore:
             backup_name = f"{ts}_{old or 'active'}"
             shutil.copy2(self.active_yaml, self.backups_dir / f"{backup_name}.yaml")
 
-        shutil.copy2(src, self.active_yaml)
+        atomic_write_text(self.active_yaml, src.read_text(encoding="utf-8"))
         meta = self.read_active_meta()
         meta["name"] = config_name
         meta["activated_at"] = f"{datetime.utcnow().isoformat()}Z"
         self._write_active_meta(meta)
+
+        adapter_serial = str(
+            self.read_calibration_block(config_name).get("adapter_serial") or ""
+        )
+        if adapter_serial:
+            self.bind_adapter(adapter_serial, config_name)
         return backup_name
 
     def delete(self, config_name: str) -> None:
@@ -128,3 +223,4 @@ class ConfigStore:
         if not path.is_file():
             raise FileNotFoundError(path)
         path.unlink()
+        self.lerobot_json_path(config_name).unlink(missing_ok=True)
