@@ -26,6 +26,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -237,7 +238,7 @@ TEST_F(ActuatorSharedStateSpans, WritingCurrentsAndLoadsLeavesOtherArraysUntouch
 // SharedMemoryChannel over a real POSIX segment
 // ---------------------------------------------------------------------------
 
-TEST_F(SharedMemoryChannelTest, CreateSizesAndZeroFillsEveryArray)
+TEST_F(SharedMemoryChannelTest, CreateZeroFillsEveryArrayButMarksPositionsUnreported)
 {
   constexpr std::size_t kN = 3;
   auto channel = SharedMemoryChannel::create(name_, kN);
@@ -248,7 +249,12 @@ TEST_F(SharedMemoryChannelTest, CreateSizesAndZeroFillsEveryArray)
   EXPECT_EQ(ext.max_actuators(), kN);
   for (std::size_t slot = 0; slot < ActuatorSharedState::kArrays; ++slot) {
     for (std::size_t i = 0; i < kN; ++i) {
-      EXPECT_EQ(ext.read(raw_offset(slot, kN, i)), 0.0) << "slot=" << slot << " i=" << i;
+      const float value = ext.read(raw_offset(slot, kN, i));
+      if (slot == kPositions) {
+        EXPECT_TRUE(std::isnan(value)) << "i=" << i;
+      } else {
+        EXPECT_EQ(value, 0.0) << "slot=" << slot << " i=" << i;
+      }
     }
   }
 }
