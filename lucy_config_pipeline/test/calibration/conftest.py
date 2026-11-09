@@ -5,6 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from src.calibration.firmware_client import FirmwareUnreachable
+from src.calibration.session import Session
+from src.calibration.sim_backend import SimBackend
 from src.config_store import ConfigStore
 
 PROFILE = {
@@ -115,3 +118,57 @@ def store(tmp_path: Path) -> ConfigStore:
 @pytest.fixture
 def lock() -> FakeLock:
     return FakeLock()
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class Arm(SimBackend):
+    """Simulated arm with a hand on the clock, recording what reached the EEPROM."""
+
+    def __init__(self, ids: list[int]) -> None:
+        self.clock = Clock()
+        super().__init__(ids, clock=self.clock)
+        self.halves = 0
+        self.restores: list[list[dict]] = []
+        self.fail_homing_with: dict | None = None
+        self.dead_on: str = ""
+
+    def _maybe_die(self, call: str) -> None:
+        if self.dead_on == call:
+            raise FirmwareUnreachable(call)
+
+    def read_homing(self) -> dict:
+        self._maybe_die("read_homing")
+        return super().read_homing()
+
+    def set_half_turn(self, serial: str) -> dict:
+        self._maybe_die("set_half_turn")
+        self.halves += 1
+        if self.fail_homing_with is not None:
+            return self.fail_homing_with
+        return super().set_half_turn(serial)
+
+    def restore_homing(self, serial: str, records: list[dict]) -> dict:
+        self._maybe_die("restore_homing")
+        self.restores.append(records)
+        return super().restore_homing(serial, records)
+
+
+@pytest.fixture
+def arm(profile) -> Arm:
+    return Arm([j["id"] for j in profile["joints"]])
+
+
+@pytest.fixture
+def session(arm, store, profile, lock) -> Session:
+    s = Session(
+        backend=arm, store=store, profile=profile, lock=lock, clock=lambda: "NOW"
+    )
+    s.poll()
+    return s
