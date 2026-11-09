@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-import yaml
 from session_support import calibrate_all
 from session_support import code_of
 from src.calibration.firmware_client import FirmwareUnreachable
@@ -13,6 +12,7 @@ from src.calibration.session import APPLIED
 from src.calibration.session import HALF_TURN_TICK
 from src.calibration.session import REVIEW
 from src.calibration.sim_backend import SIM_SERIAL
+import yaml
 
 
 def test_full_session_builds_a_preset_that_lerobot_tools_can_read(session, arm, store):

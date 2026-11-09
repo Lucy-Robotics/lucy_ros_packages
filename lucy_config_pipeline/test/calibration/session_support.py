@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
 from conftest import Arm
+import pytest
 from src.calibration.session import Session
 from src.calibration.session import SessionError
 from src.calibration.sim_backend import SWEEP_PERIOD_S
