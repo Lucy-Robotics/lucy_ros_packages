@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from lucy_config_generator.calibration import CalibrationError
 from lucy_config_generator.calibration import apply_to_text
+from lucy_config_generator.calibration import CalibrationError
 from lucy_config_generator.calibration import homing_offsets_by_actuator
 from lucy_config_generator.calibration import set_calibration_block
 from lucy_config_generator.calibration import urdf_limits_from_config

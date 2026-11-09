@@ -11,6 +11,7 @@ from .constants import APPLIED
 from .constants import HALF_TURN_TICK
 from .constants import IDLE
 from .constants import JOINTS
+from .constants import load_profile
 from .constants import LOAD_WARN
 from .constants import LOCK_REFRESH_POLLS
 from .constants import MARGIN_RAD
@@ -26,7 +27,6 @@ from .constants import TEMPERATURE_WARN_C
 from .constants import TEMPLATE_PRESET
 from .constants import VERIFY_DRIVE
 from .constants import WRAP_JUMP_TICKS
-from .constants import load_profile
 from .core import Session
 
 __all__ = [
