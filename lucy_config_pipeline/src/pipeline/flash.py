@@ -47,7 +47,7 @@ def run_flash_phase(
     paths = resolve_firmware_paths(data, workspace_src)
     plan = board_build_plan(data, selected_boards)
     flashable = [(b, t) for b, t in plan if b in boards_built_ok]
-    boards_map = data.get('boards', {})
+    boards_map = data.get("boards", {})
     needs_uf2 = any(not is_mega_board(boards_map.get(b, {})) for b, _ in flashable)
     if needs_uf2 and not paths.build_dir.is_dir():
         raise FileNotFoundError(paths.build_dir)
@@ -58,46 +58,48 @@ def run_flash_phase(
 
     for step_i, (board, target) in enumerate(flashable):
         row = step_i / total
-        boards_entry = data.get('boards', {}).get(board, {})
-        raw_serial = boards_entry.get('serial_id')
-        serial = str(raw_serial).strip() if raw_serial is not None else ''
+        boards_entry = data.get("boards", {}).get(board, {})
+        raw_serial = boards_entry.get("serial_id")
+        serial = str(raw_serial).strip() if raw_serial is not None else ""
         if not serial:
             feedback(
-                phase='flash',
+                phase="flash",
                 progress=min(1.0, row + 0.99 / total),
-                detail=f'skip flash for {board}: no serial_id',
+                detail=f"skip flash for {board}: no serial_id",
                 board=board,
             )
             continue
 
         if is_mega_board(boards_entry):
             try:
-                _flash_mega(board, serial, paths, picotool_timeout_seconds, feedback, row, locks)
+                _flash_mega(
+                    board, serial, paths, picotool_timeout_seconds, feedback, row, locks
+                )
                 flashed.append(board)
                 feedback(
-                    phase='flash',
+                    phase="flash",
                     progress=min(1.0, row + 0.95 / total),
-                    detail=f'flash completed for {board}',
+                    detail=f"flash completed for {board}",
                     board=board,
                 )
             except Exception as exc:
                 failed.append(board)
-                log_error(f'Flash failed for {board}: {exc}')
+                log_error(f"Flash failed for {board}: {exc}")
                 feedback(
-                    phase='flash',
+                    phase="flash",
                     progress=min(1.0, row + 0.9 / total),
-                    detail=f'flash failed for {board}: {exc}',
+                    detail=f"flash failed for {board}: {exc}",
                     board=board,
                 )
             continue
 
-        uf2 = paths.build_dir / f'{target}.uf2'
+        uf2 = paths.build_dir / f"{target}.uf2"
         if not uf2.is_file():
-            msg = f'missing UF2 for flash: {uf2}'
-            log_error(f'Flash failed for {board}: {msg}')
+            msg = f"missing UF2 for flash: {uf2}"
+            log_error(f"Flash failed for {board}: {msg}")
             failed.append(board)
             feedback(
-                phase='flash',
+                phase="flash",
                 progress=min(1.0, row + 0.5 / total),
                 detail=msg,
                 board=board,
@@ -106,16 +108,16 @@ def run_flash_phase(
 
         try:
             feedback(
-                phase='flash',
+                phase="flash",
                 progress=row + 0.1 / total,
-                detail=f'picotool load {uf2.name}',
+                detail=f"picotool load {uf2.name}",
                 board=board,
             )
             load_progress = min(1.0, row + 0.25 / total)
             _run_command(
-                phase='flash',
+                phase="flash",
                 board=board,
-                cmd=['sudo', 'picotool', 'load', str(uf2), '-f', '--ser', serial],
+                cmd=["sudo", "picotool", "load", str(uf2), "-f", "--ser", serial],
                 cwd=paths.build_dir,
                 timeout_seconds=picotool_timeout_seconds,
                 feedback=feedback,
@@ -124,70 +126,72 @@ def run_flash_phase(
             # ``picotool load`` already reboots the board into application mode; a
             # follow-up ``picotool reboot`` races USB re-enumeration and often
             # fails (e.g. exit 249) while the device is offline.
-            post_load_delay = float(os.environ.get('LUCY_PIPELINE_FLASH_POST_LOAD_DELAY_SEC', '1'))
+            post_load_delay = float(
+                os.environ.get("LUCY_PIPELINE_FLASH_POST_LOAD_DELAY_SEC", "1")
+            )
             if post_load_delay > 0:
                 time.sleep(post_load_delay)
             feedback(
-                phase='flash',
+                phase="flash",
                 progress=min(1.0, row + 0.5 / total),
-                detail=f'waiting up to {usb_wait_seconds}s for USB serial',
+                detail=f"waiting up to {usb_wait_seconds}s for USB serial",
                 board=board,
             )
             if not _wait_for_usb_serial(serial, usb_wait_seconds):
                 raise TimeoutError(
-                    f'USB serial did not become ready within {usb_wait_seconds}s '
-                    f'(board {board})'
+                    f"USB serial did not become ready within {usb_wait_seconds}s "
+                    f"(board {board})"
                 )
             if node is not None and uptime_wait_seconds > 0:
                 topic = _uptime_topic(boards_entry)
                 feedback(
-                    phase='flash',
+                    phase="flash",
                     progress=min(1.0, row + 0.75 / total),
-                    detail=f'waiting for uptime on {topic} (up to {uptime_wait_seconds}s)',
+                    detail=f"waiting for uptime on {topic} (up to {uptime_wait_seconds}s)",
                     board=board,
                 )
                 if not _wait_uptime_message(node, topic, float(uptime_wait_seconds)):
                     raise TimeoutError(
-                        f'no uptime message on {topic!r} within {uptime_wait_seconds}s '
-                        f'(board {board})'
+                        f"no uptime message on {topic!r} within {uptime_wait_seconds}s "
+                        f"(board {board})"
                     )
             flashed.append(board)
             feedback(
-                phase='flash',
+                phase="flash",
                 progress=min(1.0, row + 0.95 / total),
-                detail=f'flash completed for {board}',
+                detail=f"flash completed for {board}",
                 board=board,
             )
         except Exception as exc:
             failed.append(board)
-            log_error(f'Flash failed for {board}: {exc}')
+            log_error(f"Flash failed for {board}: {exc}")
             feedback(
-                phase='flash',
+                phase="flash",
                 progress=min(1.0, row + 0.9 / total),
-                detail=f'flash failed for {board}: {exc}',
+                detail=f"flash failed for {board}: {exc}",
                 board=board,
             )
 
     feedback(
-        phase='flash',
+        phase="flash",
         progress=1.0,
-        detail='flash phase completed',
-        board='',
+        detail="flash phase completed",
+        board="",
     )
     return failed, flashed
 
 
 def _uptime_topic(boards_entry: dict) -> str:
     """Resolve absolute ROS 2 topic for ``std_msgs/msg/Int32`` uptime ticks."""
-    raw = boards_entry.get('topic_uptime')
+    raw = boards_entry.get("topic_uptime")
     if isinstance(raw, str):
         t = raw.strip()
         if t:
-            return t if t.startswith('/') else f'/{t}'
-    env = os.environ.get('LUCY_PIPELINE_UPTIME_TOPIC', '').strip()
+            return t if t.startswith("/") else f"/{t}"
+    env = os.environ.get("LUCY_PIPELINE_UPTIME_TOPIC", "").strip()
     if env:
-        return env if env.startswith('/') else f'/{env}'
-    return '/uptime_publisher'
+        return env if env.startswith("/") else f"/{env}"
+    return "/uptime_publisher"
 
 
 def _wait_uptime_message(node: Node, topic: str, timeout_sec: float) -> bool:
@@ -216,18 +220,35 @@ def _flash_mega(
     locks: ExitStack | None,
 ) -> None:
     """Flash the board's ELF with avrdude onto the Mega whose USB serial is ``serial``."""
-    elf = mega_artifact_dir(paths) / f'{board}.elf'
+    elf = mega_artifact_dir(paths) / f"{board}.elf"
     if not elf.is_file():
-        raise FileNotFoundError(f'missing ELF for flash: {elf}')
+        raise FileNotFoundError(f"missing ELF for flash: {elf}")
     port = mega_port(serial)
-    feedback(phase='flash', progress=progress, detail=f'avrdude {elf.name} -> {port}', board=board)
+    feedback(
+        phase="flash",
+        progress=progress,
+        detail=f"avrdude {elf.name} -> {port}",
+        board=board,
+    )
     with ExitStack() as own:
         (locks or own).enter_context(mega_flash_lock(serial))
         _run_command(
-            phase='flash',
+            phase="flash",
             board=board,
-            cmd=['avrdude', '-p', 'atmega2560', '-c', 'wiring', '-P', port, '-b', '115200',
-                 '-D', '-U', f'flash:w:{elf}:e'],
+            cmd=[
+                "avrdude",
+                "-p",
+                "atmega2560",
+                "-c",
+                "wiring",
+                "-P",
+                port,
+                "-b",
+                "115200",
+                "-D",
+                "-U",
+                f"flash:w:{elf}:e",
+            ],
             cwd=elf.parent,
             timeout_seconds=timeout_seconds,
             feedback=feedback,
@@ -244,7 +265,7 @@ def mega_flash_lock(serial: str):
     so it never has to be stopped. It can hold the port for 2 s after opening it (the Mega
     resets), so wait longer than that before avrdude opens it.
     """
-    lock = Path(f'/tmp/.lucy_mcu_flashing_{serial}')
+    lock = Path(f"/tmp/.lucy_mcu_flashing_{serial}")
     lock.touch()
     try:
         time.sleep(3.0)
@@ -261,9 +282,9 @@ def mega_port(serial_id: str) -> str:
     for p in megas:
         if p.serial_number == serial_id:
             return p.device
-    found = ', '.join(f'{p.device}={p.serial_number}' for p in megas) or 'none'
+    found = ", ".join(f"{p.device}={p.serial_number}" for p in megas) or "none"
     raise RuntimeError(
-        f'no Arduino Mega with USB serial {serial_id} plugged in (found: {found})'
+        f"no Arduino Mega with USB serial {serial_id} plugged in (found: {found})"
     )
 
 
@@ -273,7 +294,7 @@ def _wait_for_usb_serial(serial_id: str, timeout_seconds: int) -> bool:
     if not needle:
         return False
     deadline = time.monotonic() + max(0.1, float(timeout_seconds))
-    by_id = Path('/dev/serial/by-id')
+    by_id = Path("/dev/serial/by-id")
     while time.monotonic() < deadline:
         if by_id.is_dir():
             for entry in by_id.iterdir():
@@ -321,25 +342,29 @@ def _run_command(
             if not text:
                 continue
             if emitted < 200:
-                feedback(phase=phase, progress=stream_progress, detail=text, board=board)
+                feedback(
+                    phase=phase, progress=stream_progress, detail=text, board=board
+                )
             emitted += 1
         return_code = process.wait()
     finally:
         timed_out = not watchdog.is_alive()
         watchdog.cancel()
     if timed_out:
-        raise TimeoutError(f"command timed out after {timeout_seconds}s: {' '.join(cmd)}")
+        raise TimeoutError(
+            f"command timed out after {timeout_seconds}s: {' '.join(cmd)}"
+        )
     if return_code != 0:
         raise RuntimeError(f"command failed ({return_code}): {' '.join(cmd)}")
 
 
 def flash_picotool_timeout_seconds() -> int:
-    return int(os.environ.get('LUCY_PIPELINE_FLASH_TIMEOUT_SEC', '120'))
+    return int(os.environ.get("LUCY_PIPELINE_FLASH_TIMEOUT_SEC", "120"))
 
 
 def flash_usb_wait_seconds() -> int:
-    return int(os.environ.get('LUCY_PIPELINE_FLASH_WAIT_SEC', '5'))
+    return int(os.environ.get("LUCY_PIPELINE_FLASH_WAIT_SEC", "5"))
 
 
 def flash_uptime_wait_seconds() -> int:
-    return int(os.environ.get('LUCY_PIPELINE_FLASH_UPTIME_WAIT_SEC', '30'))
+    return int(os.environ.get("LUCY_PIPELINE_FLASH_UPTIME_WAIT_SEC", "30"))

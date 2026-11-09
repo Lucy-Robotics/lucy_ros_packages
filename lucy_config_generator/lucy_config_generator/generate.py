@@ -27,7 +27,7 @@ import yaml
 
 
 def _templates_dir() -> Path:
-    return Path(__file__).resolve().parent / 'templates'
+    return Path(__file__).resolve().parent / "templates"
 
 
 def _jinja_env() -> jinja2.Environment:
@@ -40,10 +40,10 @@ def _jinja_env() -> jinja2.Environment:
 
 
 def load_hardware_yaml(path: Path) -> dict[str, Any]:
-    with path.open(encoding='utf-8') as f:
+    with path.open(encoding="utf-8") as f:
         data = yaml.safe_load(f)
     if not isinstance(data, dict):
-        raise ValueError('YAML root must be a mapping')
+        raise ValueError("YAML root must be a mapping")
     return data
 
 
@@ -53,14 +53,14 @@ def _xacro_argv(
     """Prefer ``ros2 run xacro xacro`` so broken distro ``xacro`` console scripts still work."""
     tail = [
         str(urdf_xacro),
-        f'base_path:={base_path}',
-        f'controller_config:={controller_config}',
-        'use_gazebo_sim:=false',
+        f"base_path:={base_path}",
+        f"controller_config:={controller_config}",
+        "use_gazebo_sim:=false",
     ]
-    if shutil.which('ros2') is not None:
-        return ['ros2', 'run', 'xacro', 'xacro', *tail]
-    if shutil.which('xacro') is not None:
-        return ['xacro', *tail]
+    if shutil.which("ros2") is not None:
+        return ["ros2", "run", "xacro", "xacro", *tail]
+    if shutil.which("xacro") is not None:
+        return ["xacro", *tail]
     raise RuntimeError(
         """Need 'ros2' (for `ros2 run xacro xacro`) or `xacro` on PATH to process URDF"""
     )
@@ -73,18 +73,18 @@ def _parse_urdf_joints_xml(
     root = ET.fromstring(urdf_xml)
     names: set[str] = set()
     limits: dict[str, tuple[float, float]] = {}
-    for j in root.findall('joint'):
-        name = j.attrib.get('name')
+    for j in root.findall("joint"):
+        name = j.attrib.get("name")
         if not name:
             continue
         names.add(name)
-        if j.attrib.get('type') not in ('revolute', 'prismatic'):
+        if j.attrib.get("type") not in ("revolute", "prismatic"):
             continue
-        limit_el = j.find('limit')
+        limit_el = j.find("limit")
         if limit_el is None:
             continue
-        lo = limit_el.attrib.get('lower')
-        hi = limit_el.attrib.get('upper')
+        lo = limit_el.attrib.get("lower")
+        hi = limit_el.attrib.get("upper")
         if lo is None or hi is None:
             continue
         limits[name] = (float(lo), float(hi))
@@ -105,7 +105,7 @@ def _expand_urdf_xacro(
     cmd = _xacro_argv(urdf_xacro, base_path, controller_config)
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
     if r.returncode != 0:
-        raise RuntimeError(f'xacro failed: {r.stderr}')
+        raise RuntimeError(f"xacro failed: {r.stderr}")
     return r.stdout
 
 
@@ -135,9 +135,9 @@ def urdf_joint_limits(
 
 def _board_ids_in_yaml_order(data: dict[str, Any]) -> list[str]:
     """Preserve ``boards:`` key order from YAML (PyYAML + Python 3.7+ dict order)."""
-    boards = data['boards']
+    boards = data["boards"]
     if not isinstance(boards, dict):
-        raise ValueError('boards must be a mapping')
+        raise ValueError("boards must be a mapping")
     return list(boards.keys())
 
 
@@ -145,19 +145,19 @@ def _actuators_for_board(
     data: dict[str, Any], board_id: str, *, enabled_only: bool
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
-    for a in data['actuators']:
-        if a['board'] != board_id:
+    for a in data["actuators"]:
+        if a["board"] != board_id:
             continue
-        if enabled_only and not a.get('enabled', True):
+        if enabled_only and not a.get("enabled", True):
             continue
         out.append(a)
-    out.sort(key=lambda x: int(x['virtual_pin']))
+    out.sort(key=lambda x: int(x["virtual_pin"]))
     return out
 
 
 def _sensors_for_board(data: dict[str, Any], board_id: str) -> list[dict[str, Any]]:
-    out = [s for s in data['sensors'] if s['board'] == board_id]
-    out.sort(key=lambda x: int(x['virtual_pin']))
+    out = [s for s in data["sensors"] if s["board"] == board_id]
+    out.sort(key=lambda x: int(x["virtual_pin"]))
     return out
 
 
@@ -165,13 +165,13 @@ def _sensors_for_board_firmware(
     data: dict[str, Any], board_id: str
 ) -> list[dict[str, Any]]:
     """Pressure rows only if their associated actuator is enabled (matches firmware C scope)."""
-    enabled_ids = {a['id'] for a in data['actuators'] if a.get('enabled', True)}
+    enabled_ids = {a["id"] for a in data["actuators"] if a.get("enabled", True)}
     out = [
         s
-        for s in data['sensors']
-        if s['board'] == board_id and s['associated_actuator'] in enabled_ids
+        for s in data["sensors"]
+        if s["board"] == board_id and s["associated_actuator"] in enabled_ids
     ]
-    out.sort(key=lambda x: int(x['virtual_pin']))
+    out.sort(key=lambda x: int(x["virtual_pin"]))
     return out
 
 
@@ -182,14 +182,14 @@ def _actuator_joint_for_ros2(
 ) -> dict[str, Any]:
     """Copy actuator row and attach URDF command_interface min/max when present."""
     row = dict(actuator)
-    pair = urdf_limits.get(actuator['urdf_joint'])
+    pair = urdf_limits.get(actuator["urdf_joint"])
     if pair is not None:
-        row['limit_lower_rad'] = pair[0]
-        row['limit_upper_rad'] = pair[1]
+        row["limit_lower_rad"] = pair[0]
+        row["limit_upper_rad"] = pair[1]
     if board_class == BOARD_CLASS_BUS_SERVO_ONLY:
         # physical_pin is the servo's id on the shared UART, not a board pin.
-        row['joint_type'] = 'bus_servo'
-        row['bus_id'] = actuator['physical_pin']
+        row["joint_type"] = "bus_servo"
+        row["bus_id"] = actuator["physical_pin"]
     return row
 
 
@@ -200,18 +200,18 @@ def _ros2_control_blocks(
 ) -> list[dict[str, Any]]:
     blocks: list[dict[str, Any]] = []
     for bid in board_ids:
-        bdef = data['boards'][bid]
+        bdef = data["boards"][bid]
         joints = [
-            _actuator_joint_for_ros2(a, urdf_limits, bdef['board_class'])
+            _actuator_joint_for_ros2(a, urdf_limits, bdef["board_class"])
             for a in _actuators_for_board(data, bid, enabled_only=False)
         ]
         blocks.append(
             {
-                'board_id': bid,
-                'hardware_name': derive_ros2_hardware_name(bid),
-                'publisher_topic': bdef['topic_actuators'],
-                'node_name': derive_ros2_node_name(bid),
-                'joints': joints,
+                "board_id": bid,
+                "hardware_name": derive_ros2_hardware_name(bid),
+                "publisher_topic": bdef["topic_actuators"],
+                "node_name": derive_ros2_node_name(bid),
+                "joints": joints,
             }
         )
     return blocks
@@ -222,46 +222,46 @@ def _gazebo_camera_entry(camera: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(camera, dict):
         return None
 
-    topic = camera.get('topic')
+    topic = camera.get("topic")
     if not isinstance(topic, str) or not topic.strip():
         return None
     topic = topic.strip()
 
-    compressed_topic = camera.get('compressed_topic')
+    compressed_topic = camera.get("compressed_topic")
     if not isinstance(compressed_topic, str) or not compressed_topic.strip():
         return None
     compressed_topic = compressed_topic.strip()
 
-    external = bool(camera.get('external'))
+    external = bool(camera.get("external"))
     if external:
-        gz_topic = camera.get('sim_gz_topic')
+        gz_topic = camera.get("sim_gz_topic")
         if not isinstance(gz_topic, str) or not gz_topic.strip():
             return None
         gz_topic = gz_topic.strip()
         link = None
     else:
-        link = camera.get('link')
+        link = camera.get("link")
         if not isinstance(link, str) or not link.strip():
             return None
         gz_topic = topic
         link = link.strip()
     return {
-        'name': camera['name'],
-        'topic': topic,
-        'compressed_topic': compressed_topic,
-        'gz_topic': gz_topic,
-        'message_type': camera['message_type'],
-        'external': external,
-        'link': link,
+        "name": camera["name"],
+        "topic": topic,
+        "compressed_topic": compressed_topic,
+        "gz_topic": gz_topic,
+        "message_type": camera["message_type"],
+        "external": external,
+        "link": link,
     }
 
 
 def _gazebo_bridge_cameras(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Cameras bridged in sim (robot-mounted + external world cameras)."""
     cameras: list[dict[str, Any]] = []
-    if 'cameras' not in data:
+    if "cameras" not in data:
         return cameras
-    for camera in data['cameras']:
+    for camera in data["cameras"]:
         entry = _gazebo_camera_entry(camera)
         if entry is not None:
             cameras.append(entry)
@@ -270,26 +270,26 @@ def _gazebo_bridge_cameras(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _gazebo_xacro_cameras(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Robot-mounted gz camera sensors only (excludes external/world cameras)."""
-    return [c for c in _gazebo_bridge_cameras(data) if not c['external']]
+    return [c for c in _gazebo_bridge_cameras(data) if not c["external"]]
 
 
 def _gazebo_sensors(data: dict[str, Any]) -> list[dict[str, Any]]:
     sensors: list[dict[str, Any]] = []
-    if 'sensors' not in data:
+    if "sensors" not in data:
         return sensors
 
     tmp_dict: dict[str, list[dict[str, Any]]] = {}
-    for sensor in data['sensors']:
-        if not sensor.get('enabled', True):
+    for sensor in data["sensors"]:
+        if not sensor.get("enabled", True):
             continue
-        board_name = sensor['board']
+        board_name = sensor["board"]
         tmp_dict.setdefault(board_name, []).append({})
 
-    for board_name, board_data in data['boards'].items():
+    for board_name, board_data in data["boards"].items():
         if board_name not in tmp_dict:
             continue
         sensors.append(
-            {'topic': board_data['topic_sensors'], 'sensors': tmp_dict[board_name]}
+            {"topic": board_data["topic_sensors"], "sensors": tmp_dict[board_name]}
         )
     return sensors
 
@@ -310,7 +310,7 @@ def _extra_joints(
     from the joint they follow, but only for names absent from ``/joint_states``
     (it inserts, it does not overwrite). Publishing them here at 0.0 would pin them.
     """
-    actuated = {a['urdf_joint'] for a in data['actuators']}
+    actuated = {a["urdf_joint"] for a in data["actuators"]}
     extra = sorted(urdf_joints - actuated - (mimic_joints or set()))
     return extra
 
@@ -319,18 +319,18 @@ def _mimic_joint_names(urdf_xml: str) -> set[str]:
     """Names of joints carrying a ``<mimic>`` tag (position slaved to another joint)."""
     root = ET.fromstring(urdf_xml)
     return {
-        j.attrib['name']
-        for j in root.findall('joint')
-        if 'name' in j.attrib and j.find('mimic') is not None
+        j.attrib["name"]
+        for j in root.findall("joint")
+        if "name" in j.attrib and j.find("mimic") is not None
     }
 
 
 def _firmware_template_for_board_class(board_class: str) -> str:
     if board_class == BOARD_CLASS_INTERNAL_I2C_PWM:
-        return 'config_internal_i2c_board.c.j2'
+        return "config_internal_i2c_board.c.j2"
     if board_class == BOARD_CLASS_INTERNAL_ONLY:
-        return 'config_internal_only_board.c.j2'
-    raise ValueError(f'unknown board_class for firmware template: {board_class!r}')
+        return "config_internal_only_board.c.j2"
+    raise ValueError(f"unknown board_class for firmware template: {board_class!r}")
 
 
 BUS_SERVO_BLOCK = 3
@@ -342,11 +342,11 @@ def torque_enable_controller_name(trajectory_name: str) -> str:
 
     ``so_arm_controller`` becomes ``so_arm_torque_enable_controller``.
     """
-    suffix = '_controller'
+    suffix = "_controller"
     if trajectory_name.endswith(suffix):
         stem = trajectory_name[: -len(suffix)]
-        return f'{stem}_torque_enable_controller'
-    return f'{trajectory_name}_torque_enable'
+        return f"{stem}_torque_enable_controller"
+    return f"{trajectory_name}_torque_enable"
 
 
 def render_firmware_rs(
@@ -357,8 +357,8 @@ def render_firmware_rs(
     """Render the Rust register layout for a bus-servo board."""
     env = env or _jinja_env()
     actuators = _actuators_for_board(data, board_id, enabled_only=False)
-    slots = max((int(a['virtual_pin']) for a in actuators), default=-1) + 1
-    tpl = env.get_template('config_bus_servo_board.rs.j2')
+    slots = max((int(a["virtual_pin"]) for a in actuators), default=-1) + 1
+    tpl = env.get_template("config_bus_servo_board.rs.j2")
     return tpl.render(
         board_id=board_id,
         bus_servo_block=BUS_SERVO_BLOCK,
@@ -375,24 +375,30 @@ def render_firmware_mega(
     """Render the Arduino Mega (PCA9685) board tables; only enabled actuators are driven."""
     env = env or _jinja_env()
     actuators = _actuators_for_board(data, board_id, enabled_only=False)
-    tpl = env.get_template('config_i2c_pwm_board.rs.j2')
+    tpl = env.get_template("config_i2c_pwm_board.rs.j2")
     return tpl.render(
         board_id=board_id,
-        addresses=[f'0x{int(a):02X}' for a in data['boards'][board_id]['pca_addresses']],
-        mega_pins=[int(p) for p in data['boards'][board_id].get('mega_pins', [])],
+        addresses=[
+            f"0x{int(a):02X}" for a in data["boards"][board_id]["pca_addresses"]
+        ],
+        mega_pins=[int(p) for p in data["boards"][board_id].get("mega_pins", [])],
         joints=[
             {
-                'id': a['id'],
-                'default': repr(float(a['default'])),
-                'limit_min': repr(float(a['limit_min'])),
-                'limit_max': repr(float(a['limit_max'])),
+                "id": a["id"],
+                "default": repr(float(a["default"])),
+                "limit_min": repr(float(a["limit_min"])),
+                "limit_max": repr(float(a["limit_max"])),
             }
             for a in actuators
         ],
         driven=[
-            {'id': a['id'], 'slot': int(a['virtual_pin']), 'output': int(a['physical_pin']) - 1}
+            {
+                "id": a["id"],
+                "slot": int(a["virtual_pin"]),
+                "output": int(a["physical_pin"]) - 1,
+            }
             for a in actuators
-            if a.get('enabled', True)
+            if a.get("enabled", True)
         ],
     )
 
@@ -405,7 +411,7 @@ def render_firmware_c(
     env = env or _jinja_env()
     actuators = _actuators_for_board(data, board_id, enabled_only=True)
     sensors = _sensors_for_board_firmware(data, board_id)
-    board_class = data['boards'][board_id]['board_class']
+    board_class = data["boards"][board_id]["board_class"]
     tpl_name = _firmware_template_for_board_class(board_class)
     tpl = env.get_template(tpl_name)
     return tpl.render(
@@ -422,9 +428,9 @@ def render_ros2_control_xacro(
     env: jinja2.Environment | None = None,
 ) -> str:
     env = env or _jinja_env()
-    tpl = env.get_template('ros2_control.xacro.j2')
+    tpl = env.get_template("ros2_control.xacro.j2")
     return tpl.render(
-        robot_name=data.get('robot_name') or 'robot',
+        robot_name=data.get("robot_name") or "robot",
         blocks=_ros2_control_blocks(data, board_ids, urdf_limits),
     )
 
@@ -436,9 +442,9 @@ def render_gazebo_xacro(
     env: jinja2.Environment | None = None,
 ) -> str:
     env = env or _jinja_env()
-    tpl = env.get_template('gazebo.xacro.j2')
+    tpl = env.get_template("gazebo.xacro.j2")
     return tpl.render(
-        robot_name=data.get('robot_name') or 'robot',
+        robot_name=data.get("robot_name") or "robot",
         blocks=_ros2_control_blocks(data, board_ids, urdf_limits),
         cameras=_gazebo_xacro_cameras(data),
         sensors=_gazebo_sensors(data),
@@ -452,7 +458,7 @@ def render_gazebo_bridge(
     env: jinja2.Environment | None = None,
 ) -> str:
     env = env or _jinja_env()
-    tpl = env.get_template('gazebo_bridge.yaml.j2')
+    tpl = env.get_template("gazebo_bridge.yaml.j2")
     return tpl.render(
         blocks=_ros2_control_blocks(data, board_ids, urdf_limits),
         cameras=_gazebo_bridge_cameras(data),
@@ -467,20 +473,20 @@ def render_controllers_yaml(
     env: jinja2.Environment | None = None,
 ) -> str:
     env = env or _jinja_env()
-    tpl = env.get_template('controllers.yaml.j2')
+    tpl = env.get_template("controllers.yaml.j2")
     controllers: list[dict[str, Any]] = []
-    update_rate = int(data['controller_manager']['update_rate'])
+    update_rate = int(data["controller_manager"]["update_rate"])
     for bid in board_ids:
-        ctrl = data['boards'][bid]['controller']
+        ctrl = data["boards"][bid]["controller"]
         joints = [
-            a['urdf_joint'] for a in _actuators_for_board(data, bid, enabled_only=False)
+            a["urdf_joint"] for a in _actuators_for_board(data, bid, enabled_only=False)
         ]
         controllers.append(
             {
-                'name': ctrl['name'],
-                'type': ctrl['type'],
-                'joints': joints,
-                'torque_name': torque_enable_controller_name(ctrl['name']),
+                "name": ctrl["name"],
+                "type": ctrl["type"],
+                "joints": joints,
+                "torque_name": torque_enable_controller_name(ctrl["name"]),
             }
         )
     return tpl.render(
@@ -497,7 +503,7 @@ def _resolve_board_ids(
     if boards_filter is not None:
         board_ids = [b for b in board_ids if b in boards_filter]
         if not board_ids:
-            raise ValueError('no boards left after --boards filter')
+            raise ValueError("no boards left after --boards filter")
     return board_ids
 
 
@@ -528,50 +534,50 @@ def generate(
     urdf_names, urdf_limits = _parse_urdf_joints_xml(urdf_xml)
 
     extra: list[str] = []
-    if targets & {'controllers', 'all'}:
+    if targets & {"controllers", "all"}:
         extra = _extra_joints(data, urdf_names, _mimic_joint_names(urdf_xml))
 
     env = _jinja_env()
 
-    if targets & {'firmware', 'all'} and not simulation_only:
+    if targets & {"firmware", "all"} and not simulation_only:
         fw_boards = _resolve_board_ids(data, boards_filter)
         for bid in fw_boards:
-            if data['boards'][bid]['board_class'] == BOARD_CLASS_I2C_PWM_ONLY:
-                out = output_dir / f'config_{bid}.rs'
-                out.write_text(render_firmware_mega(data, bid, env), encoding='utf-8')
+            if data["boards"][bid]["board_class"] == BOARD_CLASS_I2C_PWM_ONLY:
+                out = output_dir / f"config_{bid}.rs"
+                out.write_text(render_firmware_mega(data, bid, env), encoding="utf-8")
                 continue
-            if data['boards'][bid]['board_class'] == BOARD_CLASS_BUS_SERVO_ONLY:
-                out = output_dir / f'config_{bid}.rs'
-                out.write_text(render_firmware_rs(data, bid, env), encoding='utf-8')
+            if data["boards"][bid]["board_class"] == BOARD_CLASS_BUS_SERVO_ONLY:
+                out = output_dir / f"config_{bid}.rs"
+                out.write_text(render_firmware_rs(data, bid, env), encoding="utf-8")
                 continue
             text = render_firmware_c(data, bid, env)
-            out = output_dir / f'config_{bid}.c'
-            out.write_text(text, encoding='utf-8')
+            out = output_dir / f"config_{bid}.c"
+            out.write_text(text, encoding="utf-8")
 
-    if targets & {'ros2_control', 'all'}:
-        xacro_out = output_dir / names['ros2_control_xacro']
+    if targets & {"ros2_control", "all"}:
+        xacro_out = output_dir / names["ros2_control_xacro"]
         xacro_out.write_text(
             render_ros2_control_xacro(data, ros2_control_boards, urdf_limits, env),
-            encoding='utf-8',
+            encoding="utf-8",
         )
 
-    if targets & {'controllers', 'all'}:
-        yaml_out = output_dir / names['controllers_yaml']
+    if targets & {"controllers", "all"}:
+        yaml_out = output_dir / names["controllers_yaml"]
         yaml_out.write_text(
             render_controllers_yaml(data, ros2_control_boards, extra, env),
-            encoding='utf-8',
+            encoding="utf-8",
         )
 
-    if targets & {'gazebo', 'all'}:
-        xacro_out = output_dir / 'gazebo.xacro'
-        bridge_out = output_dir / 'gazebo_bridge.yaml'
+    if targets & {"gazebo", "all"}:
+        xacro_out = output_dir / "gazebo.xacro"
+        bridge_out = output_dir / "gazebo_bridge.yaml"
         xacro_out.write_text(
             render_gazebo_xacro(data, ros2_control_boards, urdf_limits, env),
-            encoding='utf-8',
+            encoding="utf-8",
         )
         bridge_out.write_text(
             render_gazebo_bridge(data, ros2_control_boards, urdf_limits, env),
-            encoding='utf-8',
+            encoding="utf-8",
         )
 
 
@@ -595,21 +601,21 @@ def generate_from_xacro_string_for_tests(
     names = resolve_generated_files(data)
     env = _jinja_env()
     out: dict[str, str] = {}
-    if targets & {'firmware', 'all'} and not simulation_only:
+    if targets & {"firmware", "all"} and not simulation_only:
         for bid in firmware_boards:
-            if data['boards'][bid]['board_class'] == BOARD_CLASS_I2C_PWM_ONLY:
-                out[f'config_{bid}.rs'] = render_firmware_mega(data, bid, env)
+            if data["boards"][bid]["board_class"] == BOARD_CLASS_I2C_PWM_ONLY:
+                out[f"config_{bid}.rs"] = render_firmware_mega(data, bid, env)
                 continue
-            if data['boards'][bid]['board_class'] == BOARD_CLASS_BUS_SERVO_ONLY:
-                out[f'config_{bid}.rs'] = render_firmware_rs(data, bid, env)
+            if data["boards"][bid]["board_class"] == BOARD_CLASS_BUS_SERVO_ONLY:
+                out[f"config_{bid}.rs"] = render_firmware_rs(data, bid, env)
                 continue
-            out[f'config_{bid}.c'] = render_firmware_c(data, bid, env)
-    if targets & {'ros2_control', 'all'}:
-        out[names['ros2_control_xacro']] = render_ros2_control_xacro(
+            out[f"config_{bid}.c"] = render_firmware_c(data, bid, env)
+    if targets & {"ros2_control", "all"}:
+        out[names["ros2_control_xacro"]] = render_ros2_control_xacro(
             data, board_ids, urdf_limits, env
         )
-    if targets & {'controllers', 'all'}:
-        out[names['controllers_yaml']] = render_controllers_yaml(
+    if targets & {"controllers", "all"}:
+        out[names["controllers_yaml"]] = render_controllers_yaml(
             data, board_ids, extra, env
         )
     return out

@@ -28,6 +28,7 @@ install(FILES
 )
 
 if(BUILD_TESTING)
+  set(ament_cmake_flake8_CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/ament_flake8.ini")
   find_package(ament_lint_auto REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
   set(AMENT_LINT_AUTO_EXCLUDE "")
