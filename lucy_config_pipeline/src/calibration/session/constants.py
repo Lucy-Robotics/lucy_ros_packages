@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from datetime import timezone
 import math
 import re
+from datetime import datetime
+from datetime import timezone
 
 import yaml
 

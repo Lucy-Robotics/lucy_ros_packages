@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ..firmware_client import FirmwareUnreachable
 from .constants import APPLIED
 from .constants import IDLE
 from .constants import JOINTS
@@ -12,6 +11,7 @@ from .constants import RECOVERY
 from .constants import REVIEW
 from .constants import SessionError
 from .constants import VERIFY_DRIVE
+from ..firmware_client import FirmwareUnreachable
 
 
 class SessionLifecycleMixin:

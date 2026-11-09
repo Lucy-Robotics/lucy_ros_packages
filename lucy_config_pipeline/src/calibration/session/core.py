@@ -7,8 +7,6 @@ previous calibration.
 
 from __future__ import annotations
 
-from ..firmware_client import FirmwareUnreachable
-from ...config_store import ConfigStore
 from .apply import SessionApplyMixin
 from .constants import IDLE
 from .constants import RECOVERY
@@ -19,6 +17,8 @@ from .lifecycle import SessionLifecycleMixin
 from .recording import SessionRecordingMixin
 from .recovery import SessionRecoveryMixin
 from .status import SessionStatusMixin
+from ..firmware_client import FirmwareUnreachable
+from ...config_store import ConfigStore
 
 
 class Session(

@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-from ..identity import FRESH_READ_MS
-from ..identity import servos_fresh
-from ..identity import valid_serial
-from ..firmware_client import FirmwareUnreachable
 from .constants import HALF_TURN_TICK
 from .constants import IDLE
 from .constants import LOAD_WARN
@@ -14,6 +10,10 @@ from .constants import MID_TOLERANCE_TICKS
 from .constants import TEMPERATURE_WARN_C
 from .constants import VERIFY_DRIVE
 from .constants import WRAP_JUMP_TICKS
+from ..firmware_client import FirmwareUnreachable
+from ..identity import FRESH_READ_MS
+from ..identity import servos_fresh
+from ..identity import valid_serial
 
 
 class SessionStatusMixin:

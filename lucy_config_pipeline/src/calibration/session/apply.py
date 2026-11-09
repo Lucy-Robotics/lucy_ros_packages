@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from lucy_config_generator.calibration import apply_to_text
 from lucy_config_generator.calibration import CalibrationError
+from lucy_config_generator.calibration import apply_to_text
 from lucy_config_generator.calibration import homing_offsets_by_actuator
 from lucy_config_generator.calibration import set_calibration_block
 from lucy_config_generator.calibration import urdf_limits_from_config
@@ -13,13 +13,13 @@ from lucy_config_generator.calibration import validate_calibration
 from lucy_config_generator.schema import validate_hardware_yaml
 import yaml
 
-from ...config_store import atomic_write_text
 from .constants import APPLIED
 from .constants import MARGIN_RAD
 from .constants import PRESET_NAME
 from .constants import REVIEW
 from .constants import SessionError
 from .constants import TEMPLATE_PRESET
+from ...config_store import atomic_write_text
 
 
 class SessionApplyMixin:

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from ..identity import valid_serial
 from .constants import IDLE
 from .constants import SessionError
 from .constants import TEMPLATE_PRESET
+from ..identity import valid_serial
 
 
 class SessionIdleCommandsMixin:
