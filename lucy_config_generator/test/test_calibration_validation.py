@@ -7,10 +7,9 @@
 from __future__ import annotations
 
 from calibration_fixtures import REAL_ARM
-import pytest
-
 from lucy_config_generator.calibration import CalibrationError
 from lucy_config_generator.calibration import validate_calibration
+import pytest
 
 
 @pytest.mark.parametrize("mode", [0, 1])

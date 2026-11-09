@@ -8,10 +8,9 @@ from __future__ import annotations
 
 import re
 
-import yaml
-
 from lucy_config_generator.calibration.planning import _actuators_by_pin
 from lucy_config_generator.calibration.ticks import servo_window_to_joint_limits
+import yaml
 
 # Generated values are written with six significant digits.
 LIMIT_TOLERANCE_RAD = 1e-3

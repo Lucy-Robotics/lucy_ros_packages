@@ -6,9 +6,8 @@
 
 from __future__ import annotations
 
-import pytest
-
 from lucy_config_generator.schema import _validate_calibration_block
+import pytest
 
 
 @pytest.mark.parametrize(

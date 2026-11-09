@@ -10,9 +10,9 @@ from typing import Iterable
 
 from lucy_config_generator.calibration.errors import CalibrationError
 from lucy_config_generator.calibration.ticks import CENTRE_TICKS
+from lucy_config_generator.calibration.ticks import servo_window_to_joint_limits
 from lucy_config_generator.calibration.ticks import ticks_to_radians
 from lucy_config_generator.calibration.ticks import window_around_centre
-from lucy_config_generator.calibration.ticks import servo_window_to_joint_limits
 
 
 def _actuators_by_pin(actuators: Iterable[dict]) -> dict[int, list[dict]]:

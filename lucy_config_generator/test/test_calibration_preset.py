@@ -8,10 +8,9 @@ from __future__ import annotations
 
 from calibration_fixtures import CONFIG
 from calibration_fixtures import REAL_ARM
-import yaml
-
 from lucy_config_generator.calibration import homing_offsets_by_actuator
 from lucy_config_generator.calibration import set_calibration_block
+import yaml
 
 
 def test_homing_offsets_are_keyed_by_actuator():

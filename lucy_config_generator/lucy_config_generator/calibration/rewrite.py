@@ -10,11 +10,10 @@ from pathlib import Path
 import re
 from typing import Iterable
 
-import yaml
-
 from lucy_config_generator.calibration.errors import CalibrationError
 from lucy_config_generator.calibration.planning import plan
 from lucy_config_generator.calibration.planning import sensor_updates
+import yaml
 
 
 def _block_span(text: str, entry_id: str) -> tuple[int, int]:

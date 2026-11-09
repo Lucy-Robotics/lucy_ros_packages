@@ -11,10 +11,9 @@ import math
 from calibration_fixtures import CENTRE
 from calibration_fixtures import CONFIG
 from calibration_fixtures import REAL_ARM
-import pytest
-
 from lucy_config_generator.calibration import plan
 from lucy_config_generator.calibration import ticks_to_radians
+import pytest
 
 MARGIN = math.radians(1.5)
 
