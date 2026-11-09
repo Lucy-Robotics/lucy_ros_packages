@@ -1,5 +1,11 @@
 # lucy_ros_packages
 
+[![CI: dev](https://github.com/Lucy-Robotics/lucy_ros_packages/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/Lucy-Robotics/lucy_ros_packages/actions/workflows/ci.yml?query=branch%3Adev)
+[![CI: master](https://github.com/Lucy-Robotics/lucy_ros_packages/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Lucy-Robotics/lucy_ros_packages/actions/workflows/ci.yml?query=branch%3Amaster)
+[![codecov](https://codecov.io/gh/Lucy-Robotics/lucy_ros_packages/branch/master/graph/badge.svg)](https://codecov.io/gh/Lucy-Robotics/lucy_ros_packages)
+[![release](https://img.shields.io/github/v/release/Lucy-Robotics/lucy_ros_packages)](https://github.com/Lucy-Robotics/lucy_ros_packages/releases)
+[![Discord](https://img.shields.io/discord/1272611839775084564?label=Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.com/invite/g4KNZ3eeBd)
+
 ROS 2 **Jazzy** repository for **Lucy** (Lucy Robotics): runtime bringup, `ros2_control` hardware integration, and camera tooling. This is a **multi-package** repo; each subdirectory under `src/` in your colcon workspace is one `ament` package.
 
 ## What lives here
