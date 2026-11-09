@@ -7,8 +7,8 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass
 import ctypes
+from dataclasses import dataclass
 import os
 from pathlib import Path
 import shutil
