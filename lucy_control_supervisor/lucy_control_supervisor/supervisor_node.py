@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+import ctypes
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -22,6 +24,9 @@ from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
 from lucy_control_supervisor.controllers_spawn import torque_command_values
 from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
 from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
+from lucy_control_supervisor.mcu_bridges import mega_bridges
+from lucy_control_supervisor.mcu_bridges import resolve_bridge_binary
+from lucy_control_supervisor.mcu_bridges import ros2_control_nodes
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy
@@ -34,6 +39,11 @@ from std_srvs.srv import Trigger
 import yaml
 
 _WINDOWS_EXEC_SUFFIXES = (".exe", ".bat", ".cmd")
+_PR_SET_PDEATHSIG = 1
+
+
+def _die_with_parent() -> None:
+    ctypes.CDLL(None).prctl(_PR_SET_PDEATHSIG, signal.SIGTERM)
 
 
 def _control_ready_file() -> Path:
@@ -77,7 +87,7 @@ def node_argv(package: str, executable: str) -> list[str]:
 class _ManagedProc:
     name: str
     popen: subprocess.Popen
-    kind: str  # rsp | cm
+    kind: str
     stopping: bool = False  # set when we ask it to stop, so the exit is expected
     # Temp files the child reads while starting. Removed when it is reaped rather
     # than on a graph condition, which another node can satisfy first.
@@ -101,6 +111,7 @@ class ControlSupervisorNode(Node):
     # Latched by lucy_client_registry. Non-empty means Control Robot is ON.
     ACTIVE_CLIENT_TOPIC = "/lucy/active_client"
     TERMINATE_TIMEOUT_S = 10.0
+    BRIDGE_DRAIN_S = 0.2
     READY_TIMEOUT_S = 60.0
     CONTROL_READY_FILE = _control_ready_file()
     CHILD_LOG_TAIL = 50
@@ -205,7 +216,16 @@ class ControlSupervisorNode(Node):
 
     def _terminate_children(self) -> None:
         self._clear_ready_marker()
-        for child in reversed(self._children):
+        stack = [c for c in self._children if c.kind != "bridge"]
+        bridges = [c for c in self._children if c.kind == "bridge"]
+        self._stop_children(stack)
+        if bridges:
+            time.sleep(self.BRIDGE_DRAIN_S)
+            self._stop_children(bridges)
+        self._children.clear()
+
+    def _stop_children(self, children: List[_ManagedProc]) -> None:
+        for child in reversed(children):
             child.stopping = True
             if child.popen.poll() is None:
                 try:
@@ -213,23 +233,22 @@ class ControlSupervisorNode(Node):
                 except OSError:
                     pass
         deadline = time.monotonic() + self.TERMINATE_TIMEOUT_S
-        for child in self._children:
+        for child in children:
             while child.popen.poll() is None and time.monotonic() < deadline:
                 time.sleep(0.1)
-        for child in self._children:
+        for child in children:
             if child.popen.poll() is None:
                 self.get_logger().warning(f"{child.name} ignored terminate; killing")
                 try:
                     child.popen.kill()
                 except OSError:
                     pass
-        for child in self._children:
+        for child in children:
             for path in child.cleanup_paths:
                 try:
                     os.unlink(path)
                 except OSError:
                     pass
-        self._children.clear()
 
     def _foreign_controller_managers(self) -> List[str]:
         """controller_manager nodes running that this supervisor did not start.
@@ -320,8 +339,12 @@ class ControlSupervisorNode(Node):
             try:
                 for line in iter(popen.stdout.readline, b""):
                     text = line.decode("utf-8", "replace").rstrip()
-                    if text:
-                        tail.append(text)
+                    if not text:
+                        continue
+                    tail.append(text)
+                    if kind == "bridge":
+                        self.get_logger().info(f"[{name}] {text}")
+                    else:
                         self.get_logger().debug(f"[{name}] {text}")
             except (OSError, ValueError):
                 pass
@@ -364,6 +387,40 @@ class ControlSupervisorNode(Node):
                 "controller_manager did not offer list_controllers within "
                 f"{self.READY_TIMEOUT_S:.0f}s; spawners may block on the lock"
             )
+
+    def _start_mcu_bridges(self, cfg: _StackConfig, urdf_xml: str) -> None:
+        """Start one bridge per Mega board of the active YAML (restarted with the stack).
+
+        Being children of this node, they follow every RELOAD: a new serial_id or board
+        layout applies on Activate, not only on a full relaunch. Each bridge waits for its
+        shared memory and board, and lets go of the port while that board is flashed.
+        """
+        config_dir = (
+            os.environ.get("LUCY_CONFIG_DIR")
+            or cfg.controllers_yaml.parent / "hardware"
+        )
+        hardware_yaml = Path(config_dir) / "active.yaml"
+        nodes = ros2_control_nodes(urdf_xml)
+        bridges = [b for b in mega_bridges(hardware_yaml) if b[0] in nodes]
+        if not bridges:
+            return
+        binary = resolve_bridge_binary(cfg.controllers_yaml.parent)
+        if binary is None:
+            self.get_logger().error(
+                "lucy-embedded-firmware-mcu-bridge not found: run `pixi run firmware-build-linux`"
+            )
+            return
+        for node_name, serial in bridges:
+            self.get_logger().info(f"starting mcu_bridge {node_name} {serial}")
+            popen = subprocess.Popen(
+                [str(binary), node_name, serial],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                env=os.environ.copy(),
+                start_new_session=True,
+                preexec_fn=_die_with_parent if sys.platform == "linux" else None,
+            )
+            self._track(f"mcu_bridge_{node_name}", popen, "bridge")
 
     def _spawn_controllers(self, cfg: _StackConfig) -> None:
         """Load and activate controllers after controller_manager is up.
@@ -477,6 +534,8 @@ class ControlSupervisorNode(Node):
                 self._start_rsp(cfg, urdf_xml)
                 if not cfg.use_gazebo_sim:
                     self._start_cm(cfg)
+                    if not cfg.use_mock_hardware:
+                        self._start_mcu_bridges(cfg, urdf_xml)
                     self._spawn_controllers(cfg)
 
             note = ""

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -26,6 +27,8 @@ from .flash import run_flash_phase
 from .models import PipelinePaths
 from .selection import all_selected_serials_empty
 from .selection import board_build_plan
+from .selection import is_mega_board
+from .selection import mega_artifact_dir
 from .selection import resolve_firmware_paths
 from .selection import resolve_mapping_input
 from .selection import select_boards_to_process
@@ -41,6 +44,7 @@ class PipelineActionServer(Node):
     )
     _RELOAD_SERVICE = "/lucy_control/restart"
     _RELOAD_TIMEOUT_SECONDS = 15.0
+    _RELOAD_RESTART_TIMEOUT_SECONDS = 90.0
 
     def __init__(self, *, paths: PipelinePaths, config_store: ConfigStore):
         super().__init__("lucy_config_pipeline")
@@ -128,11 +132,14 @@ class PipelineActionServer(Node):
         # while this _execute call stays parked here.
         done_event = threading.Event()
         future.add_done_callback(lambda _f: done_event.set())
-        completed = done_event.wait(timeout=self._RELOAD_TIMEOUT_SECONDS)
+        completed = done_event.wait(timeout=self._RELOAD_RESTART_TIMEOUT_SECONDS)
         if goal_handle.is_cancel_requested:
             return False, "reload cancelled"
         if not completed or not future.done():
-            return False, f"reload timed out after {self._RELOAD_TIMEOUT_SECONDS}s"
+            return (
+                False,
+                f"reload timed out after {self._RELOAD_RESTART_TIMEOUT_SECONDS}s",
+            )
         resp = future.result()
         if resp is None:
             return False, "reload service call failed"
@@ -173,6 +180,7 @@ class PipelineActionServer(Node):
         result.config_name = self._store.get_active_name()
         result.boards_flashed = []
         result.errors = []
+        mega_flash_locks = ExitStack()
 
         try:
             goal = goal_handle.request
@@ -348,6 +356,7 @@ class PipelineActionServer(Node):
                     node=self,
                     feedback=lambda **kwargs: self._feedback(goal_handle, **kwargs),
                     log_error=lambda msg: self.get_logger().error(msg),
+                    locks=mega_flash_locks,
                 )
                 result.boards_flashed = flashed_ok
                 if flash_failed:
@@ -387,6 +396,7 @@ class PipelineActionServer(Node):
             goal_handle.abort()
             return result
         finally:
+            mega_flash_locks.close()
             with self._busy_lock:
                 self._busy = False
 
@@ -411,3 +421,11 @@ class PipelineActionServer(Node):
         fw_cfg_dir.mkdir(parents=True, exist_ok=True)
         for cfile in out_dir.glob("config_*.c"):
             shutil.copy2(cfile, fw_cfg_dir / cfile.name)
+        mega_dir = mega_artifact_dir(
+            resolve_firmware_paths(data, self._paths.workspace_src)
+        )
+        for board_id, board in (data.get("boards") or {}).items():
+            generated = out_dir / f"config_{board_id}.rs"
+            if is_mega_board(board) and generated.is_file():
+                mega_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(generated, mega_dir / generated.name)

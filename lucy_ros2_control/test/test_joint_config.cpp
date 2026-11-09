@@ -159,6 +159,16 @@ TEST(JointConfigLimits, ParsesProvidedLimits)
   EXPECT_DOUBLE_EQ(limits.max_rad, 1.5708);
 }
 
+TEST(JointConfigLimits, FindsThePositionInterfaceAfterOthers)
+{
+  ComponentInfo joint = make_valid_joint();
+  InterfaceInfo torque;
+  torque.name = "torque_enable";
+  joint.command_interfaces.insert(joint.command_interfaces.begin(), torque);
+  joint.command_interfaces[1].max = "1.5708";
+  EXPECT_DOUBLE_EQ(lucy_ros2_control::parse_joint_limits(joint).max_rad, 1.5708);
+}
+
 TEST(JointConfigLimits, NonNumericLimitThrows)
 {
   ComponentInfo joint = make_valid_joint();
@@ -295,6 +305,16 @@ TEST(JointConfigMath, ActuatorCommandToServoRadClampsHigh)
   m.limit_max = 180.0;
   // cmd 180 -> (180 / 1) + 90 = 270, clamps to 180
   EXPECT_NEAR(lucy_ros2_control::actuator_command_to_servo_rad(m, 180.0), 180.0, 1e-12);
+}
+
+TEST(JointConfigMath, ActuatorCommandToServoRadClampsToUrdfLimits)
+{
+  ActuatedJointMapping m;
+  m.offset = 90.0;
+  m.limit_min = 0.0;
+  m.limit_max = 180.0;
+  m.command.max = 45.0;
+  EXPECT_NEAR(lucy_ros2_control::actuator_command_to_servo_rad(m, 60.0), 135.0, 1e-12);
 }
 
 TEST(JointConfigMath, ActuatorCommandHonoursDirection)
