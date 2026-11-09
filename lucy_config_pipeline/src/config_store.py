@@ -54,6 +54,10 @@ class ConfigStore:
         return self.config_dir / ".calibration_session.yaml"
 
     @property
+    def stock_urdf_limits_yaml(self) -> Path:
+        return self.config_dir / "urdf_limits_stock.yaml"
+
+    @property
     def calibration_profile_yaml(self) -> Path:
         return self.config_dir / "calibration_profile.yaml"
 
@@ -188,6 +192,15 @@ class ConfigStore:
 
     def clear_journal(self) -> None:
         self.session_journal.unlink(missing_ok=True)
+
+    def read_stock_urdf_limits(self) -> tuple[str, dict[str, tuple[float, float]]]:
+        """Return the file holding the URDF limits, and those for a preset with no calibration."""
+        data = self._read_mapping(self.stock_urdf_limits_yaml)
+        limits = data.get("joints") or {}
+        return str(data.get("urdf") or ""), {
+            str(joint): (float(pair[0]), float(pair[1]))
+            for joint, pair in limits.items()
+        }
 
     def activate(self, config_name: str) -> str:
         self.ensure_layout()

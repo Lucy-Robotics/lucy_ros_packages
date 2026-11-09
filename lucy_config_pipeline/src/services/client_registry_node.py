@@ -12,6 +12,7 @@ import threading
 import time
 
 from lucy_msgs.srv import ClientControl
+from lucy_msgs.srv import ControlLock
 from lucy_msgs.srv import GetInt
 import rclpy
 from rclpy.node import Node
@@ -29,6 +30,7 @@ CLIENT_COUNT_TOPIC = "/lucy/client_count"
 ACTIVE_CLIENT_TOPIC = "/lucy/active_client"
 GET_CLIENT_COUNT_SERVICE = "/lucy/get_client_count"
 CONTROL_SERVICE = "/lucy/control"
+CONTROL_LOCK_SERVICE = "/lucy/control_lock"
 
 TICK_PERIOD_S = 1.0
 CLIENT_TTL_S = 10.0  # ~10 missed beats at the 1 Hz client cadence
@@ -60,6 +62,9 @@ class ClientRegistryNode(Node):
         # (Not _clients — Node uses that.)
         self._last_seen: dict[str, float] = {}
         self._active_client: str = ""
+        # While set, nobody can take control: torque must stay off, e.g. with the
+        # arm in someone's hands during calibration.
+        self._lock_owner: str = ""
         self._bridge_clients: int | None = None
         self._state_lock = threading.Lock()
 
@@ -79,6 +84,7 @@ class ClientRegistryNode(Node):
         )
         self.create_service(GetInt, GET_CLIENT_COUNT_SERVICE, self._on_get_client_count)
         self.create_service(ClientControl, CONTROL_SERVICE, self._on_control)
+        self.create_service(ControlLock, CONTROL_LOCK_SERVICE, self._on_control_lock)
 
         self._tick_timer = self.create_timer(TICK_PERIOD_S, self._on_tick)
 
@@ -177,19 +183,57 @@ class ClientRegistryNode(Node):
                 req.client_id not in self._last_seen
             )  # a request also proves liveness
             self._last_seen[req.client_id] = time.monotonic()
-            if req.acquire:
+            locked_by = self._lock_owner if req.acquire else ""
+            if req.acquire and not locked_by:
                 self._active_client = req.client_id
-            elif self._active_client == req.client_id:
+            elif not req.acquire and self._active_client == req.client_id:
                 self._active_client = ""
             res.active_client = self._active_client
         if is_new:
             self._publish_count()
+        if locked_by:
+            self.get_logger().warning(
+                f"Control refused to {req.client_id}: locked by {locked_by}"
+            )
+            res.success = False
+            res.message = f"control is locked by {locked_by}"
+            return res
         self.get_logger().info(
             f"Control {'granted to' if req.acquire else 'released by'} {req.client_id}"
         )
         self._publish_active()
         res.success = True
         res.message = "ok"
+        return res
+
+    def _on_control_lock(
+        self, req: ControlLock.Request, res: ControlLock.Response
+    ) -> ControlLock.Response:
+        """Hold control free. Atomic with `_on_control`, and fails while someone has control."""
+        if not req.owner:
+            res.success = False
+            res.message = "empty owner"
+            return res
+        with self._state_lock:
+            res.active_client = self._active_client
+            if req.acquire:
+                if self._lock_owner not in ("", req.owner):
+                    res.success = False
+                    res.message = f"already locked by {self._lock_owner}"
+                elif self._active_client:
+                    res.success = False
+                    res.message = f"{self._active_client} has control"
+                else:
+                    self._lock_owner = req.owner
+                    res.success = True
+                    res.message = "locked"
+            elif self._lock_owner in ("", req.owner):
+                self._lock_owner = ""
+                res.success = True
+                res.message = "released"
+            else:
+                res.success = False
+                res.message = f"locked by {self._lock_owner}"
         return res
 
     def _publish_count(self) -> None:

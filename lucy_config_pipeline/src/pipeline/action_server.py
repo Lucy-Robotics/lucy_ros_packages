@@ -8,6 +8,9 @@ import shutil
 import tempfile
 import threading
 
+from lucy_config_generator.calibration import apply_urdf_limits
+from lucy_config_generator.calibration import generated_limit_mismatches
+from lucy_config_generator.calibration import urdf_limits_from_config
 from lucy_config_generator.generate import generate
 from lucy_config_generator.schema import resolve_generated_files
 from lucy_msgs.action import ConfigurePipeline
@@ -32,6 +35,7 @@ from .selection import mega_artifact_dir
 from .selection import resolve_firmware_paths
 from .selection import resolve_mapping_input
 from .selection import select_boards_to_process
+from ..config_store import atomic_write_text
 from ..config_store import ConfigStore
 from ..error_format import format_error_lines
 from ..validation import urdf_crosscheck
@@ -181,6 +185,7 @@ class PipelineActionServer(Node):
         result.boards_flashed = []
         result.errors = []
         mega_flash_locks = ExitStack()
+        urdf_before: str | None = None
 
         try:
             goal = goal_handle.request
@@ -192,6 +197,9 @@ class PipelineActionServer(Node):
                 goal_handle, phase="validate", progress=0.1, detail="schema validation"
             )
             data = validate_schema(config_yaml)
+
+            if not goal.dry_run:
+                urdf_before = self._sync_urdf_limits(data)
 
             for path in (
                 self._paths.urdf_xacro,
@@ -241,6 +249,24 @@ class PipelineActionServer(Node):
                     targets={"ros2_control", "controllers"},
                     simulation_only=goal.simulation_only,
                 )
+                if (
+                    urdf_before is not None
+                    and "calibration" in data
+                    and not goal.simulation_only
+                ):
+                    names = resolve_generated_files(data)
+                    problems = generated_limit_mismatches(
+                        (out_dir / names["ros2_control_xacro"]).read_text(
+                            encoding="utf-8"
+                        ),
+                        data,
+                    )
+                    if problems:
+                        result.errors.extend(format_error_lines(problems))
+                        result.message = "generated limits do not match the preset"
+                        goal_handle.abort()
+                        return result
+
                 if not goal.dry_run:
                     self._feedback(
                         goal_handle,
@@ -249,6 +275,8 @@ class PipelineActionServer(Node):
                         detail="installing ros2_control outputs",
                     )
                     self._install_ros2_control_outputs(out_dir, data)
+                    # Generated files now match the URDF, so it must not be rolled back alone.
+                    urdf_before = None
 
                 if not goal.simulation_only:
                     self._feedback(
@@ -397,8 +425,32 @@ class PipelineActionServer(Node):
             return result
         finally:
             mega_flash_locks.close()
+            if urdf_before is not None and not result.success:
+                atomic_write_text(self._limits_file(), urdf_before)
             with self._busy_lock:
                 self._busy = False
+
+    def _sync_urdf_limits(self, data: dict) -> str | None:
+        """
+        Make the URDF's limits those of the preset being activated.
+
+        URDF limits are shared by all presets, but a calibration belongs to one arm.
+        A preset with no calibration goes back to the robot's stock limits. Robots
+        with no stock limits file don't take part. Returns the previous URDF text.
+        """
+        relative, stock = self._store.read_stock_urdf_limits()
+        if not relative or not stock:
+            return None
+        limits = urdf_limits_from_config(data) if "calibration" in data else stock
+        path = self._limits_file()
+        before = path.read_text(encoding="utf-8")
+        after = apply_urdf_limits(before, limits)
+        if after != before:
+            atomic_write_text(path, after)
+        return before
+
+    def _limits_file(self) -> Path:
+        return self._paths.robot_root / self._store.read_stock_urdf_limits()[0]
 
     def _install_ros2_control_outputs(self, out_dir: Path, data: dict) -> None:
         names = resolve_generated_files(data)

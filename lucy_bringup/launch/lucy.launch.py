@@ -396,6 +396,7 @@ def generate_launch_description():
         launch_arguments=[
             ("robot_package", LaunchConfiguration("robot_package")),
             ("config_dir", LaunchConfiguration("config_dir")),
+            ("real", LaunchConfiguration("real")),
         ],
     )
 

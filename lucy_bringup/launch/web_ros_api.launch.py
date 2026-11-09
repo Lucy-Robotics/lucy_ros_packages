@@ -49,6 +49,12 @@ def generate_launch_description():
         ),
     )
 
+    real_arg = DeclareLaunchArgument(
+        "real",
+        default_value="true",
+        description="If false, the calibration wizard drives a simulated arm",
+    )
+
     # Included rather than run through `ros2 launch`: that shelled out via
     # cmd.exe and a console-script shim, and on Windows shutdown signalled only
     # the outermost of those, leaving rosbridge holding the port.
@@ -88,6 +94,7 @@ def generate_launch_description():
         launch_arguments=[
             ("robot_package", LaunchConfiguration("robot_package")),
             ("config_dir", LaunchConfiguration("config_dir")),
+            ("real", LaunchConfiguration("real")),
         ],
     )
 
@@ -95,6 +102,7 @@ def generate_launch_description():
         [
             robot_package_arg,
             config_dir_arg,
+            real_arg,
             rosbridge,
             config_pipeline_launch,
         ]
