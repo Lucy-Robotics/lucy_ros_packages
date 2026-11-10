@@ -25,6 +25,12 @@ def generate_launch_description() -> LaunchDescription:
         package="lucy_config_pipeline",
         executable="client_registry_node",
         output="screen",
+        parameters=[
+            {
+                "robot_package": LaunchConfiguration("robot_package"),
+                "config_dir": LaunchConfiguration("config_dir"),
+            }
+        ],
     )
 
     return LaunchDescription([robot_pkg_arg, config_dir_arg, node, registry_node])

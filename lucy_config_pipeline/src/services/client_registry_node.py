@@ -8,9 +8,12 @@ active controller, so the web panel (rosbridge) and the CLI (DDS) behave alike.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import threading
 import time
 
+from control_msgs.msg import DynamicJointState
+from lucy_config_generator.motors import motor_values_by_joint
 from lucy_msgs.srv import ClientControl
 from lucy_msgs.srv import GetInt
 import rclpy
@@ -21,6 +24,7 @@ from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 from std_msgs.msg import Int32
 from std_msgs.msg import String
+import yaml
 
 HEARTBEAT_TOPIC = "/lucy/client_heartbeat"
 GOODBYE_TOPIC = "/lucy/client_goodbye"
@@ -29,6 +33,8 @@ CLIENT_COUNT_TOPIC = "/lucy/client_count"
 ACTIVE_CLIENT_TOPIC = "/lucy/active_client"
 GET_CLIENT_COUNT_SERVICE = "/lucy/get_client_count"
 CONTROL_SERVICE = "/lucy/control"
+DYNAMIC_JOINT_STATES_TOPIC = "/dynamic_joint_states"
+NO_SERVO_POWER = "servos are not powered, connect the power supply"
 
 TICK_PERIOD_S = 1.0
 CLIENT_TTL_S = 10.0  # ~10 missed beats at the 1 Hz client cadence
@@ -52,7 +58,7 @@ _HEARTBEAT_QOS = QoSProfile(
 class ClientRegistryNode(Node):
     """Single-writer registry for connected clients and the active controller."""
 
-    def __init__(self) -> None:
+    def __init__(self, read_active_config: Callable[[], str] | None = None) -> None:
         super().__init__("lucy_client_registry")
 
         # client_id -> last-seen monotonic time.
@@ -61,7 +67,12 @@ class ClientRegistryNode(Node):
         self._last_seen: dict[str, float] = {}
         self._active_client: str = ""
         self._bridge_clients: int | None = None
+        self._servo_powered = True
+        self._read_active_config = read_active_config
+        self._min_volts: dict[str, float] = {}
+        self._motor_specs_error = ""
         self._state_lock = threading.Lock()
+        self._reload_min_volts()
 
         self._count_pub = self.create_publisher(Int32, CLIENT_COUNT_TOPIC, _LATCHED_QOS)
         self._active_pub = self.create_publisher(
@@ -76,6 +87,12 @@ class ClientRegistryNode(Node):
         )
         self.create_subscription(
             Int32, BRIDGE_CLIENT_COUNT_TOPIC, self._on_bridge_client_count, _LATCHED_QOS
+        )
+        self.create_subscription(
+            DynamicJointState,
+            DYNAMIC_JOINT_STATES_TOPIC,
+            self._on_dynamic_joint_states,
+            10,
         )
         self.create_service(GetInt, GET_CLIENT_COUNT_SERVICE, self._on_get_client_count)
         self.create_service(ClientControl, CONTROL_SERVICE, self._on_control)
@@ -149,7 +166,45 @@ class ClientRegistryNode(Node):
             self.get_logger().info(f"Active controller {reason}; control released")
         return gone
 
+    def _reload_min_volts(self) -> None:
+        if self._read_active_config is None:
+            return
+        try:
+            config = yaml.safe_load(self._read_active_config()) or {}
+            min_volts, error = motor_values_by_joint(config, "min_volts"), ""
+        except (OSError, KeyError, yaml.YAMLError) as e:
+            min_volts, error = {}, str(e)
+        if error and error != self._motor_specs_error:
+            self.get_logger().warning(
+                f"Motor specs unavailable, no power check: {error}"
+            )
+        self._motor_specs_error = error
+        with self._state_lock:
+            self._min_volts = min_volts
+
+    def _on_dynamic_joint_states(self, msg: DynamicJointState) -> None:
+        volts = {
+            joint: value
+            for joint, interfaces in zip(msg.joint_names, msg.interface_values)
+            for name, value in zip(interfaces.interface_names, interfaces.values)
+            if name == "voltage"
+        }
+        with self._state_lock:
+            checked = [joint for joint in volts if joint in self._min_volts]
+            if not checked:
+                return
+            self._servo_powered = all(
+                volts[joint] >= self._min_volts[joint] for joint in checked
+            )
+            controller_lost = not self._servo_powered and bool(self._active_client)
+            if controller_lost:
+                self._active_client = ""
+        if controller_lost:
+            self.get_logger().warning("Servo power lost; control released")
+            self._publish_active()
+
     def _on_tick(self) -> None:
+        self._reload_min_volts()
         self._drop_silent_since(time.monotonic() - CLIENT_TTL_S, "expired")
         # Republish so volatile subscribers (web via rosbridge) converge without a
         # dedicated query; subscribers dedupe by value.
@@ -177,13 +232,18 @@ class ClientRegistryNode(Node):
                 req.client_id not in self._last_seen
             )  # a request also proves liveness
             self._last_seen[req.client_id] = time.monotonic()
-            if req.acquire:
+            refused = req.acquire and not self._servo_powered
+            if req.acquire and not refused:
                 self._active_client = req.client_id
-            elif self._active_client == req.client_id:
+            elif not req.acquire and self._active_client == req.client_id:
                 self._active_client = ""
             res.active_client = self._active_client
         if is_new:
             self._publish_count()
+        if refused:
+            res.success = False
+            res.message = NO_SERVO_POWER
+            return res
         self.get_logger().info(
             f"Control {'granted to' if req.acquire else 'released by'} {req.client_id}"
         )
@@ -204,8 +264,16 @@ class ClientRegistryNode(Node):
 
 
 def main() -> None:  # pragma: no cover
+    from ..config_store import ConfigStore
+    from ..main import _resolve_paths
+
     rclpy.init()
-    node = ClientRegistryNode()
+    bootstrap = rclpy.create_node("lucy_client_registry_bootstrap")
+    robot_package = bootstrap.declare_parameter("robot_package", "thais_urdf").value
+    config_dir = bootstrap.declare_parameter("config_dir", "").value
+    bootstrap.destroy_node()
+    store = ConfigStore(_resolve_paths(robot_package, config_dir).config_dir)
+    node = ClientRegistryNode(read_active_config=store.read_active_yaml)
     try:
         rclpy.spin(node)
     finally:
