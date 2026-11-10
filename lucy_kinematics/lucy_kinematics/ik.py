@@ -76,7 +76,9 @@ def solve_position(
         jacobian = pin.computeFrameJacobian(
             model, data, q, chain.frame_id, pin.LOCAL_WORLD_ALIGNED
         )[:3, columns]
-        step = jacobian.T @ np.linalg.solve(jacobian @ jacobian.T + DAMPING * np.eye(3), error)
+        step = jacobian.T @ np.linalg.solve(
+            jacobian @ jacobian.T + DAMPING * np.eye(3), error
+        )
         q[chain.q_indices] = np.clip(q[chain.q_indices] + STEP * step, lower, upper)
         error = target - frame_position(chain, q)
     return q, float(np.linalg.norm(error))

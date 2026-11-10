@@ -1,4 +1,5 @@
 """Add project root to path so lucy_ros_api package is importable from source."""
+
 import sys
 from pathlib import Path
 

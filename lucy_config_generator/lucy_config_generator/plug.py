@@ -29,7 +29,7 @@ class HeaderPlug:
 
     @property
     def kind(self) -> str:
-        return 'servo_header'
+        return "servo_header"
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,7 @@ class PcaPlug:
 
     @property
     def kind(self) -> str:
-        return 'pca9685'
+        return "pca9685"
 
 
 ResolvedPlug = Union[HeaderPlug, PcaPlug]
@@ -59,42 +59,42 @@ def resolve_plug(
         with ``physical_pin``.
     :raises TypeError: ``header`` or ``physical_pin`` is not an integer.
     """
-    plug = actuator.get('plug')
+    plug = actuator.get("plug")
     if plug is None:
-        return HeaderPlug(int(actuator['physical_pin']))
+        return HeaderPlug(int(actuator["physical_pin"]))
     if not isinstance(plug, dict):
-        raise ValueError('plug must be a mapping')
-    kind = plug.get('kind')
-    if kind == 'pca9685':
+        raise ValueError("plug must be a mapping")
+    kind = plug.get("kind")
+    if kind == "pca9685":
         return _resolve_pca(plug, board)
-    if kind != 'servo_header':
-        raise ValueError(f'unsupported plug kind {kind!r}')
-    if 'header' not in plug:
-        raise ValueError('plug.header is required')
-    header = int(plug['header'])
-    if 'physical_pin' in actuator and int(actuator['physical_pin']) != header:
-        raise ValueError('physical_pin must equal plug.header')
+    if kind != "servo_header":
+        raise ValueError(f"unsupported plug kind {kind!r}")
+    if "header" not in plug:
+        raise ValueError("plug.header is required")
+    header = int(plug["header"])
+    if "physical_pin" in actuator and int(actuator["physical_pin"]) != header:
+        raise ValueError("physical_pin must equal plug.header")
     return HeaderPlug(header)
 
 
 def _resolve_pca(plug: dict[str, Any], board: dict[str, Any] | None) -> PcaPlug:
-    if 'device' not in plug or not str(plug.get('device') or '').strip():
-        raise ValueError('plug.device is required')
-    if 'channel' not in plug:
-        raise ValueError('plug.channel is required')
-    channel = int(plug['channel'])
+    if "device" not in plug or not str(plug.get("device") or "").strip():
+        raise ValueError("plug.device is required")
+    if "channel" not in plug:
+        raise ValueError("plug.channel is required")
+    channel = int(plug["channel"])
     if channel < 0 or channel > 15:
-        raise ValueError(f'channel {channel} out of range 0..15')
-    device = str(plug['device'])
+        raise ValueError(f"channel {channel} out of range 0..15")
+    device = str(plug["device"])
     if board is not None:
-        devices = board.get('i2c_devices') or []
+        devices = board.get("i2c_devices") or []
         known = {
-            str(item.get('id'))
+            str(item.get("id"))
             for item in devices
-            if isinstance(item, dict) and item.get('id')
+            if isinstance(item, dict) and item.get("id")
         }
         if device not in known:
-            raise ValueError(f'PCA device {device} is not on this board')
+            raise ValueError(f"PCA device {device} is not on this board")
     return PcaPlug(device=device, channel=channel)
 
 
@@ -106,8 +106,8 @@ def assign_plug(actuator: dict[str, Any], header: int) -> None:
     :param header: Servo2040 silk number, 1–18.
     """
     header = int(header)
-    actuator['plug'] = {'kind': 'servo_header', 'header': header}
-    actuator['physical_pin'] = header
+    actuator["plug"] = {"kind": "servo_header", "header": header}
+    actuator["physical_pin"] = header
 
 
 def assign_pca_plug(actuator: dict[str, Any], device: str, channel: int) -> None:
@@ -118,15 +118,17 @@ def assign_pca_plug(actuator: dict[str, Any], device: str, channel: int) -> None
     :param device: ``i2c_devices[].id`` on the actuator's board.
     :param channel: PCA channel, 0–15.
     """
-    actuator['plug'] = {
-        'kind': 'pca9685',
-        'device': device,
-        'channel': int(channel),
+    actuator["plug"] = {
+        "kind": "pca9685",
+        "device": device,
+        "channel": int(channel),
     }
-    actuator.pop('physical_pin', None)
+    actuator.pop("physical_pin", None)
 
 
-def header_constraint_errors(board_id: str, actuators: list[dict[str, Any]]) -> list[str]:
+def header_constraint_errors(
+    board_id: str, actuators: list[dict[str, Any]]
+) -> list[str]:
     """
     Return header range, duplicate, and shared-PWM-slice errors for one board.
 
@@ -136,24 +138,24 @@ def header_constraint_errors(board_id: str, actuators: list[dict[str, Any]]) -> 
     errors: list[str] = []
     claimed: dict[int, str] = {}
     for actuator in actuators:
-        aid = actuator.get('id') or '<unknown>'
+        aid = actuator.get("id") or "<unknown>"
         try:
             resolved = resolve_plug(actuator)
         except (KeyError, TypeError, ValueError) as exc:
-            errors.append(f'actuator {aid}: {exc}')
+            errors.append(f"actuator {aid}: {exc}")
             continue
         if not isinstance(resolved, HeaderPlug):
             continue
         header = resolved.header
         if header < HEADER_MIN or header > HEADER_MAX:
             errors.append(
-                f'actuator {aid}: header {header} out of range {HEADER_MIN}..{HEADER_MAX}'
+                f"actuator {aid}: header {header} out of range {HEADER_MIN}..{HEADER_MAX}"
             )
             continue
         previous = claimed.get(header)
         if previous is not None:
             errors.append(
-                f'board {board_id}: duplicate header {header} ({previous} and {aid})'
+                f"board {board_id}: duplicate header {header} ({previous} and {aid})"
             )
             continue
         claimed[header] = str(aid)
@@ -161,7 +163,7 @@ def header_constraint_errors(board_id: str, actuators: list[dict[str, Any]]) -> 
     for left, right in SHARED_PWM_PAIRS:
         if left in used and right in used:
             errors.append(
-                f'board {board_id}: Servo{left} and Servo{right} share a PWM slice'
+                f"board {board_id}: Servo{left} and Servo{right} share a PWM slice"
             )
     return errors
 
@@ -173,46 +175,46 @@ def i2c_device_errors(board_id: str, board: dict[str, Any]) -> list[str]:
     :param board_id: Board id used in error text.
     :param board: Board mapping. Missing ``i2c_devices`` is valid.
     """
-    devices = board.get('i2c_devices')
+    devices = board.get("i2c_devices")
     if devices is None:
         return []
     if not isinstance(devices, list):
-        return [f'board {board_id}: i2c_devices must be a list']
+        return [f"board {board_id}: i2c_devices must be a list"]
     errors: list[str] = []
     seen_ids: set[str] = set()
     seen_addresses: set[int] = set()
     for item in devices:
         if not isinstance(item, dict):
-            errors.append(f'board {board_id}: i2c device must be a mapping')
+            errors.append(f"board {board_id}: i2c device must be a mapping")
             continue
-        device_id = str(item.get('id') or '')
+        device_id = str(item.get("id") or "")
         if not device_id:
-            errors.append(f'board {board_id}: i2c device id is required')
+            errors.append(f"board {board_id}: i2c device id is required")
             continue
         if device_id in seen_ids:
-            errors.append(f'board {board_id}: duplicate i2c device id {device_id}')
+            errors.append(f"board {board_id}: duplicate i2c device id {device_id}")
         seen_ids.add(device_id)
-        if item.get('type') != 'pca9685':
+        if item.get("type") != "pca9685":
             errors.append(
                 f'board {board_id}: unsupported i2c device type {item.get("type")!r}'
             )
         try:
-            address = int(item['address'])
+            address = int(item["address"])
         except (KeyError, TypeError, ValueError):
-            errors.append(f'board {board_id}: i2c address must be an integer')
+            errors.append(f"board {board_id}: i2c address must be an integer")
             continue
         if address < 0x40 or address > 0x7F:
-            errors.append(f'board {board_id}: address {address} outside 0x40..0x7F')
+            errors.append(f"board {board_id}: address {address} outside 0x40..0x7F")
         elif address in seen_addresses:
-            errors.append(f'board {board_id}: duplicate i2c address {address}')
+            errors.append(f"board {board_id}: duplicate i2c address {address}")
         seen_addresses.add(address)
         try:
-            channels = int(item.get('channels', 16))
+            channels = int(item.get("channels", 16))
         except (TypeError, ValueError):
-            errors.append(f'board {board_id}: channels must be 16')
+            errors.append(f"board {board_id}: channels must be 16")
             continue
         if channels != 16:
-            errors.append(f'board {board_id}: channels other than 16')
+            errors.append(f"board {board_id}: channels other than 16")
     return errors
 
 
@@ -231,11 +233,11 @@ def pca_channel_errors(
     errors: list[str] = []
     claimed: dict[tuple[str, int], str] = {}
     for actuator in actuators:
-        aid = actuator.get('id') or '<unknown>'
+        aid = actuator.get("id") or "<unknown>"
         try:
             resolved = resolve_plug(actuator, board)
         except (KeyError, TypeError, ValueError) as exc:
-            errors.append(f'actuator {aid}: {exc}')
+            errors.append(f"actuator {aid}: {exc}")
             continue
         if not isinstance(resolved, PcaPlug):
             continue
@@ -243,8 +245,8 @@ def pca_channel_errors(
         previous = claimed.get(key)
         if previous is not None:
             errors.append(
-                f'board {board_id}: duplicate PCA channel '
-                f'{resolved.device}:{resolved.channel} ({previous} and {aid})'
+                f"board {board_id}: duplicate PCA channel "
+                f"{resolved.device}:{resolved.channel} ({previous} and {aid})"
             )
             continue
         claimed[key] = str(aid)

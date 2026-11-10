@@ -27,40 +27,40 @@ def project_firmware_spec(data: dict[str, Any], board_id: str) -> dict[str, Any]
     :param board_id: Board whose actuators are projected.
     """
     assign_virtual_pins(data)
-    board = data['boards'][board_id]
+    board = data["boards"][board_id]
     pwm: list[dict[str, Any]] = []
     i2c_pwm: list[dict[str, Any]] = []
     devices = {
-        str(item['id']): item
-        for item in board.get('i2c_devices') or []
-        if isinstance(item, dict) and item.get('id')
+        str(item["id"]): item
+        for item in board.get("i2c_devices") or []
+        if isinstance(item, dict) and item.get("id")
     }
-    for actuator in data['actuators']:
-        if actuator.get('board') != board_id or not actuator.get('enabled'):
+    for actuator in data["actuators"]:
+        if actuator.get("board") != board_id or not actuator.get("enabled"):
             continue
         plug = resolve_plug(actuator, board)
         row = _pulse_fields(actuator)
-        row['virtual_pin'] = int(actuator['virtual_pin'])
+        row["virtual_pin"] = int(actuator["virtual_pin"])
         if isinstance(plug, HeaderPlug):
-            row['header'] = plug.header
-            row['identity'] = f'Servo{plug.header}'
+            row["header"] = plug.header
+            row["identity"] = f"Servo{plug.header}"
             pwm.append(row)
         else:
             device = devices[plug.device]
-            address = int(device['address'])
-            row['bus'] = 0
-            row['address'] = address
-            row['channel'] = plug.channel
-            row['identity'] = f'I2C0:PCA9685:{address}:{plug.channel}'
+            address = int(device["address"])
+            row["bus"] = 0
+            row["address"] = address
+            row["channel"] = plug.channel
+            row["identity"] = f"I2C0:PCA9685:{address}:{plug.channel}"
             i2c_pwm.append(row)
-    pwm.sort(key=lambda item: item['virtual_pin'])
-    i2c_pwm.sort(key=lambda item: item['virtual_pin'])
+    pwm.sort(key=lambda item: item["virtual_pin"])
+    i2c_pwm.sort(key=lambda item: item["virtual_pin"])
     return {
-        'board_id': board_id,
-        'serial_id': board.get('serial_id') or '',
-        'node_name': derive_ros2_node_name(board_id),
-        'pwm': pwm,
-        'i2c_pwm': i2c_pwm,
+        "board_id": board_id,
+        "serial_id": board.get("serial_id") or "",
+        "node_name": derive_ros2_node_name(board_id),
+        "pwm": pwm,
+        "i2c_pwm": i2c_pwm,
     }
 
 
@@ -75,7 +75,7 @@ def render_firmware_spec(data: dict[str, Any], board_id: str) -> str:
 
 def _pulse_fields(actuator: dict[str, Any]) -> dict[str, Any]:
     return {
-        'amplitude_rad': amplitude_rad(str(actuator['servo_type'])),
-        'min_pulse_us': MIN_PULSE_US,
-        'max_pulse_us': MAX_PULSE_US,
+        "amplitude_rad": amplitude_rad(str(actuator["servo_type"])),
+        "min_pulse_us": MIN_PULSE_US,
+        "max_pulse_us": MAX_PULSE_US,
     }

@@ -24,7 +24,7 @@ class FirmwareToolchainError(RuntimeError):
 
 
 def conda_prefix() -> Path | None:
-    raw = (os.environ.get('CONDA_PREFIX') or '').strip()
+    raw = (os.environ.get("CONDA_PREFIX") or "").strip()
     return Path(raw) if raw else None
 
 
@@ -32,7 +32,7 @@ def cargo_bin_dir(prefix: Path | None = None) -> Path | None:
     root = prefix if prefix is not None else conda_prefix()
     if root is None:
         return None
-    return root / 'cargo' / 'bin'
+    return root / "cargo" / "bin"
 
 
 def firmware_tool_env(base: dict[str, str] | None = None) -> dict[str, str]:
@@ -42,23 +42,23 @@ def firmware_tool_env(base: dict[str, str] | None = None) -> dict[str, str]:
     if prefix is None:
         return env
 
-    cargo_home = prefix / 'cargo'
-    rustup_home = prefix / 'rustup'
-    cargo_bin = cargo_home / 'bin'
-    env['CARGO_HOME'] = str(cargo_home)
-    env['RUSTUP_HOME'] = str(rustup_home)
+    cargo_home = prefix / "cargo"
+    rustup_home = prefix / "rustup"
+    cargo_bin = cargo_home / "bin"
+    env["CARGO_HOME"] = str(cargo_home)
+    env["RUSTUP_HOME"] = str(rustup_home)
 
-    sep = ';' if os.name == 'nt' else ':'
+    sep = ";" if os.name == "nt" else ":"
     cargo_bin_s = str(cargo_bin)
-    path = env.get('PATH', '')
+    path = env.get("PATH", "")
     parts = [p for p in path.split(sep) if p]
     if cargo_bin_s not in parts:
-        env['PATH'] = sep.join([cargo_bin_s, *parts]) if parts else cargo_bin_s
+        env["PATH"] = sep.join([cargo_bin_s, *parts]) if parts else cargo_bin_s
     return env
 
 
 def _tool_name(name: str) -> str:
-    return f'{name}.exe' if os.name == 'nt' else name
+    return f"{name}.exe" if os.name == "nt" else name
 
 
 def resolve_firmware_tool(name: str, *, env: dict[str, str] | None = None) -> Path:
@@ -76,14 +76,14 @@ def resolve_firmware_tool(name: str, *, env: dict[str, str] | None = None) -> Pa
             return candidate
 
     search_env = firmware_tool_env(env)
-    which = shutil.which(exe, path=search_env.get('PATH'))
+    which = shutil.which(exe, path=search_env.get("PATH"))
     if which:
         return Path(which)
 
-    hint_prefix = str(prefix) if prefix is not None else '(CONDA_PREFIX unset)'
+    hint_prefix = str(prefix) if prefix is not None else "(CONDA_PREFIX unset)"
     raise FirmwareToolchainError(
-        f'{name} not found under {hint_prefix}/cargo/bin (or PATH). '
-        f'Run: pixi run firmware-setup  — then restart Core / the config pipeline '
-        f'so the node picks up the toolchain. Expected binary: '
-        f'{cargo_bin / exe if cargo_bin is not None else exe}'
+        f"{name} not found under {hint_prefix}/cargo/bin (or PATH). "
+        f"Run: pixi run firmware-setup  — then restart Core / the config pipeline "
+        f"so the node picks up the toolchain. Expected binary: "
+        f"{cargo_bin / exe if cargo_bin is not None else exe}"
     )

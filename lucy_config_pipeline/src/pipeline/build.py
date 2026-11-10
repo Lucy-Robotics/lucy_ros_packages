@@ -33,7 +33,7 @@ def run_build_phase(
     if not paths.source_dir.exists():
         raise FileNotFoundError(paths.source_dir)
 
-    if (paths.source_dir / 'firmwares' / 'rp2040' / 'Cargo.toml').is_file():
+    if (paths.source_dir / "firmwares" / "rp2040" / "Cargo.toml").is_file():
         return _run_cargo_builds(
             data=data,
             selected_boards=selected_boards,
@@ -140,59 +140,66 @@ def _run_cargo_builds(
     total = max(len(plan), 1)
     elf = (
         source_dir
-        / 'target'
-        / 'thumbv6m-none-eabi'
-        / 'release'
-        / 'lucy-embedded-firmware-rp2040'
+        / "target"
+        / "thumbv6m-none-eabi"
+        / "release"
+        / "lucy-embedded-firmware-rp2040"
     )
     try:
         tool_env = firmware_tool_env()
-        cargo = resolve_firmware_tool('cargo', env=tool_env)
-        elf2uf2 = resolve_firmware_tool('elf2uf2-rs', env=tool_env)
+        cargo = resolve_firmware_tool("cargo", env=tool_env)
+        elf2uf2 = resolve_firmware_tool("elf2uf2-rs", env=tool_env)
     except FirmwareToolchainError as exc:
         log_error(str(exc))
-        feedback(phase='build', progress=0.0, detail=str(exc), board='')
+        feedback(phase="build", progress=0.0, detail=str(exc), board="")
         raise
 
     for index, (board, _target) in enumerate(plan):
-        board_def = (data.get('boards') or {}).get(board) or {}
-        if str(board_def.get('board_class') or '') == 'bus_servo_only':
+        board_def = (data.get("boards") or {}).get(board) or {}
+        if str(board_def.get("board_class") or "") == "bus_servo_only":
             feedback(
-                phase='build',
+                phase="build",
                 progress=(index + 1) / total,
-                detail=f'skip cargo build for bus_servo board {board}',
+                detail=f"skip cargo build for bus_servo board {board}",
                 board=board,
             )
             continue
-        spec_path = build_dir / f'config_{board}.yaml'
-        uf2 = build_dir / f'{board}.uf2'
+        spec_path = build_dir / f"config_{board}.yaml"
+        uf2 = build_dir / f"{board}.uf2"
         try:
             if is_mega_board(board_def):
                 _build_mega(board, paths, timeout_seconds, feedback, index / total)
                 built.add(board)
                 continue
             # Empty pwm/i2c_pwm is fine — board still builds/flashes/runs as CDC.
-            spec_path.write_text(render_firmware_spec(data, board), encoding='utf-8')
+            spec_path.write_text(render_firmware_spec(data, board), encoding="utf-8")
             env = dict(tool_env)
-            env['LUCY_FIRMWARE_CONFIG'] = str(spec_path)
-            serial = str((data.get('boards') or {}).get(board, {}).get('serial_id') or '').strip()
+            env["LUCY_FIRMWARE_CONFIG"] = str(spec_path)
+            serial = str(
+                (data.get("boards") or {}).get(board, {}).get("serial_id") or ""
+            ).strip()
             if serial:
-                env['DEVICE_SERIAL_NUMBER'] = serial
+                env["DEVICE_SERIAL_NUMBER"] = serial
             feedback(
-                phase='build',
+                phase="build",
                 progress=index / total,
-                detail=f'cargo build {board}',
+                detail=f"cargo build {board}",
                 board=board,
             )
             # Drop a stale/broken ELF so elf2uf2 never converts a previous failure.
             if elf.is_file():
                 elf.unlink()
             _run_command(
-                phase='build',
+                phase="build",
                 board=board,
                 cmd=[
-                    str(cargo), 'build', '--release', '--target', 'thumbv6m-none-eabi',
-                    '-p', 'lucy-embedded-firmware-rp2040',
+                    str(cargo),
+                    "build",
+                    "--release",
+                    "--target",
+                    "thumbv6m-none-eabi",
+                    "-p",
+                    "lucy-embedded-firmware-rp2040",
                 ],
                 cwd=source_dir,
                 timeout_seconds=timeout_seconds,
@@ -203,17 +210,17 @@ def _run_cargo_builds(
             if not elf.is_file() or elf.stat().st_size < 10_000:
                 size = elf.stat().st_size if elf.is_file() else 0
                 raise RuntimeError(
-                    f'cargo produced no usable ELF for {board} '
-                    f'(path={elf}, size={size}); check build log above'
+                    f"cargo produced no usable ELF for {board} "
+                    f"(path={elf}, size={size}); check build log above"
                 )
             feedback(
-                phase='build',
+                phase="build",
                 progress=(index + 0.45) / total,
-                detail=f'elf2uf2-rs {board}',
+                detail=f"elf2uf2-rs {board}",
                 board=board,
             )
             _run_command(
-                phase='build',
+                phase="build",
                 board=board,
                 cmd=[str(elf2uf2), str(elf), str(uf2)],
                 cwd=source_dir,
@@ -223,18 +230,18 @@ def _run_cargo_builds(
                 env=env,
             )
             if not uf2.is_file():
-                raise RuntimeError(f'missing build artifact: {uf2}')
+                raise RuntimeError(f"missing build artifact: {uf2}")
             built.add(board)
         except Exception as exc:
             failed.append(board)
-            log_error(f'Build failed for {board}: {exc}')
+            log_error(f"Build failed for {board}: {exc}")
             feedback(
-                phase='build',
+                phase="build",
                 progress=(index + 1) / total,
-                detail=f'build failed for {board}: {exc}',
+                detail=f"build failed for {board}: {exc}",
                 board=board,
             )
-    feedback(phase='build', progress=1.0, detail='build phase completed', board='')
+    feedback(phase="build", progress=1.0, detail="build phase completed", board="")
     return failed, built
 
 
@@ -326,7 +333,5 @@ def _run_command(
             f"command timed out after {timeout_seconds}s: {' '.join(cmd)}"
         )
     if return_code != 0:
-        hint = '\n'.join(tail[-12:]) if tail else '(no output)'
-        raise RuntimeError(
-            f"command failed ({return_code}): {' '.join(cmd)}\n{hint}"
-        )
+        hint = "\n".join(tail[-12:]) if tail else "(no output)"
+        raise RuntimeError(f"command failed ({return_code}): {' '.join(cmd)}\n{hint}")
