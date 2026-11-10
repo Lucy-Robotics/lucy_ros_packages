@@ -1,7 +1,7 @@
 # Request
 ---
 # Response
-# unsupported, simulated, unreachable, no_adapter, ambiguous, selected_missing, open_failed,
+# unreachable, no_adapter, ambiguous, selected_missing, open_failed,
 # bus_dead, no_serial, recovery, no_binding, offsets_differ, match
 string state
 string adapter_serial

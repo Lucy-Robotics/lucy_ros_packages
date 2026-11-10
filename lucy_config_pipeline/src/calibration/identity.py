@@ -65,9 +65,10 @@ def decide(
         return Identity("unreachable", message="The host firmware is not answering.")
 
     link = status.get("link")
+    if link in _LINK_STATES:
+        return Identity(link, message=_LINK_STATES[link])
     if link != "open":
-        state = str(link) if link in _LINK_STATES else "unreachable"
-        return Identity(state, message=_LINK_STATES.get(state, "The bus is not open."))
+        return Identity("unreachable", message="The bus is not open.")
     serial = status.get("open_serial")
     if not valid_serial(serial):
         return Identity(
