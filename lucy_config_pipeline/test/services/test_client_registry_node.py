@@ -3,6 +3,7 @@ import time
 import pytest
 import rclpy
 from src.services.client_registry_node import ClientRegistryNode
+from src.services.client_registry_node import NO_SERVO_POWER
 from src.services.client_registry_node import SOCKET_DROP_GRACE_S
 from std_msgs.msg import Int32
 from std_msgs.msg import String
@@ -158,3 +159,64 @@ class TestClientRegistryNode:
         node._on_bridge_client_count(Int32(data=0))
         self._spin_past_grace(node, [])
         assert "cp_quiet" in node._last_seen
+
+
+def _supply(node, *volts):
+    from control_msgs.msg import DynamicJointState
+    from control_msgs.msg import InterfaceValue
+
+    node._on_dynamic_joint_states(
+        DynamicJointState(
+            joint_names=[f"j{i}" for i in range(len(volts))],
+            interface_values=[
+                InterfaceValue(interface_names=["position", "voltage"], values=[0.0, v])
+                for v in volts
+            ],
+        )
+    )
+
+
+def _control(node, client_id, acquire):
+    from lucy_msgs.srv import ClientControl
+
+    return node._on_control(
+        ClientControl.Request(client_id=client_id, acquire=acquire),
+        ClientControl.Response(),
+    )
+
+
+class TestServoPower:
+    def test_power_loss_releases_control(self, node):
+        _supply(node, 12.2, 12.2)
+        assert _control(node, "cp_1", True).active_client == "cp_1"
+
+        _supply(node, 12.2, 0.0)
+
+        assert node._active_client == ""
+
+    def test_acquire_refused_until_power_returns(self, node):
+        _supply(node, 0.0, 0.0)
+        res = _control(node, "cp_1", True)
+        assert res.success is False
+        assert res.message == NO_SERVO_POWER
+        assert res.active_client == ""
+
+        _supply(node, 12.1, 12.2)
+
+        assert _control(node, "cp_1", True).active_client == "cp_1"
+
+    def test_states_without_voltage_leave_control_alone(self, node):
+        from control_msgs.msg import DynamicJointState
+        from control_msgs.msg import InterfaceValue
+
+        _control(node, "cp_1", True)
+        node._on_dynamic_joint_states(
+            DynamicJointState(
+                joint_names=["j0"],
+                interface_values=[
+                    InterfaceValue(interface_names=["position"], values=[0.0])
+                ],
+            )
+        )
+
+        assert node._active_client == "cp_1"
