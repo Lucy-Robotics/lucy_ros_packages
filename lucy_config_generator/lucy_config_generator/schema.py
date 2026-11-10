@@ -110,17 +110,17 @@ MEGA_MAX_SERVO_PINS = 8
 MEGA_MAX_PCAS = 8
 MEGA_MAX_JOINTS = 24
 
-_BOARD_ID_RE = re.compile(r"^(rp2040|mega)_[a-z][a-z0-9_]*$")
+_BOARD_ID_RE = re.compile(r"^(rp2040|mega|linux)_[a-z][a-z0-9_]*$")
 _TOPIC_RE = re.compile(r"^[a-z][a-z0-9_/]*$")
 _SERIAL_ID_RE = re.compile(r"^[A-Za-z0-9]*$")
 
 
 def ros2_hardware_suffix(board_id: str) -> str:
-    """Return the snake_case segment after the ``rp2040_`` / ``mega_`` board id prefix."""
+    """Return the snake_case segment after the board id prefix (rp2040_, mega_ or linux_)."""
     if not _BOARD_ID_RE.fullmatch(board_id):
         raise ValueError(
             f"board id {board_id!r} must match {_BOARD_ID_RE.pattern} "
-            "(rp2040_ or mega_ prefix + snake_case suffix)"
+            "(rp2040_, mega_ or linux_ prefix + snake_case suffix)"
         )
     return board_id.split("_", 1)[1]
 
@@ -144,7 +144,7 @@ def derive_ros2_node_name(board_id: str) -> str:
     """
     Return the ``node_name`` hardware parameter for *board_id*.
 
-    Pattern: the bare snake_case suffix after ``rp2040_`` / ``mega_``.
+    Pattern: the bare snake_case suffix after ``rp2040_`` / ``mega_`` / ``linux_``.
 
     ``LucySystemHardware`` names its POSIX shm/sem objects after this, and Darwin
     caps those at 31 chars - 14 once the leading '/' and ``.lucy_reg_header``
