@@ -7,6 +7,7 @@ import argparse
 from collections import deque
 import math
 import os
+import re
 import sys
 import time
 
@@ -497,7 +498,9 @@ def parse_actuators_yaml(yaml_string: str) -> dict:
                     }
                 )
             if joints:
-                group_name = board_id.replace("rp2040_", "").replace("_", " ").title()
+                group_name = (
+                    re.sub(r"^(rp2040|linux)_", "", board_id).replace("_", " ").title()
+                )
                 parsed_actuators[group_name] = {
                     "topic": f"/{ctrl_name}/joint_trajectory",
                     "joints": joints,
@@ -555,7 +558,9 @@ def parse_sensors_yaml(yaml_string: str) -> dict:
                     }
                 )
             if sensors:
-                group_name = board_id.replace("rp2040_", "").replace("_", " ").title()
+                group_name = (
+                    re.sub(r"^(rp2040|linux)_", "", board_id).replace("_", " ").title()
+                )
                 parsed_sensors[group_name] = {"topic": topic_sensor, "sensors": sensors}
         return parsed_sensors
     except yaml.YAMLError as e:

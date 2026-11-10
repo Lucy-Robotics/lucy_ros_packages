@@ -16,6 +16,7 @@ pytest.importorskip("rclpy")
 
 import rclpy  # noqa: E402
 from src.pipeline.selection import all_selected_serials_empty  # noqa: E402
+from src.pipeline.selection import skip_mcu_reason  # noqa: E402
 
 
 @pytest.fixture
@@ -44,6 +45,16 @@ def test_all_selected_serials_empty_false_when_any_set():
     }
     assert all_selected_serials_empty(data, None) is False
     assert all_selected_serials_empty(data, {"rp2040_right_arm"}) is True
+
+
+def test_skip_reason_names_linux_host_boards():
+    data = {"boards": {"linux_so_arm": {"serial_id": ""}}}
+    assert skip_mcu_reason(data, None) == "Linux host firmware (linux_so_arm)"
+
+
+def test_skip_reason_falls_back_to_empty_serials_for_mcu_boards():
+    data = {"boards": {"rp2040_left_arm": {"serial_id": ""}}}
+    assert skip_mcu_reason(data, None) == "all selected boards have empty serial_id"
 
 
 @pytest.mark.skipif(

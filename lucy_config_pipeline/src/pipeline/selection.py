@@ -98,3 +98,11 @@ def all_selected_serials_empty(data: dict, selected_boards: set[str] | None) -> 
         if serial:
             return False
     return True
+
+
+def skip_mcu_reason(data: dict, selected_boards: set[str] | None) -> str:
+    """Say why build/flash are skipped: Linux host boards, else blank serial_ids."""
+    board_ids = sorted(selected_boards or (data.get("boards") or {}).keys())
+    if board_ids and all(b.startswith("linux_") for b in board_ids):
+        return f"Linux host firmware ({', '.join(board_ids)})"
+    return "all selected boards have empty serial_id"

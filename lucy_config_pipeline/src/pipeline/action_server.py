@@ -32,6 +32,7 @@ from .selection import mega_artifact_dir
 from .selection import resolve_firmware_paths
 from .selection import resolve_mapping_input
 from .selection import select_boards_to_process
+from .selection import skip_mcu_reason
 from ..config_store import ConfigStore
 from ..error_format import format_error_lines
 from ..validation import urdf_crosscheck
@@ -281,7 +282,7 @@ class PipelineActionServer(Node):
                     goal_handle,
                     phase="build",
                     progress=0.85,
-                    detail="skip build: all selected boards have empty serial_id",
+                    detail=f"skip build: {skip_mcu_reason(data, boards)}",
                 )
                 built_ok = set(plan_boards)
             elif not goal.dry_run and not goal.simulation_only:
@@ -341,7 +342,7 @@ class PipelineActionServer(Node):
                     goal_handle,
                     phase="flash",
                     progress=0.9,
-                    detail="skip flash: all selected boards have empty serial_id",
+                    detail=f"skip flash: {skip_mcu_reason(data, boards)}",
                 )
                 result.boards_flashed = []
             elif not goal.dry_run and not goal.build_only and not goal.simulation_only:

@@ -44,6 +44,11 @@ def test_ros2_names_derived_from_board_id():
     assert derive_ros2_node_name("mega_arms") == "arms"
 
 
+def test_linux_board_keeps_the_names_its_host_firmware_attaches_to():
+    assert derive_ros2_hardware_name("linux_so_arm") == "LucyHardwareSoArm"
+    assert derive_ros2_node_name("linux_so_arm") == "so_arm"
+
+
 def _mega_mapping() -> dict:
     """Fixture with rp2040_left_arm turned into a Mega on two chained PCA9685s."""
     data = _load_mapping()
