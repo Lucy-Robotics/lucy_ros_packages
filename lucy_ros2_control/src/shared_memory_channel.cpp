@@ -76,7 +76,6 @@ std::optional<SharedMemoryChannel> SharedMemoryChannel::create(
   channel.actuators_state_->max_actuators = static_cast<uint32_t>(max_actuators);
   std::fill_n(
     channel.actuators_state_->payload, ActuatorSharedState::kArrays * max_actuators, 0.0f);
-  // No feedback until the firmware reports some: read() keeps echoing commands meanwhile.
   std::ranges::fill(channel.actuators_state_->hw_positions(), std::nanf(""));
   return channel;
 }
