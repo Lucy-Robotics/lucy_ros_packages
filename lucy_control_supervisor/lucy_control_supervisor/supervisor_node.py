@@ -32,6 +32,11 @@ from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
 from lucy_control_supervisor.controllers_spawn import torque_command_values
 from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
 from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
+from lucy_control_supervisor.mcu_bridges import board_unreachable
+from lucy_control_supervisor.mcu_bridges import mega_bridges
+from lucy_control_supervisor.mcu_bridges import pca_warning
+from lucy_control_supervisor.mcu_bridges import resolve_bridge_binary
+from lucy_control_supervisor.mcu_bridges import ros2_control_nodes
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy
@@ -42,16 +47,6 @@ from std_msgs.msg import Float64MultiArray
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
 import yaml
-
-from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
-from lucy_control_supervisor.controllers_spawn import torque_command_values
-from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
-from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
-from lucy_control_supervisor.mcu_bridges import board_unreachable
-from lucy_control_supervisor.mcu_bridges import mega_bridges
-from lucy_control_supervisor.mcu_bridges import pca_warning
-from lucy_control_supervisor.mcu_bridges import resolve_bridge_binary
-from lucy_control_supervisor.mcu_bridges import ros2_control_nodes
 
 _WINDOWS_EXEC_SUFFIXES = (".exe", ".bat", ".cmd")
 _PR_SET_PDEATHSIG = 1
