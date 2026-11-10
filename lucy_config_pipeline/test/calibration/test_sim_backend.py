@@ -7,9 +7,9 @@ import math
 from src.calibration.sim_backend import HALF_TURN_TICK
 from src.calibration.sim_backend import MAX_TICK
 from src.calibration.sim_backend import SIM_SERIAL
+from src.calibration.sim_backend import SimBackend
 from src.calibration.sim_backend import SWEEP_PERIOD_S
 from src.calibration.sim_backend import SWEEP_TICKS
-from src.calibration.sim_backend import SimBackend
 
 
 class FakeClock:
