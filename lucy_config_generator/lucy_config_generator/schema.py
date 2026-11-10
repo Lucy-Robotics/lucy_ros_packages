@@ -10,6 +10,7 @@ import math
 import re
 from typing import Any
 
+from lucy_config_generator.motors import motor_spec
 from lucy_config_generator.plug import header_constraint_errors
 from lucy_config_generator.plug import i2c_device_errors
 from lucy_config_generator.plug import pca_channel_errors
@@ -692,6 +693,19 @@ def normalize_board_classes(boards: dict[str, Any]) -> None:
         board["board_class"] = (
             BOARD_CLASS_INTERNAL_I2C_PWM if has_i2c else BOARD_CLASS_INTERNAL_ONLY
         )
+
+
+def _validate_calibration_block(block: Any) -> None:
+    if not isinstance(block, dict):
+        raise ValueError("calibration must be a mapping")
+    serial = block.get("adapter_serial", "")
+    if not isinstance(serial, str):
+        raise ValueError("calibration.adapter_serial must be a string")
+    offsets = block.get("homing_offsets")
+    if not isinstance(offsets, dict) or not all(
+        isinstance(v, int) and not isinstance(v, bool) for v in offsets.values()
+    ):
+        raise ValueError("calibration.homing_offsets must map actuator ids to integers")
 
 
 def validate_hardware_yaml(data: dict[str, Any]) -> None:

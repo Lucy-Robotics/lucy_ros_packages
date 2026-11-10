@@ -71,7 +71,6 @@ def test_mega_board_gets_rust_board_tables():
     assert "config_rp2040_right_arm.yaml" in out
     rs = out["config_rp2040_left_arm.rs"]
     assert "PCA_ADDRESSES: [u8; 2] = [0x40, 0x41];" in rs
-    # Both slots are clamped, only the enabled one (left_a, physical_pin 10) is driven.
     assert "JOINTS_CONFIG: [CommandConfig; 2]" in rs
     assert "limit_max: 3.14159 }, // left_disabled" in rs
     assert "DRIVEN: [(usize, u8); 1] = [\n    (0, 9), // left_a\n];" in rs
