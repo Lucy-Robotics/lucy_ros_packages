@@ -10,6 +10,7 @@ import math
 import re
 from typing import Any
 
+from .motors import motor_spec
 from .safe_strings import check_safe_strings
 
 REQUIRED_ROOT = (
@@ -449,6 +450,14 @@ def _validate_actuator(
             f"actuator {aid}: physical_pin {pin} out of range 1..{board_slots}"
         )
         valid = False
+
+    motor = actuator.get("motor")
+    if motor is not None:
+        try:
+            motor_spec(str(motor))
+        except KeyError:
+            errors.append(f"actuator {aid}: unknown motor {motor!r}")
+            valid = False
 
     servo_type = str(actuator["servo_type"]).strip('"')
     if servo_type not in ("180", "270", "300"):
