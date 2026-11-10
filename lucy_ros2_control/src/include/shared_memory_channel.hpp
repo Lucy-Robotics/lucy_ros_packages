@@ -32,7 +32,7 @@ struct ActuatorSharedState
   std::atomic<uint32_t> link_state{0};
   float payload[0];
 
-  static constexpr std::size_t kArrays = 9;
+  static constexpr std::size_t kArrays = 10;
 
   std::span<float> hw_commands() {return {payload, max_actuators};}
   std::span<float> hw_velocities() {return {payload + max_actuators, max_actuators};}
@@ -43,6 +43,7 @@ struct ActuatorSharedState
   std::span<float> hw_efforts() {return {payload + 6 * max_actuators, max_actuators};}
   std::span<float> hw_currents() {return {payload + 7 * max_actuators, max_actuators};}
   std::span<float> hw_loads() {return {payload + 8 * max_actuators, max_actuators};}
+  std::span<float> hw_voltages() {return {payload + 9 * max_actuators, max_actuators};}
 
 
   std::span<const float> hw_commands() const {return {payload, max_actuators};}
@@ -74,6 +75,10 @@ struct ActuatorSharedState
   std::span<const float> hw_loads() const
   {
     return {payload + 8 * max_actuators, max_actuators};
+  }
+  std::span<const float> hw_voltages() const
+  {
+    return {payload + 9 * max_actuators, max_actuators};
   }
 
   static constexpr std::size_t size_for(std::size_t max_actuators)

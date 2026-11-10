@@ -11,6 +11,7 @@ from __future__ import annotations
 import threading
 import time
 
+from control_msgs.msg import DynamicJointState
 from lucy_msgs.srv import ClientControl
 from lucy_msgs.srv import GetInt
 import rclpy
@@ -29,6 +30,9 @@ CLIENT_COUNT_TOPIC = "/lucy/client_count"
 ACTIVE_CLIENT_TOPIC = "/lucy/active_client"
 GET_CLIENT_COUNT_SERVICE = "/lucy/get_client_count"
 CONTROL_SERVICE = "/lucy/control"
+DYNAMIC_JOINT_STATES_TOPIC = "/dynamic_joint_states"
+MIN_SERVO_VOLTS = 6.0
+NO_SERVO_POWER = "servos are not powered, switch the power supply on"
 
 TICK_PERIOD_S = 1.0
 CLIENT_TTL_S = 10.0  # ~10 missed beats at the 1 Hz client cadence
@@ -61,6 +65,7 @@ class ClientRegistryNode(Node):
         self._last_seen: dict[str, float] = {}
         self._active_client: str = ""
         self._bridge_clients: int | None = None
+        self._servo_powered = True
         self._state_lock = threading.Lock()
 
         self._count_pub = self.create_publisher(Int32, CLIENT_COUNT_TOPIC, _LATCHED_QOS)
@@ -76,6 +81,12 @@ class ClientRegistryNode(Node):
         )
         self.create_subscription(
             Int32, BRIDGE_CLIENT_COUNT_TOPIC, self._on_bridge_client_count, _LATCHED_QOS
+        )
+        self.create_subscription(
+            DynamicJointState,
+            DYNAMIC_JOINT_STATES_TOPIC,
+            self._on_dynamic_joint_states,
+            10,
         )
         self.create_service(GetInt, GET_CLIENT_COUNT_SERVICE, self._on_get_client_count)
         self.create_service(ClientControl, CONTROL_SERVICE, self._on_control)
@@ -149,6 +160,24 @@ class ClientRegistryNode(Node):
             self.get_logger().info(f"Active controller {reason}; control released")
         return gone
 
+    def _on_dynamic_joint_states(self, msg: DynamicJointState) -> None:
+        volts = [
+            value
+            for interfaces in msg.interface_values
+            for name, value in zip(interfaces.interface_names, interfaces.values)
+            if name == "voltage"
+        ]
+        if not volts:
+            return
+        with self._state_lock:
+            self._servo_powered = min(volts) >= MIN_SERVO_VOLTS
+            controller_lost = not self._servo_powered and bool(self._active_client)
+            if controller_lost:
+                self._active_client = ""
+        if controller_lost:
+            self.get_logger().warning("Servo power lost; control released")
+            self._publish_active()
+
     def _on_tick(self) -> None:
         self._drop_silent_since(time.monotonic() - CLIENT_TTL_S, "expired")
         # Republish so volatile subscribers (web via rosbridge) converge without a
@@ -177,13 +206,18 @@ class ClientRegistryNode(Node):
                 req.client_id not in self._last_seen
             )  # a request also proves liveness
             self._last_seen[req.client_id] = time.monotonic()
-            if req.acquire:
+            refused = req.acquire and not self._servo_powered
+            if req.acquire and not refused:
                 self._active_client = req.client_id
-            elif self._active_client == req.client_id:
+            elif not req.acquire and self._active_client == req.client_id:
                 self._active_client = ""
             res.active_client = self._active_client
         if is_new:
             self._publish_count()
+        if refused:
+            res.success = False
+            res.message = NO_SERVO_POWER
+            return res
         self.get_logger().info(
             f"Control {'granted to' if req.acquire else 'released by'} {req.client_id}"
         )
