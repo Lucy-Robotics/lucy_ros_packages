@@ -41,14 +41,18 @@ class MockSpeechAdapter(RobotInterface):
 
     def get_observation(self) -> dict[str, Any]:
         return {
-            "observation.audio.mic": self._mic.copy() if self._mic is not None else None,
+            "observation.audio.mic": (
+                self._mic.copy() if self._mic is not None else None
+            ),
             "observation.speech.user_transcript": self._transcript,
         }
 
     def send_action(self, action: dict[str, Any]) -> dict[str, Any]:
         self._last_reply_text = action.get("action.speech.reply_text") or ""
         ra = action.get("action.speech.reply_audio")
-        self._last_reply_audio = np.array(ra, dtype=np.float32).copy() if ra is not None else None
+        self._last_reply_audio = (
+            np.array(ra, dtype=np.float32).copy() if ra is not None else None
+        )
         return action
 
     def set_mic_chunk(self, pcm: np.ndarray | None) -> None:

@@ -214,9 +214,7 @@ def _parse_v4l2_list_devices(text: str) -> List[Dict[str, Any]]:
         dev_path = line.strip()
         if dev_path.startswith("/dev/video") and current_name:
             driver = (
-                "realsense2"
-                if _is_realsense_v4l2_name(current_name)
-                else "camera_ros"
+                "realsense2" if _is_realsense_v4l2_name(current_name) else "camera_ros"
             )
             devices.append(
                 {

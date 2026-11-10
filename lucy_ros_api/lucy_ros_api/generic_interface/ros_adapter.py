@@ -25,6 +25,7 @@ try:
     from audio_common_msgs.msg import AudioStamped, Audio, AudioInfo, AudioData
     from audio_common_msgs.action import TTS
     from rclpy.action import ActionClient
+
     ROS_AVAILABLE = True
 except ImportError:
     ROS_AVAILABLE = False
@@ -54,7 +55,9 @@ class LucyROSAdapter(RobotInterface):
         node_name: str = "lucy_generic_interface",
     ):
         if not ROS_AVAILABLE:
-            raise RuntimeError("rclpy or audio_common_msgs not available; cannot use LucyROSAdapter")
+            raise RuntimeError(
+                "rclpy or audio_common_msgs not available; cannot use LucyROSAdapter"
+            )
         self._mic_topic = mic_topic
         self._playback_topic = playback_topic
         self._say_action = say_action
@@ -226,7 +229,12 @@ class _LucyROSNode(Node):
         super().__init__(node_name)
         self._mic_cb = mic_callback
         from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-        qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT, history=HistoryPolicy.KEEP_LAST)
+
+        qos = QoSProfile(
+            depth=10,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+        )
         self._mic_sub = self.create_subscription(
             AudioStamped,
             mic_topic,
