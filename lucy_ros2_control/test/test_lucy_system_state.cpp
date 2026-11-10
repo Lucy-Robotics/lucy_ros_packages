@@ -18,18 +18,23 @@
 ///
 /// Drives the plugin directly (on_init -> on_configure -> read) without a
 /// controller_manager, and plays the firmware by writing into the POSIX shm
-/// segment the plugin creates. Covers the per-joint telemetry copied from shm:
-/// temperature, effort, current and load.
+/// segment the plugin creates. Covers the per-joint telemetry copied from shm
+/// (temperature, effort, current and load) and the reaction to a lost firmware
+/// link (logs, read() result, torque written to shm).
 
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
 #include <algorithm>
+#include <chrono>
+#include <cstdarg>
+#include <cstdio>
 #include <limits>
 #include <unordered_map>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -41,13 +46,16 @@
 #include "rclcpp/duration.hpp"
 #include "rclcpp/time.hpp"
 #include "rclcpp_lifecycle/state.hpp"
+#include "rcutils/logging.h"
 
+#include "link_monitor.hpp"
 #include "lucy_system.hpp"
 #include "shared_memory_channel.hpp"
 
 namespace
 {
 using hardware_interface::CallbackReturn;
+using hardware_interface::CommandInterface;
 using hardware_interface::ComponentInfo;
 using hardware_interface::InterfaceInfo;
 using hardware_interface::StateInterface;
@@ -120,10 +128,70 @@ public:
   bool ok() const {return state_ != nullptr;}
   ActuatorSharedState & operator*() {return *state_;}
 
+  /// One firmware tick: publish the link state and bump the heartbeat.
+  void tick(std::uint32_t link_state)
+  {
+    state_->link_state.store(link_state);
+    state_->heartbeat.fetch_add(1);
+  }
+
 private:
   std::size_t size_;
   ActuatorSharedState * state_{nullptr};
 };
+
+/// Records what the plugin logs while in scope.
+class LogCapture
+{
+public:
+  LogCapture()
+  : previous_(rcutils_logging_get_output_handler())
+  {
+    records().clear();
+    rcutils_logging_set_output_handler(&LogCapture::handle);
+  }
+  ~LogCapture()
+  {
+    rcutils_logging_set_output_handler(previous_);
+  }
+  LogCapture(const LogCapture &) = delete;
+  LogCapture & operator=(const LogCapture &) = delete;
+
+  /// Number of records at ``severity`` whose text contains ``text``.
+  long count(int severity, const std::string & text) const
+  {
+    return std::count_if(
+      records().begin(), records().end(),
+      [&](const auto & r) {
+        return r.first == severity && r.second.find(text) != std::string::npos;
+      });
+  }
+
+private:
+  static std::vector<std::pair<int, std::string>> & records()
+  {
+    static std::vector<std::pair<int, std::string>> instance;
+    return instance;
+  }
+
+  static void handle(
+    const rcutils_log_location_t *, int severity, const char *,
+    rcutils_time_point_value_t, const char * format, va_list * args)
+  {
+    char buffer[512];
+    std::vsnprintf(buffer, sizeof(buffer), format, *args);
+    records().emplace_back(severity, buffer);
+  }
+
+  rcutils_logging_output_handler_t previous_;
+};
+
+/// Long enough for the monitor to call the heartbeat frozen.
+void wait_for_heartbeat_timeout()
+{
+  std::this_thread::sleep_for(
+    lucy_ros2_control::LinkMonitor::kHeartbeatTimeout + std::chrono::milliseconds(50));
+}
 
 class LucySystemStateTest : public ::testing::Test
 {
@@ -161,6 +229,7 @@ protected:
       return false;
     }
     states_ = system_.export_state_interfaces();
+    commands_ = system_.export_command_interfaces();
     if (system_.on_configure(rclcpp_lifecycle::State()) != CallbackReturn::SUCCESS) {
       return false;
     }
@@ -199,8 +268,26 @@ protected:
     return system_.read(rclcpp::Time(0, 0), rclcpp::Duration(0, 0));
   }
 
+  hardware_interface::return_type do_write()
+  {
+    return system_.write(rclcpp::Time(0, 0), rclcpp::Duration(0, 0));
+  }
+
+  /// Plays the torque_enable forward controller.
+  void command_torque(const std::string & joint, double value)
+  {
+    for (auto & c : commands_) {
+      if (c.get_prefix_name() == joint && c.get_interface_name() == "torque_enable") {
+        ASSERT_TRUE(c.set_value(value));
+        return;
+      }
+    }
+    FAIL() << "missing command interface " << joint << "/torque_enable";
+  }
+
   lucy_ros2_control::LucySystemHardware system_;
   std::vector<StateInterface> states_;
+  std::vector<CommandInterface> commands_;
   std::string node_name_;
   std::string shm_name_;
   std::size_t joint_count_{0};
@@ -357,4 +444,147 @@ TEST_F(LucySystemStateTest, LoopbackModeStillReportsCurrentAndLoad)
   ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
   EXPECT_FLOAT_EQ(value("j0", "current"), 0.12f);
   EXPECT_FLOAT_EQ(value("j0", "load"), 0.34f);
+}
+
+// ---------------------------------------------------------------------------
+// read()/write(): firmware link
+// ---------------------------------------------------------------------------
+
+TEST_F(LucySystemStateTest, LinkUpIsLoggedOnceOnTransition)
+{
+  ASSERT_TRUE(bring_up({actuated_joint("j0", 0)}));
+  FirmwareMapping fw(shm_name_, joint_count_);
+  ASSERT_TRUE(fw.ok());
+  LogCapture logs;
+
+  fw.tick(0);
+  ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
+  EXPECT_EQ(logs.count(RCUTILS_LOG_SEVERITY_INFO, "link is up"), 0);
+  EXPECT_EQ(logs.count(RCUTILS_LOG_SEVERITY_WARN, "hardware link down"), 1);
+
+  fw.tick(1);
+  ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
+  EXPECT_EQ(logs.count(RCUTILS_LOG_SEVERITY_INFO, "link is up"), 1);
+
+  fw.tick(1);
+  ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
+  EXPECT_EQ(logs.count(RCUTILS_LOG_SEVERITY_INFO, "link is up"), 1);
+}
+
+TEST_F(LucySystemStateTest, LinkWarningIsThrottledAcrossCycles)
+{
+  ASSERT_TRUE(bring_up({actuated_joint("j0", 0)}));
+  FirmwareMapping fw(shm_name_, joint_count_);
+  ASSERT_TRUE(fw.ok());
+  LogCapture logs;
+
+  for (int cycle = 0; cycle < 5; ++cycle) {
+    fw.tick(0);
+    ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
+  }
+  EXPECT_EQ(logs.count(RCUTILS_LOG_SEVERITY_WARN, "hardware link down"), 1);
+}
+
+TEST_F(LucySystemStateTest, FrozenHeartbeatWarnsWithoutFailingRead)
+{
+  ASSERT_TRUE(bring_up({actuated_joint("j0", 0)}));
+  FirmwareMapping fw(shm_name_, joint_count_);
+  ASSERT_TRUE(fw.ok());
+
+  fw.tick(1);
+  ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
+
+  LogCapture logs;
+  wait_for_heartbeat_timeout();
+  EXPECT_EQ(do_read(), hardware_interface::return_type::OK);
+  EXPECT_EQ(logs.count(RCUTILS_LOG_SEVERITY_WARN, "No firmware heartbeat"), 1);
+
+  // The shm stayed mapped: the firmware comes back on the same segment.
+  (*fw).hw_currents()[0] = 0.7f;
+  fw.tick(1);
+  EXPECT_EQ(do_read(), hardware_interface::return_type::OK);
+  EXPECT_EQ(logs.count(RCUTILS_LOG_SEVERITY_INFO, "link is up"), 1);
+  EXPECT_FLOAT_EQ(value("j0", "current"), 0.7f);
+}
+
+TEST_F(LucySystemStateTest, TorqueReachesShmOnHealthyLink)
+{
+  ASSERT_TRUE(bring_up({actuated_joint("j0", 0)}));
+  FirmwareMapping fw(shm_name_, joint_count_);
+  ASSERT_TRUE(fw.ok());
+
+  fw.tick(1);
+  ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
+  command_torque("j0", 1.0);
+  ASSERT_EQ(do_write(), hardware_interface::return_type::OK);
+  EXPECT_EQ((*fw).hw_torque_enabled()[0], 1.0f);
+}
+
+TEST_F(LucySystemStateTest, LinkLossForcesTorqueOffUntilRearmed)
+{
+  ASSERT_TRUE(bring_up({actuated_joint("j0", 0)}));
+  FirmwareMapping fw(shm_name_, joint_count_);
+  ASSERT_TRUE(fw.ok());
+
+  fw.tick(1);
+  ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
+  command_torque("j0", 1.0);
+  ASSERT_EQ(do_write(), hardware_interface::return_type::OK);
+  ASSERT_EQ((*fw).hw_torque_enabled()[0], 1.0f);
+
+  // Outage: the controller keeps requesting torque.
+  fw.tick(0);
+  ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
+  EXPECT_EQ(do_write(), hardware_interface::return_type::OK);
+  EXPECT_EQ((*fw).hw_torque_enabled()[0], 0.0f);
+
+  // Back up: still off, and the operator is told why.
+  LogCapture logs;
+  fw.tick(1);
+  ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
+  ASSERT_EQ(do_write(), hardware_interface::return_type::OK);
+  EXPECT_EQ((*fw).hw_torque_enabled()[0], 0.0f);
+  EXPECT_EQ(logs.count(RCUTILS_LOG_SEVERITY_WARN, "Torque stays off"), 1);
+
+  // Control Robot OFF, then ON.
+  command_torque("j0", 0.0);
+  ASSERT_EQ(do_write(), hardware_interface::return_type::OK);
+  EXPECT_EQ((*fw).hw_torque_enabled()[0], 0.0f);
+  command_torque("j0", 1.0);
+  ASSERT_EQ(do_write(), hardware_interface::return_type::OK);
+  EXPECT_EQ((*fw).hw_torque_enabled()[0], 1.0f);
+}
+
+TEST_F(LucySystemStateTest, FrozenHeartbeatForcesTorqueOff)
+{
+  ASSERT_TRUE(bring_up({actuated_joint("j0", 0)}));
+  FirmwareMapping fw(shm_name_, joint_count_);
+  ASSERT_TRUE(fw.ok());
+
+  fw.tick(1);
+  ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
+  command_torque("j0", 1.0);
+  ASSERT_EQ(do_write(), hardware_interface::return_type::OK);
+  ASSERT_EQ((*fw).hw_torque_enabled()[0], 1.0f);
+
+  wait_for_heartbeat_timeout();
+  ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
+  ASSERT_EQ(do_write(), hardware_interface::return_type::OK);
+  EXPECT_EQ((*fw).hw_torque_enabled()[0], 0.0f);
+}
+
+TEST_F(LucySystemStateTest, LoopbackModeIgnoresTheFirmwareLink)
+{
+  // Mock hardware has no firmware: no warning, and torque is passed through.
+  ASSERT_TRUE(bring_up({actuated_joint("j0", 0)}, {{"publish_actuators", "false"}}));
+  FirmwareMapping fw(shm_name_, joint_count_);
+  ASSERT_TRUE(fw.ok());
+  LogCapture logs;
+
+  wait_for_heartbeat_timeout();
+  ASSERT_EQ(do_read(), hardware_interface::return_type::OK);
+  command_torque("j0", 1.0);
+  ASSERT_EQ(do_write(), hardware_interface::return_type::OK);
+  EXPECT_EQ((*fw).hw_torque_enabled()[0], 1.0f);
+  EXPECT_EQ(logs.count(RCUTILS_LOG_SEVERITY_WARN, "firmware"), 0);
 }

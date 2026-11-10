@@ -147,6 +147,7 @@ TEST(ActuatorSharedStateLayout, HeaderOffsetsMatchFirmware)
   EXPECT_EQ(offsetof(ActuatorSharedState, state_seq), 64u);
   EXPECT_EQ(offsetof(ActuatorSharedState, heartbeat), 128u);
   EXPECT_EQ(offsetof(ActuatorSharedState, max_actuators), 136u);
+  EXPECT_EQ(offsetof(ActuatorSharedState, link_state), 140u);
   EXPECT_EQ(offsetof(ActuatorSharedState, payload), kRustPayloadOffset);
 }
 

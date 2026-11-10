@@ -16,6 +16,7 @@
 #include "include/lucy_system.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <format>
 #include <cctype>
 #include <cerrno>
@@ -35,6 +36,11 @@
 
 namespace lucy_ros2_control
 {
+
+namespace
+{
+constexpr std::chrono::seconds kLinkWarningPeriod{1};
+}  // namespace
 
 LucySystemHardware::~LucySystemHardware()
 {
@@ -238,6 +244,10 @@ hardware_interface::CallbackReturn LucySystemHardware::on_configure(
   }
   RCLCPP_INFO(get_logger(), "SHM initialized");
 
+  // create() zeroed the header: the firmware gets a full timeout to start beating.
+  link_monitor_ = LinkMonitor(LinkMonitor::Clock::now());
+  last_link_warning_ = {};
+
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -258,6 +268,43 @@ hardware_interface::CallbackReturn LucySystemHardware::on_deactivate(
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
+void LucySystemHardware::update_link_health()
+{
+  // Mock hardware has no firmware behind the segment.
+  if (loopback_encoders_) {
+    return;
+  }
+
+  const auto now = LinkMonitor::Clock::now();
+  const LinkHealth previous = link_monitor_.health();
+  const LinkHealth health = link_monitor_.update(
+    shared_memory_channel_->heartbeat(), shared_memory_channel_->link_state(), now);
+
+  if (health == LinkHealth::Healthy) {
+    if (previous != LinkHealth::Healthy) {
+      RCLCPP_INFO(get_logger(), "Firmware link is up.");
+      if (link_monitor_.rearm_required()) {
+        RCLCPP_WARN(
+          get_logger(),
+          "Torque stays off until torque_enable goes to 0 then back to 1 "
+          "(Control Robot OFF, then ON).");
+      }
+    }
+    return;
+  }
+
+  // Not RCLCPP_WARN_THROTTLE: its state is static per call site, so the hardware
+  // components of a multi-board robot would mask each other's warnings.
+  if (health != previous || now - last_link_warning_ >= kLinkWarningPeriod) {
+    last_link_warning_ = now;
+    RCLCPP_WARN(
+      get_logger(), "%s Positions are stale and torque is held off.",
+      health == LinkHealth::FirmwareFrozen ?
+      "No firmware heartbeat: the firmware is hung, stopped or not started yet." :
+      "The firmware reports its hardware link down.");
+  }
+}
+
 hardware_interface::return_type LucySystemHardware::read(
   const rclcpp::Time &, const rclcpp::Duration &)
 {
@@ -268,6 +315,11 @@ hardware_interface::return_type LucySystemHardware::read(
     return hardware_interface::return_type::ERROR;
   }
 
+  // A lost link is not an ERROR: on_error would release the shm, and the firmware
+  // could then never reconnect without a restart.
+  update_link_health();
+
+  // Passive/unmapped joints have no feedback: echo their last command.
   for (std::size_t i = 0; i < hw_commands_.size(); ++i) {
     hw_positions_[i] = hw_commands_[i];
   }
@@ -301,6 +353,11 @@ hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
     return hardware_interface::return_type::ERROR;
   }
 
+  const bool torque_requested = std::any_of(
+    mappings_.begin(), mappings_.end(),
+    [this](const ActuatedJointMapping & m) {return hw_torque_enabled_[m.joint_index] >= 0.5;});
+  const bool torque_allowed = loopback_encoders_ || link_monitor_.torque_allowed(torque_requested);
+
   auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
   for (const auto & m : mappings_) {
     const std::size_t i = m.joint_index;
@@ -308,7 +365,8 @@ hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
       static_cast<float>(actuator_command_to_servo_rad(m, hw_commands_[i]));
     (*access).hw_velocities()[i] = static_cast<float>(hw_velocities_[i]);
     (*access).hw_accelerations()[i] = static_cast<float>(hw_accelerations_[i]);
-    (*access).hw_torque_enabled()[i] = static_cast<float>(hw_torque_enabled_[i]);
+    (*access).hw_torque_enabled()[i] =
+      torque_allowed ? static_cast<float>(hw_torque_enabled_[i]) : 0.0f;
   }
 
   return hardware_interface::return_type::OK;
