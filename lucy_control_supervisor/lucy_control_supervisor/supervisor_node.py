@@ -43,6 +43,16 @@ from std_msgs.msg import String
 from std_srvs.srv import Trigger
 import yaml
 
+from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
+from lucy_control_supervisor.controllers_spawn import torque_command_values
+from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
+from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
+from lucy_control_supervisor.mcu_bridges import board_unreachable
+from lucy_control_supervisor.mcu_bridges import mega_bridges
+from lucy_control_supervisor.mcu_bridges import pca_warning
+from lucy_control_supervisor.mcu_bridges import resolve_bridge_binary
+from lucy_control_supervisor.mcu_bridges import ros2_control_nodes
+
 _WINDOWS_EXEC_SUFFIXES = (".exe", ".bat", ".cmd")
 _PR_SET_PDEATHSIG = 1
 
@@ -493,32 +503,25 @@ class ControlSupervisorNode(Node):
         with self._warnings_lock:
             self._hardware_warnings.clear()
             self._unreachable.clear()
-            self._bridge_boards = boards
+            self._bridge_boards = {
+                f"mcu_bridge_{node}": board for board, node, _, _ in bridges
+            }
         self._publish_hardware_warnings()
-        started = {f"{bridge}_{node}" for node, _ in processes}
-        for name in boards.keys() - started:
-            self._set_unreachable(name, "no serial_id set for it")
-        if not processes:
-            self.get_logger().warning(
-                f"{bridge}: nothing to drive in this robot"
-                + (
-                    " (no board in hardware/active.yaml; with several boards, each "
-                    "needs a serial_id)"
-                    if bridge == "mcu_bridge"
-                    else ""
+        if not bridges:
+            return
+        binary = resolve_bridge_binary(cfg.controllers_yaml.parent)
+        for _, node_name, serial, pcas in bridges:
+            name = f"mcu_bridge_{node_name}"
+            if binary is None:
+                self._set_unreachable(
+                    name,
+                    "its mcu_bridge is not built: run `pixi run firmware-build-linux`",
                 )
-            )
-            return
-        try:
-            executable = bridge_executable(bridge)
-        except LookupError as exc:
-            self.get_logger().error(str(exc))
-            for name in started:
-                self._set_unreachable(name, f"its {bridge} is not built")
-            return
-        for node_name, args in processes:
-            name = f"{bridge}_{node_name}"
-            self.get_logger().info(f"starting {bridge} {' '.join(args)}")
+                continue
+            if not serial:
+                self._set_unreachable(name, "no serial_id set for it")
+                continue
+            self.get_logger().info(f"starting mcu_bridge {node_name} {serial} {pcas}")
             try:
                 popen = subprocess.Popen(
                     [executable, *args],
@@ -529,7 +532,7 @@ class ControlSupervisorNode(Node):
                     preexec_fn=_die_with_parent if sys.platform == "linux" else None,
                 )
             except OSError as e:
-                self._set_unreachable(name, f"its {bridge} failed to start ({e})")
+                self._set_unreachable(name, f"its mcu_bridge failed to start ({e})")
                 continue
             self._track(name, popen, "bridge")
 

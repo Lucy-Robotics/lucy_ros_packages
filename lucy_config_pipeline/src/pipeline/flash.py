@@ -77,28 +77,30 @@ def run_flash_phase(
 
         if is_mega_board(boards_entry):
             try:
-                _flash_mega(board, serial, paths, picotool_timeout_seconds, feedback, row, locks)
+                _flash_mega(
+                    board, serial, paths, picotool_timeout_seconds, feedback, row, locks
+                )
                 flashed.append(board)
                 feedback(
-                    phase='flash',
+                    phase="flash",
                     progress=min(1.0, row + 0.95 / total),
-                    detail=f'flash completed for {board}',
+                    detail=f"flash completed for {board}",
                     board=board,
                 )
             except Exception as exc:
                 failed.append(board)
-                log_error(f'Flash failed for {board}: {exc}')
+                log_error(f"Flash failed for {board}: {exc}")
                 feedback(
-                    phase='flash',
+                    phase="flash",
                     progress=min(1.0, row + 0.9 / total),
-                    detail=f'flash failed for {board}: {exc}',
+                    detail=f"flash failed for {board}: {exc}",
                     board=board,
                 )
             continue
 
-        uf2 = paths.build_dir / f'{board}.uf2'
+        uf2 = paths.build_dir / f"{board}.uf2"
         if not uf2.is_file():
-            uf2 = paths.build_dir / f'{target}.uf2'
+            uf2 = paths.build_dir / f"{target}.uf2"
         if not uf2.is_file():
             msg = f"missing UF2 for flash: {uf2}"
             log_error(f"Flash failed for {board}: {msg}")
@@ -115,7 +117,7 @@ def run_flash_phase(
             feedback(
                 phase="flash",
                 progress=row + 0.1 / total,
-                detail=f'flash {uf2.name}',
+                detail=f"flash {uf2.name}",
                 board=board,
             )
             load_progress = min(1.0, row + 0.25 / total)
@@ -138,7 +140,9 @@ def run_flash_phase(
                 stream_progress=load_progress,
             )
             # UF2 copy / picotool load already reboots into application mode.
-            post_load_delay = float(os.environ.get('LUCY_PIPELINE_FLASH_POST_LOAD_DELAY_SEC', '1'))
+            post_load_delay = float(
+                os.environ.get("LUCY_PIPELINE_FLASH_POST_LOAD_DELAY_SEC", "1")
+            )
             if post_load_delay > 0:
                 time.sleep(post_load_delay)
             feedback(
@@ -154,13 +158,9 @@ def run_flash_phase(
                 )
             # USB-CDC RP2040 images do not publish micro-ROS uptime topics.
             cargo_firmware = (
-                paths.source_dir / 'firmwares' / 'rp2040' / 'Cargo.toml'
+                paths.source_dir / "firmwares" / "rp2040" / "Cargo.toml"
             ).is_file()
-            if (
-                not cargo_firmware
-                and node is not None
-                and uptime_wait_seconds > 0
-            ):
+            if not cargo_firmware and node is not None and uptime_wait_seconds > 0:
                 topic = _uptime_topic(boards_entry)
                 feedback(
                     phase="flash",
@@ -178,11 +178,11 @@ def run_flash_phase(
             link_wait = flash_bridge_link_wait_seconds()
             if bridge_node and link_wait > 0:
                 feedback(
-                    phase='flash',
+                    phase="flash",
                     progress=min(1.0, row + 0.85 / total),
                     detail=(
-                        f'waiting up to {link_wait}s for mcu_bridge link '
-                        f'({bridge_node})'
+                        f"waiting up to {link_wait}s for mcu_bridge link "
+                        f"({bridge_node})"
                     ),
                     board=board,
                 )
@@ -198,9 +198,9 @@ def run_flash_phase(
                         bridge_node, since=flash_started, timeout_seconds=link_wait
                     ):
                         raise TimeoutError(
-                            f'mcu_bridge for {bridge_node} did not restore a live '
-                            f'serial link within {link_wait}s after flash '
-                            '(CRC/resync or stale CDC). Check board USB and bridge logs.'
+                            f"mcu_bridge for {bridge_node} did not restore a live "
+                            f"serial link within {link_wait}s after flash "
+                            "(CRC/resync or stale CDC). Check board USB and bridge logs."
                         )
             flashed.append(board)
             feedback(
@@ -369,17 +369,17 @@ def _board_bridge_node_name(board_id: str) -> str:
 
 
 def _bridge_link_path(node_name: str) -> Path:
-    return Path(f'/tmp/.lucy_mcu_bridge_link.{node_name}')
+    return Path(f"/tmp/.lucy_mcu_bridge_link.{node_name}")
 
 
 def _mcu_bridge_process_running(node_name: str) -> bool:
     """Return True when a host mcu_bridge for ``node_name`` is in the process table."""
     import subprocess
 
-    needle = f'lucy-embedded-firmware-mcu-bridge {node_name}'
+    needle = f"lucy-embedded-firmware-mcu-bridge {node_name}"
     try:
         result = subprocess.run(
-            ['pgrep', '-f', needle],
+            ["pgrep", "-f", needle],
             capture_output=True,
             check=False,
         )
@@ -396,7 +396,7 @@ def _signal_mcu_bridge(node_name: str) -> None:
         return
     try:
         subprocess.run(
-            ['pkill', '-f', f'lucy-embedded-firmware-mcu-bridge {node_name}'],
+            ["pkill", "-f", f"lucy-embedded-firmware-mcu-bridge {node_name}"],
             capture_output=True,
             check=False,
         )
@@ -418,7 +418,7 @@ def _wait_for_bridge_link(
         try:
             if path.is_file():
                 # Prefer stamped content; fall back to mtime.
-                raw = path.read_text(encoding='utf-8').strip().split()
+                raw = path.read_text(encoding="utf-8").strip().split()
                 if raw:
                     try:
                         if float(raw[0]) >= since - 2.0:
@@ -434,7 +434,7 @@ def _wait_for_bridge_link(
 
 
 def flash_bridge_link_wait_seconds() -> float:
-    return float(os.environ.get('LUCY_PIPELINE_FLASH_BRIDGE_LINK_WAIT_SEC', '20'))
+    return float(os.environ.get("LUCY_PIPELINE_FLASH_BRIDGE_LINK_WAIT_SEC", "20"))
 
 
 def _list_bootsel_serials() -> list[str]:
@@ -446,24 +446,24 @@ def _list_bootsel_serials() -> list[str]:
     baked into ``serial_id``, so ``picotool --ser <serial_id>`` misses a board
     that is already sitting in the bootrom.
     """
-    root = Path('/sys/bus/usb/devices')
+    root = Path("/sys/bus/usb/devices")
     if not root.is_dir():
         return []
     found: list[str] = []
     for entry in root.iterdir():
-        vid_path = entry / 'idVendor'
+        vid_path = entry / "idVendor"
         if not vid_path.is_file():
             continue
         try:
-            vid = vid_path.read_text(encoding='utf-8').strip().lower()
-            pid = (entry / 'idProduct').read_text(encoding='utf-8').strip().lower()
-            product = (entry / 'product').read_text(encoding='utf-8').strip().lower()
-            serial = (entry / 'serial').read_text(encoding='utf-8').strip()
+            vid = vid_path.read_text(encoding="utf-8").strip().lower()
+            pid = (entry / "idProduct").read_text(encoding="utf-8").strip().lower()
+            product = (entry / "product").read_text(encoding="utf-8").strip().lower()
+            serial = (entry / "serial").read_text(encoding="utf-8").strip()
         except OSError:
             continue
-        if vid != '2e8a' or pid != '0003':
+        if vid != "2e8a" or pid != "0003":
             continue
-        if 'rp2 boot' not in product and 'bootsel' not in product:
+        if "rp2 boot" not in product and "bootsel" not in product:
             continue
         if serial:
             found.append(serial)
@@ -473,12 +473,12 @@ def _list_bootsel_serials() -> list[str]:
 def _is_bootsel_volume(path: Path) -> bool:
     """Return True when ``path`` is a writable RP2 BOOTSEL mass-storage mount."""
     name = path.name.upper()
-    if name not in {'RPI-RP2', 'RP2350'} and 'RPI-RP2' not in name:
+    if name not in {"RPI-RP2", "RP2350"} and "RPI-RP2" not in name:
         return False
     try:
         if not path.is_dir():
             return False
-        if not ((path / 'INFO_UF2.TXT').is_file() or (path / 'INFO_UF2.txt').is_file()):
+        if not ((path / "INFO_UF2.TXT").is_file() or (path / "INFO_UF2.txt").is_file()):
             return False
         return os.access(path, os.W_OK)
     except OSError:
@@ -491,7 +491,7 @@ def _find_rpi_rp2_mounts() -> list[Path]:
     seen: set[Path] = set()
     mount_points: list[Path] = []
     try:
-        with open('/proc/mounts', encoding='utf-8') as fh:
+        with open("/proc/mounts", encoding="utf-8") as fh:
             for line in fh:
                 parts = line.split()
                 if len(parts) < 2:
@@ -500,8 +500,8 @@ def _find_rpi_rp2_mounts() -> list[Path]:
     except OSError:
         mount_points = []
     for root in (
-        Path('/run/media') / os.environ.get('USER', ''),
-        Path('/media') / os.environ.get('USER', ''),
+        Path("/run/media") / os.environ.get("USER", ""),
+        Path("/media") / os.environ.get("USER", ""),
     ):
         if root.is_dir():
             try:
@@ -524,11 +524,11 @@ def _find_rpi_rp2_mounts() -> list[Path]:
 
 def _find_rpi_rp2_block_devices() -> list[Path]:
     """Block devices labelled ``RPI-RP2`` / ``RP2350`` (may be unmounted)."""
-    by_label = Path('/dev/disk/by-label')
+    by_label = Path("/dev/disk/by-label")
     found: list[Path] = []
     if not by_label.is_dir():
         return found
-    for name in ('RPI-RP2', 'RP2350'):
+    for name in ("RPI-RP2", "RP2350"):
         link = by_label / name
         if not link.exists():
             continue
@@ -543,19 +543,19 @@ def _udisksctl_mount(device: Path) -> Path | None:
     """Mount ``device`` via udisksctl (no sudo). Return the mount point."""
     import shutil
 
-    if shutil.which('udisksctl') is None:
+    if shutil.which("udisksctl") is None:
         return None
     result = subprocess.run(
-        ['udisksctl', 'mount', '-b', str(device)],
+        ["udisksctl", "mount", "-b", str(device)],
         capture_output=True,
         text=True,
         check=False,
     )
     # "Mounted /dev/sdc1 at /run/media/USER/RPI-RP2" or already-mounted text.
-    combined = f'{result.stdout}\n{result.stderr}'
-    for token in combined.replace('`', ' ').split():
-        if 'RPI-RP2' in token or 'RP2350' in token or token.startswith('/run/media'):
-            path = Path(token.rstrip('.,;'))
+    combined = f"{result.stdout}\n{result.stderr}"
+    for token in combined.replace("`", " ").split():
+        if "RPI-RP2" in token or "RP2350" in token or token.startswith("/run/media"):
+            path = Path(token.rstrip(".,;"))
             if _is_bootsel_volume(path):
                 return path
     mounts = _find_rpi_rp2_mounts()
@@ -576,9 +576,9 @@ def _ensure_bootsel_mounts(
     if not devices:
         return []
     feedback(
-        phase='flash',
+        phase="flash",
         progress=stream_progress,
-        detail=f'mounting BOOTSEL volume {devices[0]} via udisksctl (no sudo)',
+        detail=f"mounting BOOTSEL volume {devices[0]} via udisksctl (no sudo)",
         board=board,
     )
     mounted = _udisksctl_mount(devices[0])
@@ -597,9 +597,9 @@ def _copy_uf2_to_bootsel_volume(
 ) -> None:
     dest = mount / uf2.name
     feedback(
-        phase='flash',
+        phase="flash",
         progress=stream_progress,
-        detail=f'copy {uf2.name} → {mount} (BOOTSEL, no sudo)',
+        detail=f"copy {uf2.name} → {mount} (BOOTSEL, no sudo)",
         board=board,
     )
     # Binary copy; the volume remounts / disappears once the UF2 is accepted.
@@ -608,9 +608,9 @@ def _copy_uf2_to_bootsel_volume(
         dest.write_bytes(data)
     except OSError as exc:
         # EIO / disappearing mount after the write is common and means success.
-        if getattr(exc, 'errno', None) not in {5, 2}:  # EIO, ENOENT
+        if getattr(exc, "errno", None) not in {5, 2}:  # EIO, ENOENT
             raise RuntimeError(
-                f'failed to copy {uf2} onto BOOTSEL volume {mount}: {exc}'
+                f"failed to copy {uf2} onto BOOTSEL volume {mount}: {exc}"
             ) from exc
 
 
@@ -618,49 +618,49 @@ def _picotool_bin() -> str:
     """Resolve picotool on PATH / under ``$CONDA_PREFIX/bin``."""
     import shutil
 
-    found = shutil.which('picotool')
+    found = shutil.which("picotool")
     if found:
         return found
-    prefix = (os.environ.get('CONDA_PREFIX') or '').strip()
+    prefix = (os.environ.get("CONDA_PREFIX") or "").strip()
     if prefix:
-        candidate = Path(prefix) / 'bin' / 'picotool'
+        candidate = Path(prefix) / "bin" / "picotool"
         if candidate.is_file():
             return str(candidate)
     raise FileNotFoundError(
-        'picotool not found on PATH — launch Lucy from the Pixi env '
-        '(pixi run …) after `pixi run firmware-setup`'
+        "picotool not found on PATH — launch Lucy from the Pixi env "
+        "(pixi run …) after `pixi run firmware-setup`"
     )
 
 
 def _picotool_env() -> dict[str, str]:
     """Env for picotool: Pixi ``lib/`` must be on ``LD_LIBRARY_PATH`` (libusb)."""
     env = dict(os.environ)
-    prefix = (env.get('CONDA_PREFIX') or '').strip()
+    prefix = (env.get("CONDA_PREFIX") or "").strip()
     if not prefix:
         return env
-    lib = str(Path(prefix) / 'lib')
-    bin_dir = str(Path(prefix) / 'bin')
-    path = env.get('PATH', '')
+    lib = str(Path(prefix) / "lib")
+    bin_dir = str(Path(prefix) / "bin")
+    path = env.get("PATH", "")
     if path != bin_dir and not path.startswith(bin_dir + os.pathsep):
-        env['PATH'] = f'{bin_dir}{os.pathsep}{path}' if path else bin_dir
-    ld = env.get('LD_LIBRARY_PATH', '')
+        env["PATH"] = f"{bin_dir}{os.pathsep}{path}" if path else bin_dir
+    ld = env.get("LD_LIBRARY_PATH", "")
     if ld != lib and not ld.startswith(lib + os.pathsep):
-        env['LD_LIBRARY_PATH'] = f'{lib}{os.pathsep}{ld}' if ld else lib
+        env["LD_LIBRARY_PATH"] = f"{lib}{os.pathsep}{ld}" if ld else lib
     return env
 
 
 # Written to the board CDC port when raw USB (picotool) is not writable.
 # Must match firmwares/rp2040 ``BOOTSEL_MAGIC``.
-_BOOTSEL_CDC_MAGIC = b'LUCYBOOTSEL\n'
+_BOOTSEL_CDC_MAGIC = b"LUCYBOOTSEL\n"
 
 
 def _usb_udev_hint() -> str:
     return (
-        'USB device node is not writable for picotool (needs MODE 0666 / uaccess). '
-        'Run once: `pixi run setup-udev` (or `pixi run firmware-setup`), '
-        'unplug/replug the board, then retry — no sudo at flash time. '
-        'Or hold BOOTSEL while plugging once; newer firmware accepts CDC '
-        '`LUCYBOOTSEL\\n` when the tty is writable (dialout / MODE 0666).'
+        "USB device node is not writable for picotool (needs MODE 0666 / uaccess). "
+        "Run once: `pixi run setup-udev` (or `pixi run firmware-setup`), "
+        "unplug/replug the board, then retry — no sudo at flash time. "
+        "Or hold BOOTSEL while plugging once; newer firmware accepts CDC "
+        "`LUCYBOOTSEL\\n` when the tty is writable (dialout / MODE 0666)."
     )
 
 
@@ -678,7 +678,7 @@ def _try_make_node_writable(node: Path) -> bool:
         pass
     try:
         result = subprocess.run(
-            ['sudo', '-n', 'chmod', '0666', str(node)],
+            ["sudo", "-n", "chmod", "0666", str(node)],
             capture_output=True,
             text=True,
             check=False,
@@ -702,7 +702,7 @@ class _UsbLoc:
 
     @property
     def node(self) -> Path:
-        return Path(f'/dev/bus/usb/{self.bus:03d}/{self.address:03d}')
+        return Path(f"/dev/bus/usb/{self.bus:03d}/{self.address:03d}")
 
     @property
     def writable(self) -> bool:
@@ -717,23 +717,23 @@ def _find_usb_loc_by_serial(serial: str) -> _UsbLoc | None:
     want = serial.strip()
     if not want:
         return None
-    root = Path('/sys/bus/usb/devices')
+    root = Path("/sys/bus/usb/devices")
     if not root.is_dir():
         return None
     for entry in root.iterdir():
-        vid_path = entry / 'idVendor'
+        vid_path = entry / "idVendor"
         if not vid_path.is_file():
             continue
         try:
-            vid = vid_path.read_text(encoding='utf-8').strip().lower()
-            if vid != '2e8a':
+            vid = vid_path.read_text(encoding="utf-8").strip().lower()
+            if vid != "2e8a":
                 continue
-            ser = (entry / 'serial').read_text(encoding='utf-8').strip()
+            ser = (entry / "serial").read_text(encoding="utf-8").strip()
             if ser != want:
                 continue
-            bus = int((entry / 'busnum').read_text(encoding='utf-8').strip())
-            addr = int((entry / 'devnum').read_text(encoding='utf-8').strip())
-            product = (entry / 'product').read_text(encoding='utf-8').strip()
+            bus = int((entry / "busnum").read_text(encoding="utf-8").strip())
+            addr = int((entry / "devnum").read_text(encoding="utf-8").strip())
+            product = (entry / "product").read_text(encoding="utf-8").strip()
         except (OSError, ValueError):
             continue
         return _UsbLoc(bus=bus, address=addr, serial=ser, product=product)
@@ -762,7 +762,7 @@ def _flash_uf2(
         if len(mounts) > 1 and len(bootsel_serials) > 1:
             raise RuntimeError(
                 f'multiple BOOTSEL volumes ({", ".join(str(m) for m in mounts)}); '
-                'unplug other boards and retry flash'
+                "unplug other boards and retry flash"
             )
         _copy_uf2_to_bootsel_volume(
             uf2=uf2,
@@ -778,9 +778,9 @@ def _flash_uf2(
         devices = _find_rpi_rp2_block_devices()
         if devices:
             feedback(
-                phase='flash',
+                phase="flash",
                 progress=stream_progress,
-                detail=f'BOOTSEL disk {devices[0]} present; mounting via udisksctl',
+                detail=f"BOOTSEL disk {devices[0]} present; mounting via udisksctl",
                 board=board,
             )
             mounted = _udisksctl_mount(devices[0])
@@ -797,8 +797,8 @@ def _flash_uf2(
         if boot_ser is None:
             raise RuntimeError(
                 f'multiple BOOTSEL boards ({", ".join(bootsel_serials)}) and no '
-                'writable RPI-RP2 mount — unplug extras, or open the RPI-RP2 volume '
-                'in the file manager, then retry'
+                "writable RPI-RP2 mount — unplug extras, or open the RPI-RP2 volume "
+                "in the file manager, then retry"
             )
         loc = _find_usb_loc_by_serial(boot_ser)
         _run_picotool_load_bootsel(
@@ -832,7 +832,7 @@ def _find_cdc_tty_for_serial(serial_id: str) -> Path | None:
     needle = serial_id.strip().lower()
     if not needle:
         return None
-    by_id = Path('/dev/serial/by-id')
+    by_id = Path("/dev/serial/by-id")
     if by_id.is_dir():
         for entry in sorted(by_id.iterdir()):
             if needle not in entry.name.lower():
@@ -857,18 +857,18 @@ def _serial_request_bootsel(
     tty = _find_cdc_tty_for_serial(configured_serial)
     if tty is None:
         raise RuntimeError(
-            f'no CDC tty for serial_id={configured_serial} '
-            '(board must be running application firmware with USB serial)'
+            f"no CDC tty for serial_id={configured_serial} "
+            "(board must be running application firmware with USB serial)"
         )
     if not _try_make_node_writable(tty):
         raise RuntimeError(
-            f'CDC {tty} is not writable — add your user to dialout, or chmod the tty'
+            f"CDC {tty} is not writable — add your user to dialout, or chmod the tty"
         )
     feedback(
-        phase='flash',
+        phase="flash",
         progress=stream_progress,
         detail=(
-            f'CDC force BOOTSEL via {tty} (write LUCYBOOTSEL; no picotool USB access)'
+            f"CDC force BOOTSEL via {tty} (write LUCYBOOTSEL; no picotool USB access)"
         ),
         board=board,
     )
@@ -877,13 +877,13 @@ def _serial_request_bootsel(
         fd = os.open(str(tty), os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
     except OSError as exc:
         raise RuntimeError(
-            f'cannot open CDC {tty} for BOOTSEL request: {exc} '
-            '(stop anything holding the serial port, then retry)'
+            f"cannot open CDC {tty} for BOOTSEL request: {exc} "
+            "(stop anything holding the serial port, then retry)"
         ) from exc
     try:
         os.write(fd, _BOOTSEL_CDC_MAGIC)
     except OSError as exc:
-        raise RuntimeError(f'failed writing BOOTSEL magic to {tty}: {exc}') from exc
+        raise RuntimeError(f"failed writing BOOTSEL magic to {tty}: {exc}") from exc
     finally:
         os.close(fd)
 
@@ -915,9 +915,9 @@ def _wait_bootsel_volume_and_copy(
         time.sleep(0.4)
 
     raise RuntimeError(
-        f'forced {board} into BOOTSEL but no writable RPI-RP2 volume appeared within '
-        f'{timeout_seconds}s — open the volume in the file manager and retry, or check '
-        'udisks automount.'
+        f"forced {board} into BOOTSEL but no writable RPI-RP2 volume appeared within "
+        f"{timeout_seconds}s — open the volume in the file manager and retry, or check "
+        "udisks automount."
     )
 
 
@@ -935,8 +935,8 @@ def _force_reflash_running_board(
     loc = _find_usb_loc_by_serial(configured_serial)
     if loc is None:
         raise RuntimeError(
-            f'no USB device with serial_id={configured_serial} — is the board plugged '
-            'in and running Lucy firmware (or in BOOTSEL)?'
+            f"no USB device with serial_id={configured_serial} — is the board plugged "
+            "in and running Lucy firmware (or in BOOTSEL)?"
         )
 
     # Session chmod may unlock picotool after replug lost udev MODE bits.
@@ -944,11 +944,11 @@ def _force_reflash_running_board(
     if usb_ok:
         picotool = _picotool_bin()
         feedback(
-            phase='flash',
+            phase="flash",
             progress=stream_progress,
             detail=(
-                f'picotool reboot --bus {loc.bus} --address {loc.address} -f -u '
-                f'(force BOOTSEL for {configured_serial}, no sudo)'
+                f"picotool reboot --bus {loc.bus} --address {loc.address} -f -u "
+                f"(force BOOTSEL for {configured_serial}, no sudo)"
             ),
             board=board,
         )
@@ -956,13 +956,17 @@ def _force_reflash_running_board(
             # picotool v2.x: device-selection (--bus/--address/--ser) MUST come
             # before -f/-u or the CLI rejects them as "unexpected option".
             _run_command(
-                phase='flash',
+                phase="flash",
                 board=board,
                 cmd=[
-                    picotool, 'reboot',
-                    '--bus', str(loc.bus),
-                    '--address', str(loc.address),
-                    '-f', '-u',
+                    picotool,
+                    "reboot",
+                    "--bus",
+                    str(loc.bus),
+                    "--address",
+                    str(loc.address),
+                    "-f",
+                    "-u",
                 ],
                 cwd=cwd,
                 timeout_seconds=min(30, timeout_seconds),
@@ -971,13 +975,13 @@ def _force_reflash_running_board(
                 env=_picotool_env(),
             )
         except Exception as exc:
-            hint = ''
+            hint = ""
             err = str(exc).lower()
-            if 'permission' in err or 'accessible' in err:
-                hint = ' ' + _usb_udev_hint()
+            if "permission" in err or "accessible" in err:
+                hint = " " + _usb_udev_hint()
             raise RuntimeError(
-                f'picotool force-reboot failed for {board} ({configured_serial}): '
-                f'{exc}.{hint}'
+                f"picotool force-reboot failed for {board} ({configured_serial}): "
+                f"{exc}.{hint}"
             ) from exc
     else:
         # Raw USB not writable (missing udev / permissions): try CDC magic.
@@ -990,9 +994,9 @@ def _force_reflash_running_board(
             )
         except Exception as cdc_exc:
             raise RuntimeError(
-                f'cannot force-flash {board} at {loc.node} ({loc.product}): '
-                f'{_usb_udev_hint()} '
-                f'(CDC fallback also failed: {cdc_exc})'
+                f"cannot force-flash {board} at {loc.node} ({loc.product}): "
+                f"{_usb_udev_hint()} "
+                f"(CDC fallback also failed: {cdc_exc})"
             ) from cdc_exc
 
     _wait_bootsel_volume_and_copy(
@@ -1020,21 +1024,25 @@ def _run_picotool_load_bootsel(
     if loc is not None:
         if not loc.writable:
             raise RuntimeError(
-                f'BOOTSEL device {loc.node} not writable: ' + _usb_udev_hint()
+                f"BOOTSEL device {loc.node} not writable: " + _usb_udev_hint()
             )
         # Filename before device-selection is fine; keep selection before any -f.
         cmd = [
-            picotool, 'load', str(uf2),
-            '--bus', str(loc.bus),
-            '--address', str(loc.address),
+            picotool,
+            "load",
+            str(uf2),
+            "--bus",
+            str(loc.bus),
+            "--address",
+            str(loc.address),
         ]
-        detail = f'picotool load --bus {loc.bus} --address {loc.address} (BOOTSEL)'
+        detail = f"picotool load --bus {loc.bus} --address {loc.address} (BOOTSEL)"
     else:
-        cmd = [picotool, 'load', str(uf2), '--ser', serial]
-        detail = f'picotool load --ser {serial} (BOOTSEL)'
-    feedback(phase='flash', progress=stream_progress, detail=detail, board=board)
+        cmd = [picotool, "load", str(uf2), "--ser", serial]
+        detail = f"picotool load --ser {serial} (BOOTSEL)"
+    feedback(phase="flash", progress=stream_progress, detail=detail, board=board)
     _run_command(
-        phase='flash',
+        phase="flash",
         board=board,
         cmd=cmd,
         cwd=cwd,
@@ -1100,7 +1108,7 @@ def flash_picotool_timeout_seconds() -> int:
 
 def flash_usb_wait_seconds() -> int:
     # UF2 reboot + CDC re-enum is often >5s on USB hubs.
-    return int(os.environ.get('LUCY_PIPELINE_FLASH_WAIT_SEC', '15'))
+    return int(os.environ.get("LUCY_PIPELINE_FLASH_WAIT_SEC", "15"))
 
 
 def flash_uptime_wait_seconds() -> int:

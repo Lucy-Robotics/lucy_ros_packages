@@ -31,8 +31,8 @@ def test_yaml_parser_line_column_are_exposed():
 
 
 def test_board_duplicate_sensor_physical_pin_message_is_mapped():
-    s = format_error_line('board rp2040_left_arm: duplicate sensor physical_pin')
+    s = format_error_line("board rp2040_left_arm: duplicate sensor physical_pin")
     o = json.loads(s)
-    assert o['field'] == 'boards.rp2040_left_arm.duplicate'
-    assert o['field_path'] == ['boards', 'rp2040_left_arm', 'duplicate']
-    assert o['message'] == 'duplicate sensor physical_pin'
+    assert o["field"] == "boards.rp2040_left_arm.duplicate"
+    assert o["field_path"] == ["boards", "rp2040_left_arm", "duplicate"]
+    assert o["message"] == "duplicate sensor physical_pin"

@@ -209,22 +209,34 @@ def generate_launch_description():
     )
 
     hardware_discovery_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([
-            PathJoinSubstitution([
-                FindPackageShare('lucy_hardware_discovery'),
-                'launch',
-                'hardware_discovery.launch.py',
-            ])
-        ]),
+        PythonLaunchDescriptionSource(
+            [
+                PathJoinSubstitution(
+                    [
+                        FindPackageShare("lucy_hardware_discovery"),
+                        "launch",
+                        "hardware_discovery.launch.py",
+                    ]
+                )
+            ]
+        ),
     )
 
-    kinematics = Node(package='lucy_kinematics', executable='kinematics_node', output='screen')
+    kinematics = Node(
+        package="lucy_kinematics", executable="kinematics_node", output="screen"
+    )
 
-    return LaunchDescription([
-        robot_package_arg,
-        config_dir_arg,
-        rosbridge,
-        config_pipeline_launch,
-        hardware_discovery_launch,
-        kinematics,
-    ])
+    return LaunchDescription(
+        [
+            robot_package_arg,
+            rosbridge_port_arg,
+            config_dir_arg,
+            mode_arg,
+            OpaqueFunction(function=_select_rosbridge_port),
+            OpaqueFunction(function=_derive_real),
+            rosbridge,
+            config_pipeline_launch,
+            hardware_discovery_launch,
+            kinematics,
+        ]
+    )

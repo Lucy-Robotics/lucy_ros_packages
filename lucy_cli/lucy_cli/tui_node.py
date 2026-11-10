@@ -456,13 +456,16 @@ def parse_actuators_yaml(yaml_string: str) -> dict:
         boards, actuators_list = doc.get("boards", {}), doc.get("actuators", [])
         parsed_actuators = {}
         for board_id, bdef in boards.items():
-            if not isinstance(bdef, dict): continue
-            ctrl_name = bdef.get('controller', {}).get('name')
-            if not ctrl_name: continue
+            if not isinstance(bdef, dict):
+                continue
+            ctrl_name = bdef.get("controller", {}).get("name")
+            if not ctrl_name:
+                continue
             # YAML list order on this board (== derived virtual_pin 0..N-1).
             board_actuators = [
-                a for a in actuators_list
-                if isinstance(a, dict) and a.get('board') == board_id
+                a
+                for a in actuators_list
+                if isinstance(a, dict) and a.get("board") == board_id
             ]
             joints = []
             for actuator in board_actuators:
@@ -517,13 +520,16 @@ def parse_sensors_yaml(yaml_string: str) -> dict:
         boards, sensors_list = doc.get("boards", {}), doc.get("sensors", [])
         parsed_sensors = {}
         for board_id, bdef in boards.items():
-            if not isinstance(bdef, dict): continue
-            topic_sensor = bdef.get('topic_sensors', {})
-            if not topic_sensor: continue
+            if not isinstance(bdef, dict):
+                continue
+            topic_sensor = bdef.get("topic_sensors", {})
+            if not topic_sensor:
+                continue
             # YAML list order on this board (== derived virtual_pin 0..N-1).
             board_sensors = [
-                s for s in sensors_list
-                if isinstance(s, dict) and s.get('board') == board_id
+                s
+                for s in sensors_list
+                if isinstance(s, dict) and s.get("board") == board_id
             ]
             sensors = []
             for sensor in board_sensors:
