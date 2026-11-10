@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>lucy_ros_api</name>
+  <version>1.0.0</version>
+  <description>LUCY ROS interface: API specification and optional bridge for external clients (AI models, controllers, applications)</description>
+
+  <maintainer email="contact@sentience-robotics.fr">Sentience Robotics Team</maintainer>
+  <license>GPL-3.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>audio_common_msgs</depend>
+
+  <exec_depend>python3-numpy</exec_depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

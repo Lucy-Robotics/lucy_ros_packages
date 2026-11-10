@@ -61,7 +61,7 @@ using hardware_interface::InterfaceInfo;
 using hardware_interface::StateInterface;
 
 const std::vector<std::string> kExpectedStateInterfaces = {
-  hardware_interface::HW_IF_POSITION, "temperature", "current", "load",
+  hardware_interface::HW_IF_POSITION, "temperature", "current", "load", "voltage",
   hardware_interface::HW_IF_EFFORT};
 
 InterfaceInfo interface(const std::string & name)

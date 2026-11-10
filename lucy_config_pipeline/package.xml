@@ -12,6 +12,7 @@
   <depend>std_msgs</depend>
   <depend>rcl_interfaces</depend>
   <depend>lucy_msgs</depend>
+  <depend>control_msgs</depend>
   <depend>ament_index_python</depend>
   <depend>python3-yaml</depend>
   <depend>xacro</depend>

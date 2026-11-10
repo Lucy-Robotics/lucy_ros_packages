@@ -41,7 +41,7 @@ namespace
 {
 /// Mirrors ``SHM_PAYLOAD_OFFSET`` / ``SHM_ARRAYS`` in embed-rs ``crates/core/src/data.rs``.
 constexpr std::size_t kRustPayloadOffset = 144;
-constexpr std::size_t kRustArrays = 9;
+constexpr std::size_t kRustArrays = 10;
 /// ``size_of::<f32>()``: stride of the payload arrays.
 constexpr std::size_t kRustElementSize = 4;
 
@@ -190,6 +190,12 @@ TEST_F(ActuatorSharedStateSpans, CurrentsAndLoadsSitAtSlots7And8)
   EXPECT_EQ(state_->hw_loads().size(), kN);
 }
 
+TEST_F(ActuatorSharedStateSpans, VoltagesSitAtSlot9)
+{
+  EXPECT_EQ(state_->hw_voltages().data(), state_->payload + 9 * kN);
+  EXPECT_EQ(state_->hw_voltages().size(), kN);
+}
+
 TEST_F(ActuatorSharedStateSpans, ConstAccessorsMatchMutable)
 {
   const ActuatorSharedState & cstate = *state_;
@@ -211,6 +217,7 @@ TEST_F(ActuatorSharedStateSpans, ArraysAreContiguousAndDisjoint)
     state_->hw_efforts().data(),
     state_->hw_currents().data(),
     state_->hw_loads().data(),
+    state_->hw_voltages().data(),
   };
   static_assert(std::size(expected) == ActuatorSharedState::kArrays);
   for (std::size_t slot = 0; slot < ActuatorSharedState::kArrays; ++slot) {
