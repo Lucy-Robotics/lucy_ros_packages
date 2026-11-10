@@ -19,7 +19,7 @@ from .constants import PRESET_NAME
 from .constants import REVIEW
 from .constants import SessionError
 from .constants import TEMPLATE_PRESET
-from ...config_store import atomic_write_text
+from ...config_store.io import atomic_write_text
 
 
 class SessionApplyMixin:
