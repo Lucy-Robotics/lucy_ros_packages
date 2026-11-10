@@ -1,6 +1,7 @@
 # Request
 string command                # start, capture_mid, begin_joint, accept_joint, apply, cancel,
-                              # resume, restore, verify_drive, back_to_review, finish, select_adapter
+                              # resume, restore, verify_drive, back_to_review, finish,
+                              # select_adapter, adopt
 string argument               # joint name, preset name, adapter serial, or "override"
 ---
 # Response

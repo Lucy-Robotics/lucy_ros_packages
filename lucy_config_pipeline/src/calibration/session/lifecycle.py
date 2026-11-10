@@ -30,9 +30,8 @@ class SessionLifecycleMixin:
     def _capture_mid(self, _argument: str) -> None:
         self._need_phase(MID_POSE)
         self._firmware = self._call_firmware(self._backend.status)
-        checks = self.health()
-        if not all(c["ok"] for c in checks if c["required"]):
-            failing = [c["label"] for c in checks if c["required"] and not c["ok"]]
+        failing = self.failing_checks()
+        if failing:
             raise SessionError("unhealthy", f"Not ready: {'; '.join(failing)}")
 
         serial = self._firmware["open_serial"]
@@ -49,7 +48,9 @@ class SessionLifecycleMixin:
                 "Lost the firmware during homing: restore or resume.",
             ) from e
 
-        if not reply.get("ok"):
+        try:
+            self._call(reply)
+        except SessionError:
             if reply.get("restored", True):
                 self._store.clear_journal()
             else:
@@ -58,14 +59,11 @@ class SessionLifecycleMixin:
                     old,
                     "Homing failed and the previous values could not be restored.",
                 )
-            raise SessionError(
-                str(reply.get("error") or "firmware_error"), self._explain(reply)
-            )
+            raise
 
         self._serial = serial
         self._old = reply["old"]
         self._new = reply["new"]
-        self._accepted = {}
         self._mid_check_in = MID_CHECK_POLLS
         self._phase = JOINTS
         self._record_next()

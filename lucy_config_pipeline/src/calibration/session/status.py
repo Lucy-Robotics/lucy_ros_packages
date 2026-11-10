@@ -79,9 +79,8 @@ class SessionStatusMixin:
                     "from the mid pose. Return it to the mid pose and sweep again."
                 )
         self._last_tick = tick
-        if self._range is None:
-            self._range = [tick, tick]
-        self._range = [min(self._range[0], tick), max(self._range[1], tick)]
+        lo, hi = self._range or (tick, tick)
+        self._range = [min(lo, tick), max(hi, tick)]
 
     def health(self) -> list[dict]:
         """Every check, so the panel can show what to fix."""
@@ -127,8 +126,12 @@ class SessionStatusMixin:
             for id_, required, ok, label in checks
         ]
 
+    def failing_checks(self) -> list[str]:
+        """Labels of every required check that is not ok."""
+        return [c["label"] for c in self.health() if c["required"] and not c["ok"]]
+
     def healthy(self) -> bool:
-        return all(c["ok"] for c in self.health() if c["required"])
+        return not self.failing_checks()
 
     def status(self) -> dict:
         return {
