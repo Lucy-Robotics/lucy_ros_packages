@@ -12,9 +12,9 @@ MIN_PULSE_US = 500
 MAX_PULSE_US = 2500
 
 _AMPLITUDE = {
-    '180': math.pi,
-    '270': 1.5 * math.pi,
-    '300': 5.0 * math.pi / 3.0,
+    "180": math.pi,
+    "270": 1.5 * math.pi,
+    "300": 5.0 * math.pi / 3.0,
 }
 
 
@@ -29,4 +29,4 @@ def amplitude_rad(servo_type: str) -> float:
     try:
         return _AMPLITUDE[key]
     except KeyError as exc:
-        raise ValueError(f'invalid servo_type {servo_type!r}') from exc
+        raise ValueError(f"invalid servo_type {servo_type!r}") from exc

@@ -1,4 +1,5 @@
 """Unit tests for generic interface (base, mock adapter). No ROS required."""
+
 import sys
 from pathlib import Path
 
@@ -47,11 +48,14 @@ def test_mock_adapter_get_observation():
 
 def test_mock_adapter_send_action():
     import numpy as np
+
     adapter = MockSpeechAdapter()
-    adapter.send_action({
-        "action.speech.reply_text": "reply",
-        "action.speech.reply_audio": np.array([0.1, 0.2], dtype=np.float32),
-    })
+    adapter.send_action(
+        {
+            "action.speech.reply_text": "reply",
+            "action.speech.reply_audio": np.array([0.1, 0.2], dtype=np.float32),
+        }
+    )
     assert adapter.get_last_reply_text() == "reply"
     audio = adapter.get_last_reply_audio()
     assert audio is not None

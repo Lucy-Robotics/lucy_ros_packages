@@ -29,17 +29,17 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_BOARD_ID = re.compile(r'^rp2040_[a-z][a-z0-9_]*$')
+_BOARD_ID = re.compile(r"^rp2040_[a-z][a-z0-9_]*$")
 
-LINUX = 'linux'
-MCU_BRIDGE = 'mcu_bridge'
+LINUX = "linux"
+MCU_BRIDGE = "mcu_bridge"
 
 
 def node_name(board_id: str) -> str | None:
     """Suffix after ``rp2040_``. Same rule as ``derive_ros2_node_name``."""
     if not _BOARD_ID.fullmatch(board_id):
         return None
-    return board_id[len('rp2040_'):]
+    return board_id[len("rp2040_") :]
 
 
 def _u16(value: Any) -> int | None:
@@ -50,7 +50,7 @@ def _u16(value: Any) -> int | None:
     elif isinstance(value, str):
         text = value.strip().lower()
         try:
-            number = int(text, 16) if text.startswith('0x') else int(text, 10)
+            number = int(text, 16) if text.startswith("0x") else int(text, 10)
         except ValueError:
             return None
     else:
@@ -62,19 +62,19 @@ def _u16(value: Any) -> int | None:
 
 def shown_device(node: str, host: dict[str, Any], serial: str) -> str:
     """Label the person can match to a cable. The serial distinguishes two Picos."""
-    device = str(host.get('device') or '').strip()
+    device = str(host.get("device") or "").strip()
     name = device or node
     if serial and serial not in name:
-        return f'{name} ({serial})'
+        return f"{name} ({serial})"
     return name
 
 
 def _usb_ids(host: dict[str, Any]) -> tuple[int, int] | None:
-    usb = host.get('usb')
+    usb = host.get("usb")
     if not isinstance(usb, dict):
         return None
-    vid = _u16(usb.get('vid'))
-    pid = _u16(usb.get('pid'))
+    vid = _u16(usb.get("vid"))
+    pid = _u16(usb.get("pid"))
     if vid is None or pid is None:
         return None
     return vid, pid
@@ -97,45 +97,49 @@ def host_plan(boards: Any) -> tuple[list[dict[str, Any]], list[str]]:
         node = node_name(str(board_id))
         if node is None:
             continue
-        host = board.get('host') if isinstance(board.get('host'), dict) else {}
-        serial = str(board.get('serial_id') or '').strip()
+        host = board.get("host") if isinstance(board.get("host"), dict) else {}
+        serial = str(board.get("serial_id") or "").strip()
         device = shown_device(node, host, serial)
-        firmware = str(host.get('firmware') or '').strip()
-        board_class = str(board.get('board_class') or '').strip()
-        if firmware == LINUX or (not firmware and board_class == 'bus_servo_only'):
+        firmware = str(host.get("firmware") or "").strip()
+        board_class = str(board.get("board_class") or "").strip()
+        if firmware == LINUX or (not firmware and board_class == "bus_servo_only"):
             ids = _usb_ids(host)
             if ids is None:
                 problems.append(
-                    f'This robot configuration does not name the USB device for {device}. '
-                    'Fix it, then relaunch Lucy.'
+                    f"This robot configuration does not name the USB device for {device}. "
+                    "Fix it, then relaunch Lucy."
                 )
                 continue
             vid, pid = ids
-            targets.append({
-                'firmware': LINUX,
-                'node': node,
-                'device': device,
-                'vid': vid,
-                'pid': pid,
-            })
+            targets.append(
+                {
+                    "firmware": LINUX,
+                    "node": node,
+                    "device": device,
+                    "vid": vid,
+                    "pid": pid,
+                }
+            )
             continue
         if firmware == MCU_BRIDGE or (not firmware and serial):
             if not serial:
                 problems.append(
-                    f'This robot configuration does not name the USB serial for {device}. '
-                    'Fix it, then relaunch Lucy.'
+                    f"This robot configuration does not name the USB serial for {device}. "
+                    "Fix it, then relaunch Lucy."
                 )
                 continue
-            targets.append({
-                'firmware': MCU_BRIDGE,
-                'node': node,
-                'device': device,
-                'serial': serial,
-            })
+            targets.append(
+                {
+                    "firmware": MCU_BRIDGE,
+                    "node": node,
+                    "device": device,
+                    "serial": serial,
+                }
+            )
             continue
         if firmware:
             problems.append(
-                f'This robot configuration asks for firmware {firmware}, which Lucy cannot start. '
-                'Fix it, then relaunch Lucy.'
+                f"This robot configuration asks for firmware {firmware}, which Lucy cannot start. "
+                "Fix it, then relaunch Lucy."
             )
     return targets, problems
