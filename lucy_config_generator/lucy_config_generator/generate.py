@@ -510,8 +510,8 @@ def generate(
                 out = output_dir / f"config_{bid}.rs"
                 out.write_text(render_firmware_rs(data, bid, env), encoding="utf-8")
                 continue
-            out = output_dir / f'config_{bid}.yaml'
-            out.write_text(render_firmware_spec(data, bid), encoding='utf-8')
+            out = output_dir / f"config_{bid}.yaml"
+            out.write_text(render_firmware_spec(data, bid), encoding="utf-8")
 
     if targets & {"ros2_control", "all"}:
         xacro_out = output_dir / names["ros2_control_xacro"]
@@ -568,9 +568,9 @@ def generate_from_xacro_string_for_tests(
             if data["boards"][bid]["board_class"] == BOARD_CLASS_BUS_SERVO_ONLY:
                 out[f"config_{bid}.rs"] = render_firmware_rs(data, bid, env)
                 continue
-            out[f'config_{bid}.yaml'] = render_firmware_spec(data, bid)
-    if targets & {'ros2_control', 'all'}:
-        out[names['ros2_control_xacro']] = render_ros2_control_xacro(
+            out[f"config_{bid}.yaml"] = render_firmware_spec(data, bid)
+    if targets & {"ros2_control", "all"}:
+        out[names["ros2_control_xacro"]] = render_ros2_control_xacro(
             data, board_ids, urdf_limits, env
         )
     if targets & {"controllers", "all"}:

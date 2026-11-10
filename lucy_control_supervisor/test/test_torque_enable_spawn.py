@@ -85,19 +85,19 @@ def test_real_spawn_includes_torque_enable(tmp_path: Path):
         "so_arm_torque_enable_controller",
     ]
     [(name, joints)] = torque_enable_controllers(path)
-    assert name == 'so_arm_torque_enable_controller'
+    assert name == "so_arm_torque_enable_controller"
     assert len(joints) == 6
 
 
 def test_torque_command_is_one_value_per_joint():
-    assert torque_command_values(False, ['a'] * 6) == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    assert torque_command_values(True, ['a', 'b']) == [1.0, 1.0]
+    assert torque_command_values(False, ["a"] * 6) == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    assert torque_command_values(True, ["a", "b"]) == [1.0, 1.0]
 
 
 def test_disabled_joints_stay_limp_with_control_on():
-    joints = ['thumb', 'index', 'pinky']
-    assert torque_command_values(True, joints, frozenset({'index'})) == [1.0, 0.0, 1.0]
-    assert torque_command_values(False, joints, frozenset({'index'})) == [0.0, 0.0, 0.0]
+    joints = ["thumb", "index", "pinky"]
+    assert torque_command_values(True, joints, frozenset({"index"})) == [1.0, 0.0, 1.0]
+    assert torque_command_values(False, joints, frozenset({"index"})) == [0.0, 0.0, 0.0]
 
 
 def test_post_spawn_waits_for_subscription_count():
@@ -132,7 +132,7 @@ def test_wait_publishes_after_match():
     assert wait_for_torque_match(pubs, appear_then_wait, 1.0)
     assert torque_publishers_matched(pubs)
     # Mimic supervisor: publish stored ON after match.
-    pub.publish(type('M', (), {'data': torque_command_values(True, ['a', 'b'])})())
+    pub.publish(type("M", (), {"data": torque_command_values(True, ["a", "b"])})())
     assert pub.published == [[1.0, 1.0]]
 
 
@@ -143,7 +143,7 @@ def test_wait_times_out_and_still_allows_publish():
     started = time.time()
     assert wait_for_torque_match(pubs, _wait_for, 0.15) is False
     assert time.time() - started < 1.0
-    pub.publish(type('M', (), {'data': torque_command_values(True, ['a'] * 6)})())
+    pub.publish(type("M", (), {"data": torque_command_values(True, ["a"] * 6)})())
     assert pub.published == [[1.0, 1.0, 1.0, 1.0, 1.0, 1.0]]
 
 
@@ -152,17 +152,17 @@ def test_mega_bridges_follow_the_active_yaml(tmp_path: Path):
 
     hw = tmp_path / "active.yaml"
     hw.write_text(
-        'boards:\n'
+        "boards:\n"
         '  mega_left: {board_class: i2c_pwm_only, serial_id: "AAA", pca_addresses: [65, 64]}\n'
         '  mega_right: {board_class: i2c_pwm_only, serial_id: ""}\n'
         '  rp2040_torso_head: {board_class: internal_servo_only, serial_id: "BBB"}\n',
         encoding="utf-8",
     )
     assert mega_bridges(hw) == [
-        ('mega_left', 'left', 'AAA', '0x41,0x40'),
-        ('mega_right', 'right', '', ''),
+        ("mega_left", "left", "AAA", "0x41,0x40"),
+        ("mega_right", "right", "", ""),
     ]
-    assert mega_bridges(tmp_path / 'missing.yaml') == []
+    assert mega_bridges(tmp_path / "missing.yaml") == []
 
 
 def test_ros2_control_nodes_reads_the_hardware_blocks():
@@ -177,28 +177,38 @@ def test_ros2_control_nodes_reads_the_hardware_blocks():
         "</ros2_control>"
         "</robot>"
     )
-    assert ros2_control_nodes(urdf) == {'left'}
+    assert ros2_control_nodes(urdf) == {"left"}
 
 
 def test_pca_warning_tracks_bridge_lines():
     from lucy_control_supervisor.mcu_bridges import pca_warning
 
-    msg = 'left Mega: PCA9685 0x40 not answering, its servos cannot move'
-    assert pca_warning('left', "PCA9685 0x40 not answering: its servos can't move") == (msg, True)
-    assert pca_warning('left', 'PCA9685 0x40 answering') == (msg, False)
-    assert pca_warning('left', 'Board X connected') is None
+    msg = "left Mega: PCA9685 0x40 not answering, its servos cannot move"
+    assert pca_warning("left", "PCA9685 0x40 not answering: its servos can't move") == (
+        msg,
+        True,
+    )
+    assert pca_warning("left", "PCA9685 0x40 answering") == (msg, False)
+    assert pca_warning("left", "Board X connected") is None
 
 
 def test_board_unreachable_tracks_bridge_lines():
     from lucy_control_supervisor.mcu_bridges import board_unreachable
 
-    assert board_unreachable('Board AAA not found, waiting').startswith('not found')
-    assert board_unreachable('Board AAA cannot be opened (Device or resource busy), waiting') == (
-        'cannot be opened (Device or resource busy)'
+    assert board_unreachable("Board AAA not found, waiting").startswith("not found")
+    assert board_unreachable(
+        "Board AAA cannot be opened (Device or resource busy), waiting"
+    ) == ("cannot be opened (Device or resource busy)")
+    assert (
+        board_unreachable("Board AAA is being flashed: releasing the port")
+        == "being flashed"
     )
-    assert board_unreachable('Board AAA is being flashed: releasing the port') == 'being flashed'
-    assert board_unreachable('Board AAA not answering').startswith('on USB but not answering')
-    assert board_unreachable('Board AAA stopped answering: reconnecting').startswith('stopped')
-    assert board_unreachable('Board AAA connected') is None
-    assert board_unreachable('Board AAA answering') == ''
-    assert board_unreachable('PCA9685 0x40 answering') is None
+    assert board_unreachable("Board AAA not answering").startswith(
+        "on USB but not answering"
+    )
+    assert board_unreachable("Board AAA stopped answering: reconnecting").startswith(
+        "stopped"
+    )
+    assert board_unreachable("Board AAA connected") is None
+    assert board_unreachable("Board AAA answering") == ""
+    assert board_unreachable("PCA9685 0x40 answering") is None

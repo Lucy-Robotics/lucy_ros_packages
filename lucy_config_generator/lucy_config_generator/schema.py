@@ -30,18 +30,18 @@ REQUIRED_ROOT = (
 URDF_PASSIVE_LIST_KEYS = ("passive_urdf_joints", "urdf_passive", "urdf_passive_joints")
 URDF_IGNORE_LIST_KEYS = ("ignore_urdf_joints", "urdf_ignore", "urdf_ignore_joints")
 REQUIRED_ACTUATOR = (
-    'id',
-    'urdf_joint',
-    'board',
-    'physical_pin',
-    'servo_type',
-    'offset',
-    'direction',
-    'scale',
-    'limit_min',
-    'limit_max',
-    'default',
-    'enabled',
+    "id",
+    "urdf_joint",
+    "board",
+    "physical_pin",
+    "servo_type",
+    "offset",
+    "direction",
+    "scale",
+    "limit_min",
+    "limit_max",
+    "default",
+    "enabled",
 )
 # Rejected when present; use REQUIRED_ACTUATOR keys (radians) instead.
 _REJECTED_ACTUATOR_ANGLE_KEYS = (
@@ -55,14 +55,14 @@ _REJECTED_ACTUATOR_ANGLE_KEYS = (
     "servo_default_rad",
 )
 REQUIRED_SENSOR = (
-    'id',
-    'type',
-    'associated_actuator',
-    'board',
-    'physical_pin',
-    'min_value',
-    'max_value',
-    'enabled',
+    "id",
+    "type",
+    "associated_actuator",
+    "board",
+    "physical_pin",
+    "min_value",
+    "max_value",
+    "enabled",
 )
 REQUIRED_BOARD = (
     "serial_id",
@@ -92,8 +92,8 @@ GENERATED_FILES_DEFAULTS: dict[str, str] = {
 }
 
 # Firmware C template: single internal PWM stack vs internal + I2C (PCA) stack.
-BOARD_CLASS_INTERNAL_ONLY = 'internal_servo_only'
-BOARD_CLASS_INTERNAL_I2C_PWM = 'internal_servo_i2c_pwm'
+BOARD_CLASS_INTERNAL_ONLY = "internal_servo_only"
+BOARD_CLASS_INTERNAL_I2C_PWM = "internal_servo_i2c_pwm"
 # Pimoroni Servo 2040 NUM_SENSORS — analogue Sensor1–6 headers (not PWM Servo1–18).
 SERVO2040_SENSOR_HEADER_COUNT = 6
 # Smart bus servos daisy-chained on one UART, addressed by id rather than each
@@ -408,12 +408,12 @@ def _validate_actuator(
         )
     if rejected:
         return
-    plug = actuator.get('plug')
-    pca = isinstance(plug, dict) and plug.get('kind') == 'pca9685'
+    plug = actuator.get("plug")
+    pca = isinstance(plug, dict) and plug.get("kind") == "pca9685"
     required = REQUIRED_ACTUATOR
     if pca:
-        required = tuple(key for key in REQUIRED_ACTUATOR if key != 'physical_pin')
-    if not _append_missing_keys(errors, f'actuator {aid}', actuator, required):
+        required = tuple(key for key in REQUIRED_ACTUATOR if key != "physical_pin")
+    if not _append_missing_keys(errors, f"actuator {aid}", actuator, required):
         return
 
     valid = True
@@ -434,25 +434,25 @@ def _validate_actuator(
     pin = 0
     if not pca:
         try:
-            pin = int(actuator['physical_pin'])
+            pin = int(actuator["physical_pin"])
         except Exception:
-            errors.append(f'actuator {aid}: physical_pin must be an integer')
+            errors.append(f"actuator {aid}: physical_pin must be an integer")
             valid = False
             pin = 0
 
         board_slots = 0
         if board_id in boards:
             try:
-                board_slots = int(boards[board_id]['internal_servo_slots'])
+                board_slots = int(boards[board_id]["internal_servo_slots"])
             except Exception:
                 errors.append(
-                    f'actuator {aid}: cannot validate physical_pin because '
-                    f'board {board_id} internal_servo_slots is invalid'
+                    f"actuator {aid}: cannot validate physical_pin because "
+                    f"board {board_id} internal_servo_slots is invalid"
                 )
                 valid = False
         if valid and (pin < 1 or pin > board_slots):
             errors.append(
-                f'actuator {aid}: physical_pin {pin} out of range 1..{board_slots}'
+                f"actuator {aid}: physical_pin {pin} out of range 1..{board_slots}"
             )
             valid = False
 
@@ -461,7 +461,7 @@ def _validate_actuator(
         try:
             resolve_plug(actuator, board)
         except (KeyError, TypeError, ValueError) as exc:
-            errors.append(f'actuator {aid}: {exc}')
+            errors.append(f"actuator {aid}: {exc}")
             valid = False
 
     servo_type = str(actuator["servo_type"]).strip('"')
@@ -570,28 +570,27 @@ def _validate_sensor(
         valid = False
 
     try:
-        pin = int(sensor['physical_pin'])
+        pin = int(sensor["physical_pin"])
     except Exception:
-        errors.append(f'sensor {sid}: physical_pin must be an integer')
+        errors.append(f"sensor {sid}: physical_pin must be an integer")
         valid = False
         pin = 0
 
     board = boards.get(board_id) if isinstance(boards.get(board_id), dict) else None
-    board_class = str(board.get('board_class', '')) if board else ''
+    board_class = str(board.get("board_class", "")) if board else ""
     # Servo 2040 pressure/analogue sensors use Sensor1–6 ADC headers, not PWM.
     if (
         valid
-        and board_class
-        in (BOARD_CLASS_INTERNAL_ONLY, BOARD_CLASS_INTERNAL_I2C_PWM)
+        and board_class in (BOARD_CLASS_INTERNAL_ONLY, BOARD_CLASS_INTERNAL_I2C_PWM)
         and (pin < 1 or pin > SERVO2040_SENSOR_HEADER_COUNT)
     ):
         errors.append(
-            f'sensor {sid}: physical_pin {pin} out of range '
-            f'1..{SERVO2040_SENSOR_HEADER_COUNT} (Servo 2040 Sensor1–6)'
+            f"sensor {sid}: physical_pin {pin} out of range "
+            f"1..{SERVO2040_SENSOR_HEADER_COUNT} (Servo 2040 Sensor1–6)"
         )
         valid = False
     elif valid and pin < 1:
-        errors.append(f'sensor {sid}: physical_pin must be >= 1')
+        errors.append(f"sensor {sid}: physical_pin must be >= 1")
         valid = False
 
     min_value = sensor["min_value"]
@@ -634,9 +633,9 @@ def _validate_sensor_ranges(
     for board_id, sensors in by_board.items():
         if has_item_errors_by_board.get(board_id, False):
             continue
-        physical_pins = [int(sensor['physical_pin']) for sensor in sensors]
+        physical_pins = [int(sensor["physical_pin"]) for sensor in sensors]
         if len(physical_pins) != len(set(physical_pins)):
-            errors.append(f'board {board_id}: duplicate sensor physical_pin')
+            errors.append(f"board {board_id}: duplicate sensor physical_pin")
 
 
 def assign_virtual_pins(data: dict[str, Any]) -> None:
@@ -646,7 +645,7 @@ def assign_virtual_pins(data: dict[str, Any]) -> None:
     Author YAML must not set this field; any present value is overwritten.
     Firmware / ros2_control still consume the derived index.
     """
-    for key in ('actuators', 'sensors'):
+    for key in ("actuators", "sensors"):
         rows = data.get(key)
         if not isinstance(rows, list):
             continue
@@ -654,12 +653,12 @@ def assign_virtual_pins(data: dict[str, Any]) -> None:
         for row in rows:
             if not isinstance(row, dict):
                 continue
-            board_id = row.get('board')
+            board_id = row.get("board")
             if not isinstance(board_id, str) or not board_id.strip():
-                row.pop('virtual_pin', None)
+                row.pop("virtual_pin", None)
                 continue
             idx = counters.get(board_id, 0)
-            row['virtual_pin'] = idx
+            row["virtual_pin"] = idx
             counters[board_id] = idx + 1
 
 
@@ -675,11 +674,14 @@ def normalize_board_classes(boards: dict[str, Any]) -> None:
     for board in boards.values():
         if not isinstance(board, dict):
             continue
-        if board.get('board_class') in (BOARD_CLASS_BUS_SERVO_ONLY, BOARD_CLASS_I2C_PWM_ONLY):
+        if board.get("board_class") in (
+            BOARD_CLASS_BUS_SERVO_ONLY,
+            BOARD_CLASS_I2C_PWM_ONLY,
+        ):
             continue
-        devices = board.get('i2c_devices') or []
+        devices = board.get("i2c_devices") or []
         has_i2c = isinstance(devices, list) and len(devices) > 0
-        board['board_class'] = (
+        board["board_class"] = (
             BOARD_CLASS_INTERNAL_I2C_PWM if has_i2c else BOARD_CLASS_INTERNAL_ONLY
         )
 
@@ -718,10 +720,10 @@ def validate_hardware_yaml(data: dict[str, Any]) -> None:
 
     actuators: list[dict[str, Any]] = data["actuators"]
     if not isinstance(actuators, list):
-        raise ValueError('actuators must be a list')
-    sensors: list[dict[str, Any]] = data['sensors']
+        raise ValueError("actuators must be a list")
+    sensors: list[dict[str, Any]] = data["sensors"]
     if not isinstance(sensors, list):
-        raise ValueError('sensors must be a list')
+        raise ValueError("sensors must be a list")
     assign_virtual_pins(data)
 
     actuators_by_board: dict[str, list[dict[str, Any]]] = {}
@@ -740,7 +742,10 @@ def validate_hardware_yaml(data: dict[str, Any]) -> None:
         if actuator_item_errors_by_board.get(board_id, False):
             continue
         board = boards.get(board_id)
-        if isinstance(board, dict) and board.get('board_class') == BOARD_CLASS_I2C_PWM_ONLY:
+        if (
+            isinstance(board, dict)
+            and board.get("board_class") == BOARD_CLASS_I2C_PWM_ONLY
+        ):
             continue
         errors.extend(header_constraint_errors(board_id, board_actuators))
         if isinstance(board, dict):
