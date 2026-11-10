@@ -31,19 +31,24 @@ class ConfigStoreActiveMetaMixin:
             self.active_meta_yaml, "\n".join(lines) + ("\n" if lines else "")
         )
 
+    def _active_field(self, key: str) -> str:
+        return str(self.read_active_meta().get(key, "")).strip()
+
     def get_active_name(self) -> str:
-        data = self.read_active_meta()
-        name = str(data.get("name", "")).strip()
-        return name if name else "default"
+        return self._active_field("name") or "default"
 
     def get_flashed_name(self) -> str:
-        return str(self.read_active_meta().get("flashed_name", "")).strip()
+        return self._active_field("flashed_name")
 
     def get_flashed_at(self) -> str:
-        return str(self.read_active_meta().get("flashed_at", "")).strip()
+        return self._active_field("flashed_at")
+
+    def _update_active_meta(self, **fields: str) -> None:
+        meta = self.read_active_meta()
+        meta.update(fields)
+        self._write_active_meta(meta)
 
     def record_flashed_preset(self, config_name: str) -> None:
-        meta = self.read_active_meta()
-        meta["flashed_name"] = config_name
-        meta["flashed_at"] = f"{datetime.utcnow().isoformat()}Z"
-        self._write_active_meta(meta)
+        self._update_active_meta(
+            flashed_name=config_name, flashed_at=f"{datetime.utcnow().isoformat()}Z"
+        )

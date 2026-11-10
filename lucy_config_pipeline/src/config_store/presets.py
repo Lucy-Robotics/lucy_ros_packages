@@ -11,6 +11,15 @@ import yaml
 from .io import atomic_write_text
 
 
+def _calibration_block(text: str) -> dict:
+    try:
+        data = yaml.safe_load(text)
+    except (ValueError, yaml.YAMLError):
+        return {}
+    block = data.get("calibration") if isinstance(data, dict) else None
+    return block if isinstance(block, dict) else {}
+
+
 class ConfigStorePresetsMixin:
     def list_configs(self) -> list[str]:
         self.ensure_layout()
@@ -36,34 +45,32 @@ class ConfigStorePresetsMixin:
     def read_calibration_block(self, config_name: str) -> dict:
         """Return the preset's ``calibration:`` block, empty if it has none or can't be read."""
         try:
-            data = yaml.safe_load(self.read_named_yaml(config_name))
-        except (OSError, ValueError, yaml.YAMLError):
+            text = self.read_named_yaml(config_name)
+        except OSError:
             return {}
-        block = data.get("calibration") if isinstance(data, dict) else None
-        return block if isinstance(block, dict) else {}
+        return _calibration_block(text)
 
     def activate(self, config_name: str) -> str:
         self.ensure_layout()
         src = self._named_path(config_name)
         if not src.is_file():
             raise FileNotFoundError(src)
+        text = src.read_text(encoding="utf-8")
 
+        meta = self.read_active_meta()
         backup_name = ""
         if self.active_yaml.is_file():
-            old = self.get_active_name()
+            old = str(meta.get("name", "")).strip() or "default"
             ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-            backup_name = f"{ts}_{old or 'active'}"
+            backup_name = f"{ts}_{old}"
             shutil.copy2(self.active_yaml, self.backups_dir / f"{backup_name}.yaml")
 
-        atomic_write_text(self.active_yaml, src.read_text(encoding="utf-8"))
-        meta = self.read_active_meta()
+        atomic_write_text(self.active_yaml, text)
         meta["name"] = config_name
         meta["activated_at"] = f"{datetime.utcnow().isoformat()}Z"
         self._write_active_meta(meta)
 
-        adapter_serial = str(
-            self.read_calibration_block(config_name).get("adapter_serial") or ""
-        )
+        adapter_serial = str(_calibration_block(text).get("adapter_serial") or "")
         if adapter_serial:
             self.bind_adapter(adapter_serial, config_name)
         return backup_name

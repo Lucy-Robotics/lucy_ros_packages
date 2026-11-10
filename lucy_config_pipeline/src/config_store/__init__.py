@@ -7,12 +7,11 @@ from pathlib import Path
 
 from .active_meta import ConfigStoreActiveMetaMixin
 from .bindings import ConfigStoreBindingsMixin
-from .io import atomic_write_text
 from .journal import ConfigStoreJournalMixin
 from .paths import ConfigStorePathsMixin
 from .presets import ConfigStorePresetsMixin
 
-__all__ = ["ConfigStore", "atomic_write_text"]
+__all__ = ["ConfigStore"]
 
 
 @dataclass(frozen=True)
