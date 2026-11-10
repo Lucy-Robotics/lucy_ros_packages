@@ -183,15 +183,15 @@ class PipelineActionServer(Node):
                 continue
             self._feedback(
                 goal_handle,
-                phase='reload',
+                phase="reload",
                 progress=0.95,
-                detail=f'verifying mcu_bridge link for {node}',
+                detail=f"verifying mcu_bridge link for {node}",
                 board=board,
             )
             if not _wait_for_bridge_link(node, since=since, timeout_seconds=link_wait):
                 errors.append(
-                    f'mcu_bridge {node} has no live serial link after reload '
-                    f'(within {link_wait}s) — control is not restored'
+                    f"mcu_bridge {node} has no live serial link after reload "
+                    f"(within {link_wait}s) — control is not restored"
                 )
         return errors
 
@@ -431,7 +431,7 @@ class PipelineActionServer(Node):
                 if link_failed:
                     result.errors.extend(format_error_lines(link_failed))
                     result.message = (
-                        'reload claimed success but mcu_bridge serial link is dead'
+                        "reload claimed success but mcu_bridge serial link is dead"
                     )
                     goal_handle.abort()
                     return result
@@ -470,14 +470,14 @@ class PipelineActionServer(Node):
         if not str(data.get("firmware", {}).get("source_dir", "")).strip():
             return
         paths = resolve_firmware_paths(data, self._paths.workspace_src)
-        fw_cfg_dir = paths.source_dir / 'config'
+        fw_cfg_dir = paths.source_dir / "config"
         fw_cfg_dir.mkdir(parents=True, exist_ok=True)
-        for pattern in ('config_*.c', 'config_*.yaml'):
+        for pattern in ("config_*.c", "config_*.yaml"):
             for cfile in out_dir.glob(pattern):
                 shutil.copy2(cfile, fw_cfg_dir / cfile.name)
         mega_dir = mega_artifact_dir(paths)
-        for board_id, board in (data.get('boards') or {}).items():
-            generated = out_dir / f'config_{board_id}.rs'
+        for board_id, board in (data.get("boards") or {}).items():
+            generated = out_dir / f"config_{board_id}.rs"
             if is_mega_board(board) and generated.is_file():
                 mega_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(generated, mega_dir / generated.name)

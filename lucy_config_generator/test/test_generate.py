@@ -67,14 +67,14 @@ def test_mega_board_gets_rust_board_tables():
     out = generate_from_xacro_string_for_tests(
         _mega_mapping(), _fixture_urdf_xml(), {"firmware"}, None
     )
-    assert 'config_rp2040_left_arm.yaml' not in out
-    assert 'config_rp2040_right_arm.yaml' in out
-    rs = out['config_rp2040_left_arm.rs']
-    assert 'PCA_ADDRESSES: [u8; 2] = [0x40, 0x41];' in rs
+    assert "config_rp2040_left_arm.yaml" not in out
+    assert "config_rp2040_right_arm.yaml" in out
+    rs = out["config_rp2040_left_arm.rs"]
+    assert "PCA_ADDRESSES: [u8; 2] = [0x40, 0x41];" in rs
     # Both slots are clamped, only the enabled one (left_a, physical_pin 10) is driven.
-    assert 'JOINTS_CONFIG: [CommandConfig; 2]' in rs
-    assert 'limit_max: 3.14159 }, // left_disabled' in rs
-    assert 'DRIVEN: [(usize, u8); 1] = [\n    (0, 9), // left_a\n];' in rs
+    assert "JOINTS_CONFIG: [CommandConfig; 2]" in rs
+    assert "limit_max: 3.14159 }, // left_disabled" in rs
+    assert "DRIVEN: [(usize, u8); 1] = [\n    (0, 9), // left_a\n];" in rs
 
 
 def test_mega_pins_come_after_the_pca_outputs():
@@ -218,14 +218,14 @@ def test_schema_rejects_invalid_internal_servo_slots():
 
 def test_schema_assigns_virtual_pin_from_board_list_order():
     data = _load_mapping()
-    for actuator in data['actuators']:
-        actuator.pop('virtual_pin', None)
-    for sensor in data['sensors']:
-        sensor.pop('virtual_pin', None)
+    for actuator in data["actuators"]:
+        actuator.pop("virtual_pin", None)
+    for sensor in data["sensors"]:
+        sensor.pop("virtual_pin", None)
     validate_hardware_yaml(data)
     by_board: dict[str, list[int]] = {}
-    for actuator in data['actuators']:
-        by_board.setdefault(actuator['board'], []).append(int(actuator['virtual_pin']))
+    for actuator in data["actuators"]:
+        by_board.setdefault(actuator["board"], []).append(int(actuator["virtual_pin"]))
     for pins in by_board.values():
         assert pins == list(range(len(pins)))
 
@@ -319,21 +319,23 @@ def test_schema_suppresses_sensor_physical_pin_dup_when_sensor_has_item_error():
     with pytest.raises(ValueError) as exc:
         validate_hardware_yaml(data)
     msg = str(exc.value)
-    assert 'associated_actuator does_not_exist not found' in msg
-    assert 'duplicate sensor physical_pin' not in msg
+    assert "associated_actuator does_not_exist not found" in msg
+    assert "duplicate sensor physical_pin" not in msg
 
 
 def test_firmware_spec_replaces_internal_c():
     data = _load_mapping()
-    got = generate_from_xacro_string_for_tests(data, _fixture_urdf_xml(), {'firmware'}, None)
-    assert 'config_rp2040_left_arm.c' not in got
-    left = yaml.safe_load(got['config_rp2040_left_arm.yaml'])
-    assert left['node_name'] == 'left_arm'
-    assert left['pwm'][0]['identity'] == 'Servo10'
-    right = yaml.safe_load(got['config_rp2040_right_arm.yaml'])
-    assert right['pwm'][0]['identity'] == 'Servo10'
-    torso = yaml.safe_load(got['config_rp2040_torso_head.yaml'])
-    assert [row['identity'] for row in torso['pwm']] == ['Servo5', 'Servo6']
+    got = generate_from_xacro_string_for_tests(
+        data, _fixture_urdf_xml(), {"firmware"}, None
+    )
+    assert "config_rp2040_left_arm.c" not in got
+    left = yaml.safe_load(got["config_rp2040_left_arm.yaml"])
+    assert left["node_name"] == "left_arm"
+    assert left["pwm"][0]["identity"] == "Servo10"
+    right = yaml.safe_load(got["config_rp2040_right_arm.yaml"])
+    assert right["pwm"][0]["identity"] == "Servo10"
+    torso = yaml.safe_load(got["config_rp2040_torso_head.yaml"])
+    assert [row["identity"] for row in torso["pwm"]] == ["Servo5", "Servo6"]
 
 
 def test_golden_ros2_control():
@@ -397,7 +399,7 @@ def test_boards_filter_emits_subset():
         {"firmware"},
         {"rp2040_left_arm"},
     )
-    assert set(got.keys()) == {'config_rp2040_left_arm.yaml'}
+    assert set(got.keys()) == {"config_rp2040_left_arm.yaml"}
 
 
 def test_generated_files_defaults_when_section_absent():
@@ -493,10 +495,10 @@ def test_bus_servo_board_generates_rust_layout():
     assert f"config_{board_id}.c" not in out
     rust = out[f"config_{board_id}.rs"]
 
-    actuators = [a for a in data['actuators'] if a['board'] == board_id]
+    actuators = [a for a in data["actuators"] if a["board"] == board_id]
     expected = len(actuators)
-    assert f'pub const BUS_SERVO_SLOTS: u16 = {expected};' in rust
-    assert 'pub const BUS_SERVO_BLOCK: u16 = 3;' in rust
+    assert f"pub const BUS_SERVO_SLOTS: u16 = {expected};" in rust
+    assert "pub const BUS_SERVO_BLOCK: u16 = 3;" in rust
 
 
 def test_slot_count_is_the_board_joint_count():

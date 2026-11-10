@@ -12,16 +12,16 @@ from lucy_config_generator.schema import BOARD_CLASS_I2C_PWM_ONLY
 from lucy_config_generator.schema import derive_ros2_node_name
 import yaml
 
-MCU_BRIDGE_BIN = 'lucy-embedded-firmware-mcu-bridge'
+MCU_BRIDGE_BIN = "lucy-embedded-firmware-mcu-bridge"
 # The bridge prints one of these per PCA9685 when its state changes.
-_PCA_LINE = re.compile(r'PCA9685 (0x[0-9a-f]+) (not answering|answering)')
+_PCA_LINE = re.compile(r"PCA9685 (0x[0-9a-f]+) (not answering|answering)")
 # The bridge prints `Board <serial> <state>` when its link to the board changes.
-_BOARD_LINE = re.compile(r'Board \S*\s(.+)')
+_BOARD_LINE = re.compile(r"Board \S*\s(.+)")
 _UNREACHABLE = (
-    ('not found', 'not found on USB: check its cable and serial_id'),
-    ('is being flashed', 'being flashed'),
-    ('stopped answering', 'stopped answering: reconnecting'),
-    ('not answering', 'on USB but not answering (frozen?): unplug and replug it'),
+    ("not found", "not found on USB: check its cable and serial_id"),
+    ("is being flashed", "being flashed"),
+    ("stopped answering", "stopped answering: reconnecting"),
+    ("not answering", "on USB but not answering (frozen?): unplug and replug it"),
 )
 
 
@@ -36,9 +36,9 @@ def mega_bridges(hardware_yaml: Path) -> list[tuple[str, str, str, str]]:
     out = []
     for board_id, board in (data.get("boards") or {}).items():
         board = board or {}
-        serial = str(board.get('serial_id') or '').strip()
-        if board.get('board_class') == BOARD_CLASS_I2C_PWM_ONLY:
-            pcas = ','.join(f'{int(a):#04x}' for a in board.get('pca_addresses') or [])
+        serial = str(board.get("serial_id") or "").strip()
+        if board.get("board_class") == BOARD_CLASS_I2C_PWM_ONLY:
+            pcas = ",".join(f"{int(a):#04x}" for a in board.get("pca_addresses") or [])
             out.append((board_id, derive_ros2_node_name(board_id), serial, pcas))
     return out
 
@@ -71,8 +71,8 @@ def pca_warning(board: str, line: str) -> tuple[str, bool] | None:
     m = _PCA_LINE.match(line)
     if m is None:
         return None
-    message = f'{board} Mega: PCA9685 {m[1]} not answering, its servos cannot move'
-    return message, m[2] == 'not answering'
+    message = f"{board} Mega: PCA9685 {m[1]} not answering, its servos cannot move"
+    return message, m[2] == "not answering"
 
 
 def board_unreachable(line: str) -> str | None:
@@ -80,8 +80,10 @@ def board_unreachable(line: str) -> str | None:
     m = _BOARD_LINE.match(line)
     if m is None:
         return None
-    if m[1] == 'answering':
-        return ''
-    if m[1].startswith('cannot be opened'):
-        return m[1].removesuffix(', waiting')
-    return next((reason for start, reason in _UNREACHABLE if m[1].startswith(start)), None)
+    if m[1] == "answering":
+        return ""
+    if m[1].startswith("cannot be opened"):
+        return m[1].removesuffix(", waiting")
+    return next(
+        (reason for start, reason in _UNREACHABLE if m[1].startswith(start)), None
+    )

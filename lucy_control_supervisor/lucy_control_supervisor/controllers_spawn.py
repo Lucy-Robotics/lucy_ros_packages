@@ -16,7 +16,9 @@ def _load(controllers_yaml_path: Path) -> dict:
     return data
 
 
-def torque_enable_controllers(controllers_yaml_path: Path) -> list[tuple[str, list[str]]]:
+def torque_enable_controllers(
+    controllers_yaml_path: Path,
+) -> list[tuple[str, list[str]]]:
     """Return ``(name, joints)`` for controllers bound to ``torque_enable``."""
     found: list[tuple[str, list[str]]] = []
     for name, body in _load(controllers_yaml_path).items():
@@ -27,7 +29,7 @@ def torque_enable_controllers(controllers_yaml_path: Path) -> list[tuple[str, li
             continue
         if params.get("interface_name") != TORQUE_ENABLE_INTERFACE:
             continue
-        joints = params.get('joints') or []
+        joints = params.get("joints") or []
         found.append((str(name), [str(j) for j in joints]))
     return found
 
@@ -76,7 +78,9 @@ def controllers_to_spawn(
         return []
     names = [name for name in cm_params.keys() if name != "update_rate"]
     if not include_torque_enable:
-        torque_names = {name for name, _joints in torque_enable_controllers(controllers_yaml_path)}
+        torque_names = {
+            name for name, _joints in torque_enable_controllers(controllers_yaml_path)
+        }
         names = [name for name in names if name not in torque_names]
     jsb = "joint_state_broadcaster"
     if jsb in names:
