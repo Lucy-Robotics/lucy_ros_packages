@@ -11,8 +11,10 @@ import math
 from calibration_fixtures import CENTRE
 from calibration_fixtures import CONFIG
 from calibration_fixtures import REAL_ARM
+from lucy_config_generator.calibration import CalibrationError
 from lucy_config_generator.calibration import plan
 from lucy_config_generator.calibration import ticks_to_radians
+from lucy_config_generator.calibration.planning import sensor_updates
 import pytest
 
 MARGIN = math.radians(1.5)
@@ -63,3 +65,55 @@ def test_drive_mode_leaves_direction_alone():
     }
     updates, _, _ = plan({"gripper": REAL_ARM["gripper"]}, config)
     assert "direction" not in updates["jaw"]
+
+
+def test_inverted_drive_mode_warns_to_check_direction():
+    record = dict(REAL_ARM["gripper"], drive_mode=1)
+    _, _, warnings = plan({"gripper": record}, CONFIG)
+    assert any("drive_mode=1" in w for w in warnings)
+
+
+def test_unmatched_servo_id_is_refused():
+    record = dict(REAL_ARM["gripper"], id=99)
+    with pytest.raises(CalibrationError, match="matches no actuator"):
+        plan({"gripper": record}, CONFIG)
+
+
+def test_servo_id_matching_several_actuators_is_refused():
+    config = {
+        "actuators": [
+            {"id": "a", "physical_pin": 6, "direction": 1, "scale": 1},
+            {"id": "b", "physical_pin": 6, "direction": 1, "scale": 1},
+        ]
+    }
+    with pytest.raises(CalibrationError, match="matches several actuators"):
+        plan({"gripper": REAL_ARM["gripper"]}, config)
+
+
+def test_actuator_with_no_calibration_record_warns_and_is_left_untouched():
+    config = {
+        "actuators": [
+            {"id": "jaw", "physical_pin": 6, "direction": 1, "scale": 1},
+            {"id": "extra", "physical_pin": 7, "direction": 1, "scale": 1},
+        ]
+    }
+    updates, _, warnings = plan({"gripper": REAL_ARM["gripper"]}, config)
+    assert "extra" not in updates
+    assert any("no calibration record for: extra" in w for w in warnings)
+
+
+def test_sensor_updates_mirrors_its_actuators_window():
+    updates = {"jaw": {"limit_min": -1.0, "limit_max": 1.0, "default": 0.0}}
+    config = {"sensors": [{"id": "jaw_sensor", "associated_actuator": "jaw"}]}
+    assert sensor_updates(config, updates) == {
+        "jaw_sensor": {"min_value": -1.0, "max_value": 1.0}
+    }
+
+
+def test_sensor_updates_skips_sensors_with_no_matching_actuator():
+    config = {"sensors": [{"id": "jaw_sensor", "associated_actuator": "missing"}]}
+    assert sensor_updates(config, {}) == {}
+
+
+def test_sensor_updates_with_no_sensors_in_config():
+    assert sensor_updates({}, {}) == {}
