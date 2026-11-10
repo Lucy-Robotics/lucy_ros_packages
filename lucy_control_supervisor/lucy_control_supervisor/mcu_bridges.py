@@ -76,7 +76,7 @@ def pca_warning(board: str, line: str) -> tuple[str, bool] | None:
 
 
 def board_unreachable(line: str) -> str | None:
-    """Why a bridge's board is unreachable after this line, '' once it answers, None if unrelated."""
+    """Why the board is unreachable after this line, '' once it answers, None if unrelated."""
     m = _BOARD_LINE.match(line)
     if m is None:
         return None
