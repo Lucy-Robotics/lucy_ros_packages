@@ -44,6 +44,12 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_launch_syntax test/test_launch_syntax.py
     TIMEOUT 120
   )
+  ament_add_pytest_test(test_lucy_launch_args test/test_lucy_launch_args.py
+    TIMEOUT 120
+  )
+  ament_add_pytest_test(test_rosbridge_port test/test_rosbridge_port.py
+    TIMEOUT 120
+  )
 endif()
 
 ament_package()

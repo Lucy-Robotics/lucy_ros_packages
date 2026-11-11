@@ -20,13 +20,13 @@ import threading
 import time
 from typing import List
 
+from lucy_control_supervisor.bridges import bridge_executable
+from lucy_control_supervisor.bridges import BRIDGE_EXECUTABLES
+from lucy_control_supervisor.bridges import bridge_processes
 from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
 from lucy_control_supervisor.controllers_spawn import torque_command_values
 from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
 from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
-from lucy_control_supervisor.mcu_bridges import mega_bridges
-from lucy_control_supervisor.mcu_bridges import resolve_bridge_binary
-from lucy_control_supervisor.mcu_bridges import ros2_control_nodes
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy
@@ -388,39 +388,54 @@ class ControlSupervisorNode(Node):
                 f"{self.READY_TIMEOUT_S:.0f}s; spawners may block on the lock"
             )
 
-    def _start_mcu_bridges(self, cfg: _StackConfig, urdf_xml: str) -> None:
-        """Start one bridge per Mega board of the active YAML (restarted with the stack).
+    def _start_bridges(self, cfg: _StackConfig, urdf_xml: str) -> None:
+        """Start the host bridge firmwares picked by ``LUCY_BRIDGE`` (restarted with the stack).
+
+        lucy.launch.py sets ``LUCY_BRIDGE`` from ``bridge:=`` in ``mode:=real``. ``linux``
+        runs one ``lucy_embedded_firmware_linux`` per ros2_control node; ``mcu_bridge`` one
+        ``lucy_embedded_firmware_mcu_bridge`` per Mega board of the active YAML.
 
         Being children of this node, they follow every RELOAD: a new serial_id or board
         layout applies on Activate, not only on a full relaunch. Each bridge waits for its
         shared memory and board, and lets go of the port while that board is flashed.
         """
+        bridge = os.environ.get("LUCY_BRIDGE", "").strip()
+        if not bridge:
+            self.get_logger().warning(
+                "real hardware without a bridge: LUCY_BRIDGE is unset, so no host firmware "
+                "drives the robot. Launch lucy.launch.py with mode:=real bridge:=<"
+                + "|".join(BRIDGE_EXECUTABLES)
+                + ">"
+            )
+            return
         config_dir = (
             os.environ.get("LUCY_CONFIG_DIR")
             or cfg.controllers_yaml.parent / "hardware"
         )
-        hardware_yaml = Path(config_dir) / "active.yaml"
-        nodes = ros2_control_nodes(urdf_xml)
-        bridges = [b for b in mega_bridges(hardware_yaml) if b[0] in nodes]
-        if not bridges:
+        try:
+            processes = bridge_processes(bridge, Path(config_dir) / "active.yaml", urdf_xml)
+        except ValueError as exc:
+            self.get_logger().error(f"LUCY_BRIDGE: {exc}")
             return
-        binary = resolve_bridge_binary(cfg.controllers_yaml.parent)
-        if binary is None:
-            self.get_logger().error(
-                "lucy-embedded-firmware-mcu-bridge not found: run `pixi run firmware-build-linux`"
-            )
+        if not processes:
+            self.get_logger().warning(f"{bridge}: nothing to drive in this robot")
             return
-        for node_name, serial in bridges:
-            self.get_logger().info(f"starting mcu_bridge {node_name} {serial}")
+        try:
+            executable = bridge_executable(bridge)
+        except LookupError as exc:
+            self.get_logger().error(str(exc))
+            return
+        for node_name, args in processes:
+            self.get_logger().info(f"starting {bridge} {' '.join(args)}")
             popen = subprocess.Popen(
-                [str(binary), node_name, serial],
+                [executable, *args],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=os.environ.copy(),
                 start_new_session=True,
                 preexec_fn=_die_with_parent if sys.platform == "linux" else None,
             )
-            self._track(f"mcu_bridge_{node_name}", popen, "bridge")
+            self._track(f"{bridge}_{node_name}", popen, "bridge")
 
     def _spawn_controllers(self, cfg: _StackConfig) -> None:
         """Load and activate controllers after controller_manager is up.
@@ -535,7 +550,7 @@ class ControlSupervisorNode(Node):
                 if not cfg.use_gazebo_sim:
                     self._start_cm(cfg)
                     if not cfg.use_mock_hardware:
-                        self._start_mcu_bridges(cfg, urdf_xml)
+                        self._start_bridges(cfg, urdf_xml)
                     self._spawn_controllers(cfg)
 
             note = ""

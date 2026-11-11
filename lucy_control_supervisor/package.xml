@@ -16,6 +16,8 @@
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>forward_command_controller</exec_depend>
   <exec_depend>xacro</exec_depend>
+  <!-- Bridge firmwares are looked up the way `ros2 run` does. -->
+  <exec_depend>ros2run</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

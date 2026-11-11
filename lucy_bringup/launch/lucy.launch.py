@@ -15,107 +15,67 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """
-Single entry bringup for Lucy: web panel APIs, optional real peripherals, RViz, Gazebo.
+Single entry bringup for Lucy: web panel APIs, ros2_control stack, optional RViz / Gazebo.
 
-Always starts ``web_ros_api`` (rosbridge + lucy_config_pipeline).
-
-Invalid combinations raise at launch parse time (clear ``RuntimeError``).
+Always starts ``web_ros_api`` (rosbridge + lucy_config_pipeline). Invalid argument
+combinations raise a ``RuntimeError`` naming the fix before anything starts.
 
 Arguments:
 ---------
-- ``real`` (default ``true``): host SHM consumers (e.g. ``lucy-embedded-firmware-linux`` for
-  ``so_arm101_urdf``), plus optional cameras / RealSense when wired. When false, those
-  nodes are not constructed (``OpaqueFunction``), so e.g. Docker without the host binary
-  can run ``real:=false``.
-- ``rviz`` (default ``false``): RViz2 (real/sim time set per mode). With ``gazebo:=true``,
-  forwarded as ``start_rviz`` to ``inmoov_urdf/gazebo.launch.py`` (no second RViz).
-- ``gazebo`` (default ``false``): GZ Sim stack from ``inmoov_urdf``; requires ``real:=false``.
-- ``headless`` (default ``false``): only meaningful with ``gazebo:=true``. Runs gz-sim
-  server-only with EGL rendering (``-s -r --headless-rendering``) so camera sensors
-  keep producing frames without an X server. Forwarded to ``inmoov_urdf/gazebo.launch.py``.
+- ``mode`` (default ``mock``): ``mock`` runs ros2_control on mock hardware (no robot,
+  no simulator); ``sim`` runs the robot package's Gazebo stack; ``real`` drives the
+  physical robot through the host firmware picked by ``bridge``.
+- ``bridge`` (required with ``mode:=real``, rejected otherwise): ``linux`` drives
+  USB-serial Feetech servos from the host (``lucy_embedded_firmware_linux``, one per
+  ros2_control node); ``mcu_bridge`` relays to the microcontroller boards of the active
+  hardware YAML (``lucy_embedded_firmware_mcu_bridge``, one per board).
+  ``lucy_control_supervisor`` starts them with ``ros2 run`` and restarts them with the stack.
+- ``rviz`` (default ``false``): RViz2 with the robot package's config (sim time in ``sim``).
+- ``headless`` (default ``false``, ``mode:=sim`` only): server-only gz-sim with EGL
+  rendering, so camera sensors keep producing frames without an X server.
+- ``domain_id`` (default ``$ROS_DOMAIN_ID``, else ``0``): ROS_DOMAIN_ID (0-101) of every
+  process this launch starts. Run tools beside it (rqt, ``ros2 topic``, lucy-cli) with
+  the same ``ROS_DOMAIN_ID`` to see the graph. One domain per robot on a shared network.
+- ``robot_package``, ``config_dir``, ``urdf_path``, ``base_path``, ``controllers_yaml``:
+  robot selection and path overrides (empty = robot package defaults).
+
+Examples::
+
+    ros2 launch lucy_bringup lucy.launch.py rviz:=true
+    ros2 launch lucy_bringup lucy.launch.py mode:=sim headless:=true
+    ros2 launch lucy_bringup lucy.launch.py mode:=real bridge:=linux robot_package:=so_arm101_urdf
+    ros2 launch lucy_bringup lucy.launch.py mode:=real bridge:=mcu_bridge domain_id:=3
 
 """
 
-import os
 from pathlib import Path
-import shutil
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.actions import ExecuteProcess
 from launch.actions import GroupAction
 from launch.actions import IncludeLaunchDescription
 from launch.actions import LogInfo
 from launch.actions import OpaqueFunction
 from launch.actions import SetEnvironmentVariable
+from launch.actions import SetLaunchConfiguration
 from launch.conditions import IfCondition
 from launch.conditions import UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command
+from launch.substitutions import EnvironmentVariable
 from launch.substitutions import LaunchConfiguration
 from launch.substitutions import PathJoinSubstitution
-from launch.substitutions import PythonExpression
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
-_LINUX_FIRMWARE_BIN = "lucy-embedded-firmware-linux"
-_SO101_HOST_NODE = "so_arm"
-_SO101_ROBOT_PACKAGE = "so_arm101_urdf"
-
-
-def resolve_linux_firmware_binary() -> Path:
-    """
-    Locate the host Feetech SHM consumer binary (``firmwares/linux``).
-
-    Search order: ``LUCY_EMBEDDED_FIRMWARE_LINUX``, ``PATH``, then
-    ``src/lucy_embedded_firmware/target/release/<bin>`` under the workspace
-    (walk from cwd and from the ``lucy_bringup`` share directory).
-    """
-    env = os.environ.get("LUCY_EMBEDDED_FIRMWARE_LINUX", "").strip()
-    if env:
-        path = Path(env).expanduser()
-        if path.is_file():
-            return path.resolve()
-        raise RuntimeError(f"LUCY_EMBEDDED_FIRMWARE_LINUX={env!r} is not a file")
-
-    which = shutil.which(_LINUX_FIRMWARE_BIN)
-    if which:
-        return Path(which).resolve()
-
-    rel = (
-        Path("src")
-        / "lucy_embedded_firmware"
-        / "target"
-        / "release"
-        / _LINUX_FIRMWARE_BIN
-    )
-    search_roots: list[Path] = [Path.cwd(), *Path.cwd().parents]
-    try:
-        share = Path(get_package_share_directory("lucy_bringup"))
-        search_roots.extend([share, *share.parents])
-    except Exception:
-        pass
-    seen: set[Path] = set()
-    for root in search_roots:
-        try:
-            root = root.resolve()
-        except OSError:
-            continue
-        if root in seen:
-            continue
-        seen.add(root)
-        candidate = root / rel
-        if candidate.is_file():
-            return candidate.resolve()
-
-    raise RuntimeError(
-        f"{_LINUX_FIRMWARE_BIN} not found. Build it with "
-        f"`cargo build --release -p lucy-embedded-firmware-linux` "
-        f"(from lucy_embedded_firmware), put it on PATH, or set "
-        f"LUCY_EMBEDDED_FIRMWARE_LINUX to the absolute path."
-    )
+MODES = ("mock", "sim", "real")
+BRIDGES = ("linux", "mcu_bridge")
+# Highest ROS_DOMAIN_ID that stays clear of ephemeral ports on every platform.
+MAX_DOMAIN_ID = 101
+_TRUE = ("true", "1", "yes")
+_FALSE = ("false", "0", "no")
 
 
 def _infer_robot_source_root(robot_package: str, share_dir: str) -> Path:
@@ -203,8 +163,6 @@ def _resolve_robot_paths(context):
     Explicit ``urdf_path`` / ``base_path`` / ``controllers_yaml`` overrides
     (non-empty) are left untouched.
     """
-    from launch.actions import SetLaunchConfiguration
-
     robot_package = LaunchConfiguration("robot_package").perform(context).strip()
     if not robot_package:
         # _validate_lucy_launch already raised; nothing to resolve.
@@ -236,11 +194,46 @@ def _resolve_robot_paths(context):
     return actions
 
 
-def _validate_lucy_launch(context):
-    gz = LaunchConfiguration("gazebo").perform(context).lower()
-    real = LaunchConfiguration("real").perform(context).lower()
+def _flag(context, name: str) -> bool:
+    value = LaunchConfiguration(name).perform(context).strip().lower()
+    if value in _TRUE:
+        return True
+    if value in _FALSE:
+        return False
+    raise RuntimeError(f"lucy.launch.py: {name}:={value!r} must be true or false.")
+
+
+def launch_settings(context) -> dict:
+    """
+    Read and check bridge / headless / domain_id / robot_package against mode.
+
+    ``mode`` itself is checked by its DeclareLaunchArgument choices.
+    """
+    mode = LaunchConfiguration("mode").perform(context)
+    bridge = LaunchConfiguration("bridge").perform(context).strip().lower()
+    domain_id = LaunchConfiguration("domain_id").perform(context).strip()
     robot_package = LaunchConfiguration("robot_package").perform(context).strip()
 
+    if mode == "real" and bridge not in BRIDGES:
+        raise RuntimeError(
+            "lucy.launch.py: mode:=real needs bridge:=linux (USB-serial servos driven "
+            "from this host) or bridge:=mcu_bridge (microcontroller boards)"
+            + (f", not bridge:={bridge!r}." if bridge else ".")
+        )
+    if mode != "real" and bridge:
+        raise RuntimeError(
+            f"lucy.launch.py: bridge:={bridge} only applies to mode:=real "
+            f"(got mode:={mode}). Drop bridge:= or add mode:=real."
+        )
+    if _flag(context, "headless") and mode != "sim":
+        raise RuntimeError(
+            f"lucy.launch.py: headless:=true only applies to mode:=sim (got mode:={mode})."
+        )
+    if not domain_id.isdigit() or int(domain_id) > MAX_DOMAIN_ID:
+        raise RuntimeError(
+            f"lucy.launch.py: domain_id:={domain_id!r} must be an integer "
+            f"from 0 to {MAX_DOMAIN_ID}."
+        )
     if not robot_package:
         raise RuntimeError(
             "lucy.launch.py: no robot-description package found in the workspace "
@@ -248,64 +241,70 @@ def _validate_lucy_launch(context):
             "inmoov_urdf). Clone/build a robot package, or pass one "
             "explicitly with robot_package:=<pkg>."
         )
-
-    def _is_true(val):
-        return val in ("true", "1", "yes")
-
-    if _is_true(gz) and _is_true(real):
-        raise RuntimeError(
-            "lucy.launch.py: gazebo:=true conflicts with real:=true. "
-            "Use real:=false for simulation (e.g. "
-            '"ros2 launch lucy_bringup lucy.launch.py gazebo:=true real:=false").'
-        )
-    return []
+    return {
+        "mode": mode,
+        "bridge": bridge,
+        "domain_id": str(int(domain_id)),
+        "robot_package": robot_package,
+    }
 
 
-def _real_hardware_stack(context, *args, **kwargs):
-    """Start host SHM consumers when ``real`` is true (lazy package load)."""
-    real = LaunchConfiguration("real").perform(context).lower().strip()
-    if real not in ("true", "1", "yes"):
-        return []
-    out = []
-    robot_package = LaunchConfiguration("robot_package").perform(context).strip()
-    if robot_package == _SO101_ROBOT_PACKAGE:
-        binary = resolve_linux_firmware_binary()
-        out.append(
-            LogInfo(
-                msg=(
-                    f"lucy.launch: starting {_LINUX_FIRMWARE_BIN} "
-                    f"node_name={_SO101_HOST_NODE} ({binary})"
-                )
+def _apply_launch_settings(context):
+    """
+    Validate the arguments, then derive what the rest of the launch reads.
+
+    Internal configurations: ``use_gazebo`` / ``use_mock_hardware``. Environment, set
+    before any process starts so every child inherits it: ``ROS_DOMAIN_ID``, and
+    ``LUCY_BRIDGE`` for lucy_control_supervisor (it starts the bridge firmwares).
+    """
+    settings = launch_settings(context)
+    mode = settings["mode"]
+    bridge = settings["bridge"] or "none"
+    return [
+        SetLaunchConfiguration("use_gazebo", "true" if mode == "sim" else "false"),
+        SetLaunchConfiguration(
+            "use_mock_hardware", "true" if mode == "mock" else "false"
+        ),
+        SetEnvironmentVariable("ROS_DOMAIN_ID", settings["domain_id"]),
+        SetEnvironmentVariable("LUCY_BRIDGE", settings["bridge"]),
+        LogInfo(
+            msg=(
+                f"lucy.launch: robot_package={settings['robot_package']} mode={mode} "
+                f"bridge={bridge} ROS_DOMAIN_ID={settings['domain_id']}"
             )
-        )
-        out.append(
-            ExecuteProcess(
-                cmd=[str(binary), _SO101_HOST_NODE],
-                name="lucy_embedded_firmware_linux",
-                output="screen",
-            )
-        )
-    return out
+        ),
+    ]
 
 
 def generate_launch_description():
     """Generate launch description for Lucy robot system."""
-    audio_sample_rate_arg = DeclareLaunchArgument(
-        "audio_sample_rate",
-        default_value="48000",
-        description="Audio sample rate in Hz (e.g., 44100, 48000)",
+    mode_arg = DeclareLaunchArgument(
+        "mode",
+        default_value="mock",
+        choices=list(MODES),
+        description=(
+            "mock: mock hardware (no robot, no simulator); sim: Gazebo; "
+            "real: physical robot through bridge:="
+        ),
     )
 
-    audio_capture_device_arg = DeclareLaunchArgument(
-        "audio_capture_device",
-        default_value="-1",
-        description="Audio capture device index (-1 for default)",
+    bridge_arg = DeclareLaunchArgument(
+        "bridge",
+        default_value="",
+        description=(
+            "mode:=real only (required there). linux: host drives USB-serial servos "
+            "(one lucy_embedded_firmware_linux per ros2_control node); mcu_bridge: host "
+            "relays to the microcontroller boards of the hardware YAML"
+        ),
     )
 
-    audio_playback_device_arg = DeclareLaunchArgument(
-        "audio_playback_device",
-        default_value="-1",
-        description="Audio playback device index (-1 for default)",
+    domain_id_arg = DeclareLaunchArgument(
+        "domain_id",
+        default_value=EnvironmentVariable("ROS_DOMAIN_ID", default_value="0"),
+        description=(
+            f"ROS_DOMAIN_ID (0-{MAX_DOMAIN_ID}) for every process of this launch. "
+            "Tools run beside it need the same ROS_DOMAIN_ID"
+        ),
     )
 
     robot_package_arg = DeclareLaunchArgument(
@@ -327,29 +326,17 @@ def generate_launch_description():
         ),
     )
 
-    real_arg = DeclareLaunchArgument(
-        "real",
-        default_value="false",
-        description="If true: micro-ROS agents, USB webcam, RealSense",
-    )
-
     rviz_arg = DeclareLaunchArgument(
         "rviz",
         default_value="false",
-        description="If true: RViz (or start_rviz when gazebo:=true)",
-    )
-
-    gazebo_arg = DeclareLaunchArgument(
-        "gazebo",
-        default_value="false",
-        description="If true: <robot_package> gazebo sim (requires real:=false)",
+        description="If true: RViz with the robot package config (sim time in mode:=sim)",
     )
 
     headless_arg = DeclareLaunchArgument(
         "headless",
         default_value="false",
         description=(
-            "Only with gazebo:=true. Server-only gz-sim with EGL rendering "
+            "mode:=sim only. Server-only gz-sim with EGL rendering "
             "(-s -r --headless-rendering); cameras still work without an X server."
         ),
     )
@@ -378,7 +365,7 @@ def generate_launch_description():
         ),
     )
 
-    validate = OpaqueFunction(function=_validate_lucy_launch)
+    apply_settings = OpaqueFunction(function=_apply_launch_settings)
     resolve_robot_paths = OpaqueFunction(function=_resolve_robot_paths)
 
     web_ros_api_launch = IncludeLaunchDescription(
@@ -401,16 +388,9 @@ def generate_launch_description():
 
     controllers_yaml = LaunchConfiguration("controllers_yaml")
 
-    # use_mock_hardware := (not gazebo) and (not real) — RViz-only mock_components path.
-    use_mock_hardware = PythonExpression(
-        [
-            "'true' if ('",
-            LaunchConfiguration("gazebo"),
-            "'.lower() not in ('true','1','yes') and '",
-            LaunchConfiguration("real"),
-            "'.lower() not in ('true','1','yes')) else 'false'",
-        ]
-    )
+    # Set by _apply_launch_settings from mode:=.
+    use_gazebo = LaunchConfiguration("use_gazebo")
+    use_mock_hardware = LaunchConfiguration("use_mock_hardware")
 
     robot_description = ParameterValue(
         Command(
@@ -420,7 +400,7 @@ def generate_launch_description():
                 " base_path:=",
                 base_path,
                 " use_gazebo_sim:=",
-                LaunchConfiguration("gazebo"),
+                use_gazebo,
                 " use_mock_hardware:=",
                 use_mock_hardware,
                 " controller_config:=",
@@ -432,19 +412,16 @@ def generate_launch_description():
     robot_description_dict = {"robot_description": robot_description}
 
     robot_state_publisher = Node(
-        condition=IfCondition(LaunchConfiguration("gazebo")),
+        condition=IfCondition(use_gazebo),
         package="robot_state_publisher",
         executable="robot_state_publisher",
         name="robot_state_publisher",
         output="screen",
         parameters=[
             robot_description_dict,
-            {"use_sim_time": LaunchConfiguration("gazebo")},
+            {"use_sim_time": use_gazebo},
         ],
     )
-
-    real_hardware = OpaqueFunction(function=_real_hardware_stack)
-    use_sim_time = LaunchConfiguration("gazebo")
 
     rviz = GroupAction(
         condition=IfCondition(LaunchConfiguration("rviz")),
@@ -462,14 +439,14 @@ def generate_launch_description():
                     ]
                 ),
                 launch_arguments=[
-                    ("use_sim_time", use_sim_time),
+                    ("use_sim_time", use_gazebo),
                 ],
             ),
         ],
     )
 
     gazebo = GroupAction(
-        condition=IfCondition(LaunchConfiguration("gazebo")),
+        condition=IfCondition(use_gazebo),
         actions=[
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
@@ -494,7 +471,7 @@ def generate_launch_description():
     )
 
     ros2_control_launch = GroupAction(
-        condition=UnlessCondition(LaunchConfiguration("gazebo")),
+        condition=UnlessCondition(use_gazebo),
         actions=[
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
@@ -520,19 +497,18 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
-            audio_sample_rate_arg,
-            audio_capture_device_arg,
-            audio_playback_device_arg,
+            mode_arg,
+            bridge_arg,
+            domain_id_arg,
             robot_package_arg,
             config_dir_arg,
-            real_arg,
             rviz_arg,
-            gazebo_arg,
             headless_arg,
             urdf_path_arg,
             base_path_arg,
             controllers_yaml_arg,
-            validate,
+            # First: validates, then sets ROS_DOMAIN_ID / LUCY_BRIDGE before any process.
+            apply_settings,
             resolve_robot_paths,
             SetEnvironmentVariable(
                 "LUCY_CONFIG_DIR", LaunchConfiguration("config_dir")
@@ -541,7 +517,6 @@ def generate_launch_description():
             LogInfo(msg="Starting lucy_bringup lucy.launch.py"),
             LogInfo(msg="========================================"),
             web_ros_api_launch,
-            real_hardware,
             robot_state_publisher,
             ros2_control_launch,
             rviz,

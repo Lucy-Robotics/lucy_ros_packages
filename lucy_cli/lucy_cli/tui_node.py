@@ -569,7 +569,8 @@ def parse_sensors_yaml(yaml_string: str) -> dict:
 
 
 # The file the launcher's readiness_check tests for: created only once the TUI is up, so the launcher reports LOADING during startup and RUNNING from the main menu on.
-READY_MARKER = "/tmp/lucy_cli.ready"
+# A second launcher instance sets LUCY_CLI_READY_FILE so it waits on its own lucy_cli.
+READY_MARKER = os.environ.get("LUCY_CLI_READY_FILE") or "/tmp/lucy_cli.ready"
 
 
 def _set_ready_marker():
