@@ -13,7 +13,6 @@ import threading
 import time
 
 from control_msgs.msg import DynamicJointState
-from lucy_config_generator.motors import motor_values_by_joint
 from lucy_msgs.srv import ClientControl
 from lucy_msgs.srv import ControlLock
 from lucy_msgs.srv import GetInt
@@ -25,7 +24,11 @@ from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 from std_msgs.msg import Int32
 from std_msgs.msg import String
-import yaml
+
+from .control_arbitration import decide_control
+from .control_arbitration import decide_control_lock
+from .power_monitor import extract_voltages
+from .power_monitor import load_min_volts
 
 HEARTBEAT_TOPIC = "/lucy/client_heartbeat"
 GOODBYE_TOPIC = "/lucy/client_goodbye"
@@ -175,11 +178,7 @@ class ClientRegistryNode(Node):
     def _reload_min_volts(self) -> None:
         if self._read_active_config is None:
             return
-        try:
-            config = yaml.safe_load(self._read_active_config()) or {}
-            min_volts, error = motor_values_by_joint(config, "min_volts"), ""
-        except (OSError, KeyError, yaml.YAMLError) as e:
-            min_volts, error = {}, str(e)
+        min_volts, error = load_min_volts(self._read_active_config)
         if error and error != self._motor_specs_error:
             self.get_logger().warning(
                 f"Motor specs unavailable, no power check: {error}"
@@ -189,12 +188,7 @@ class ClientRegistryNode(Node):
             self._min_volts = min_volts
 
     def _on_dynamic_joint_states(self, msg: DynamicJointState) -> None:
-        volts = {
-            joint: value
-            for joint, interfaces in zip(msg.joint_names, msg.interface_values)
-            for name, value in zip(interfaces.interface_names, interfaces.values)
-            if name == "voltage"
-        }
+        volts = extract_voltages(msg)
         with self._state_lock:
             checked = [joint for joint in volts if joint in self._min_volts]
             if not checked:
@@ -238,12 +232,13 @@ class ClientRegistryNode(Node):
                 req.client_id not in self._last_seen
             )  # a request also proves liveness
             self._last_seen[req.client_id] = time.monotonic()
-            refused = req.acquire and not self._servo_powered
-            locked_by = self._lock_owner if req.acquire else ""
-            if req.acquire and not refused and not locked_by:
-                self._active_client = req.client_id
-            elif not req.acquire and self._active_client == req.client_id:
-                self._active_client = ""
+            self._active_client, refused, locked_by = decide_control(
+                client_id=req.client_id,
+                acquire=req.acquire,
+                active_client=self._active_client,
+                lock_owner=self._lock_owner,
+                servo_powered=self._servo_powered,
+            )
             res.active_client = self._active_client
         if is_new:
             self._publish_count()
@@ -276,25 +271,12 @@ class ClientRegistryNode(Node):
             return res
         with self._state_lock:
             res.active_client = self._active_client
-            owns_or_free = self._lock_owner in ("", req.owner)
-            if req.acquire:
-                if not owns_or_free:
-                    res.success = False
-                    res.message = f"already locked by {self._lock_owner}"
-                elif self._active_client:
-                    res.success = False
-                    res.message = f"{self._active_client} has control"
-                else:
-                    self._lock_owner = req.owner
-                    res.success = True
-                    res.message = "locked"
-            elif owns_or_free:
-                self._lock_owner = ""
-                res.success = True
-                res.message = "released"
-            else:
-                res.success = False
-                res.message = f"locked by {self._lock_owner}"
+            self._lock_owner, res.success, res.message = decide_control_lock(
+                owner=req.owner,
+                acquire=req.acquire,
+                lock_owner=self._lock_owner,
+                active_client=self._active_client,
+            )
         return res
 
     def _publish_count(self) -> None:
