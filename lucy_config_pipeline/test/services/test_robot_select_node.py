@@ -9,6 +9,7 @@ from std_msgs.msg import String
 @pytest.fixture
 def node(tmp_path, monkeypatch):
     monkeypatch.setenv("LUCY_SELECT_ROBOT_FILE", str(tmp_path / "select"))
+    monkeypatch.setenv("LUCY_STACK_STATUS_FILE", str(tmp_path / "status"))
     rclpy.init()
     n = RobotSelectNode(available=["inmoov_urdf", "so_arm101_urdf"])
     yield n
@@ -42,3 +43,24 @@ def test_robot_list_is_published(node):
             break
     node.destroy_subscription(sub)
     assert json.loads(received[0])["available"] == ["inmoov_urdf", "so_arm101_urdf"]
+
+
+def test_robots_and_stack_status_are_republished_for_late_subscribers(node, tmp_path):
+    robots, status = [], []
+    node._robots_pub.publish = lambda m: robots.append(m.data)
+    node._status_pub.publish = lambda m: status.append(m.data)
+    node._republish()
+    (tmp_path / "status").write_text('{"ready": false, "index": 6}')
+    node._republish()
+    node._republish()
+    assert status == ['{"ready": false, "index": 6}'] * 2
+    assert len(robots) == 3
+    assert json.loads(robots[0])["available"] == ["inmoov_urdf", "so_arm101_urdf"]
+
+
+def test_an_empty_stack_status_file_is_not_relayed(node, tmp_path):
+    status = []
+    node._status_pub.publish = lambda m: status.append(m.data)
+    (tmp_path / "status").write_text("")
+    node._republish()
+    assert status == []
