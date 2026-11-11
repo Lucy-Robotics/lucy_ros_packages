@@ -11,6 +11,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/ConfigurePipeline.action"
   "srv/GetInt.srv"
   "srv/ClientControl.srv"
+  "srv/ControlLock.srv"
+  "srv/CalibrationCommand.srv"
   "srv/GetHardwareIdentity.srv"
   "srv/ListConfigs.srv"
   "srv/GetConfig.srv"
