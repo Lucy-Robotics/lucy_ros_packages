@@ -253,9 +253,10 @@ def _apply_launch_settings(context):
     """
     Validate the arguments, then derive what the rest of the launch reads.
 
-    Internal configurations: ``use_gazebo`` / ``use_mock_hardware``. Environment, set
-    before any process starts so every child inherits it: ``ROS_DOMAIN_ID``, and
-    ``LUCY_BRIDGE`` for lucy_control_supervisor (it starts the bridge firmwares).
+    Internal configurations: ``use_gazebo`` / ``use_mock_hardware`` / ``use_real_hardware``.
+    Environment, set before any process starts so every child inherits it:
+    ``ROS_DOMAIN_ID``, and ``LUCY_BRIDGE`` for lucy_control_supervisor (it starts the
+    bridge firmwares).
     """
     settings = launch_settings(context)
     mode = settings["mode"]
@@ -264,6 +265,9 @@ def _apply_launch_settings(context):
         SetLaunchConfiguration("use_gazebo", "true" if mode == "sim" else "false"),
         SetLaunchConfiguration(
             "use_mock_hardware", "true" if mode == "mock" else "false"
+        ),
+        SetLaunchConfiguration(
+            "use_real_hardware", "true" if mode == "real" else "false"
         ),
         SetEnvironmentVariable("ROS_DOMAIN_ID", settings["domain_id"]),
         SetEnvironmentVariable("LUCY_BRIDGE", settings["bridge"]),
@@ -383,6 +387,7 @@ def generate_launch_description():
         launch_arguments=[
             ("robot_package", LaunchConfiguration("robot_package")),
             ("config_dir", LaunchConfiguration("config_dir")),
+            ("real", LaunchConfiguration("use_real_hardware")),
         ],
     )
 
