@@ -413,7 +413,9 @@ class ControlSupervisorNode(Node):
             or cfg.controllers_yaml.parent / "hardware"
         )
         try:
-            processes = bridge_processes(bridge, Path(config_dir) / "active.yaml", urdf_xml)
+            processes = bridge_processes(
+                bridge, Path(config_dir) / "active.yaml", urdf_xml
+            )
         except ValueError as exc:
             self.get_logger().error(f"LUCY_BRIDGE: {exc}")
             return

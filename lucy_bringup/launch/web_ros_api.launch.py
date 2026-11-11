@@ -44,7 +44,9 @@ from launch.substitutions import PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 
 DEFAULT_ROSBRIDGE_ADDRESS = "127.0.0.1"
-ROSBRIDGE_ADDRESS = LaunchConfiguration("rosbridge_address", default=DEFAULT_ROSBRIDGE_ADDRESS)
+ROSBRIDGE_ADDRESS = LaunchConfiguration(
+    "rosbridge_address", default=DEFAULT_ROSBRIDGE_ADDRESS
+)
 # Ports tried from rosbridge_port on: rosbridge_port .. rosbridge_port + span - 1.
 PORT_SEARCH_SPAN = 20
 
@@ -59,7 +61,11 @@ def port_is_free(address: str, port: int) -> bool:
     """
     try:
         infos = socket.getaddrinfo(
-            address or None, port, socket.AF_UNSPEC, socket.SOCK_STREAM, 0,
+            address or None,
+            port,
+            socket.AF_UNSPEC,
+            socket.SOCK_STREAM,
+            0,
             socket.AI_PASSIVE,
         )
     except socket.gaierror:

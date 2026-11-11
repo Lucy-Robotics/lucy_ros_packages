@@ -24,7 +24,10 @@ def mcu_boards(hardware_yaml: Path) -> list[tuple[str, str]]:
         return []
     data = yaml.safe_load(hardware_yaml.read_text(encoding="utf-8")) or {}
     return [
-        (derive_ros2_node_name(board_id), str((board or {}).get("serial_id") or "").strip())
+        (
+            derive_ros2_node_name(board_id),
+            str((board or {}).get("serial_id") or "").strip(),
+        )
         for board_id, board in (data.get("boards") or {}).items()
     ]
 
@@ -52,12 +55,18 @@ def bridge_processes(
     if bridge == "linux":
         return [(node, [node]) for node in sorted(nodes)]
     if bridge == "mcu_bridge":
-        boards = [(node, serial) for node, serial in mcu_boards(hardware_yaml) if node in nodes]
+        boards = [
+            (node, serial)
+            for node, serial in mcu_boards(hardware_yaml)
+            if node in nodes
+        ]
         if len(boards) == 1:
             node, serial = boards[0]
             return [(node, [node, serial] if serial else [node])]
         return [(node, [node, serial]) for node, serial in boards if serial]
-    raise ValueError(f"unknown bridge {bridge!r} (expected {', '.join(BRIDGE_EXECUTABLES)})")
+    raise ValueError(
+        f"unknown bridge {bridge!r} (expected {', '.join(BRIDGE_EXECUTABLES)})"
+    )
 
 
 def bridge_executable(bridge: str) -> str:

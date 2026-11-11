@@ -199,8 +199,12 @@ def test_mcu_bridge_runs_one_bridge_per_board_the_urdf_drives(tmp_path: Path):
         '  mega_right: {board_class: i2c_pwm_only, serial_id: "CCC"}\n',
         encoding="utf-8",
     )
-    assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [("left", ["left", "AAA"])]
-    assert bridge_processes("mcu_bridge", tmp_path / "missing.yaml", _TWO_NODE_URDF) == []
+    assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [
+        ("left", ["left", "AAA"])
+    ]
+    assert (
+        bridge_processes("mcu_bridge", tmp_path / "missing.yaml", _TWO_NODE_URDF) == []
+    )
 
 
 def test_mcu_bridge_finds_a_single_board_without_serial(tmp_path: Path):
@@ -212,7 +216,9 @@ def test_mcu_bridge_finds_a_single_board_without_serial(tmp_path: Path):
         'boards:\n  rp2040_so_arm: {board_class: bus_servo_only, serial_id: ""}\n',
         encoding="utf-8",
     )
-    assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [("so_arm", ["so_arm"])]
+    assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [
+        ("so_arm", ["so_arm"])
+    ]
 
 
 def test_mcu_bridge_needs_serials_when_several_boards(tmp_path: Path):
@@ -226,7 +232,9 @@ def test_mcu_bridge_needs_serials_when_several_boards(tmp_path: Path):
         '  rp2040_so_arm: {board_class: bus_servo_only, serial_id: ""}\n',
         encoding="utf-8",
     )
-    assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [("left", ["left", "AAA"])]
+    assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [
+        ("left", ["left", "AAA"])
+    ]
 
 
 def test_unknown_bridge_is_rejected(tmp_path: Path):
