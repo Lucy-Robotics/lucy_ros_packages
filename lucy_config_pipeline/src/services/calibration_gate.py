@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from .registry_lock import RegistryLock
 from ..calibration.firmware_client import FirmwareBackend
 from ..calibration.firmware_client import FirmwareUnreachable
 from ..calibration.identity import Identity
 from ..calibration.session import IDLE
 from ..calibration.sim_backend import SimBackend
 from ..config_store import ConfigStore
-from .registry_lock import RegistryLock
 
 
 class ControlGate:
