@@ -85,6 +85,13 @@ struct ActuatorSharedState
 static_assert(std::atomic<uint64_t>::is_always_lock_free, "uint64_t must be lock-free");
 static_assert(std::atomic<uint32_t>::is_always_lock_free, "uint32_t must be lock-free");
 
+/// POSIX shm name of a ros2_control node: ``/<node_name>.domain<ROS_DOMAIN_ID>``.
+///
+/// The domain keeps robots on separate ROS domains of one host on separate segments.
+/// ROS_DOMAIN_ID unset or not a plain number counts as 0. The embed-rs firmwares build
+/// the same name (lucy_embedded_firmware crates/host/src/shm.rs): keep both in step.
+std::string lucy_shm_name(const std::string & node_name);
+
 class SharedMemoryChannel
 {
 public:

@@ -17,7 +17,10 @@
 
 #include <sys/mman.h>
 #include <algorithm>
+#include <charconv>
 #include <cmath>
+#include <cstdlib>
+#include <string_view>
 #include <thread>
 
 #include <fcntl.h>
@@ -34,7 +37,26 @@ std::string posix_shm_name(const std::string & node_name)
   }
   return "/" + node_name;
 }
+
+unsigned ros_domain_id()
+{
+  const char * env = std::getenv("ROS_DOMAIN_ID");
+  if (env == nullptr) {
+    return 0;
+  }
+  const std::string_view text(env);
+  unsigned domain = 0;
+  const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), domain);
+  return (text.empty() || error != std::errc() || end != text.data() + text.size()) ? 0 : domain;
+}
 }  // namespace
+
+std::string lucy_shm_name(const std::string & node_name)
+{
+  const auto start = node_name.find_first_not_of('/');
+  const std::string node = start == std::string::npos ? "" : node_name.substr(start);
+  return "/" + node + ".domain" + std::to_string(ros_domain_id());
+}
 
 SharedMemoryChannel::~SharedMemoryChannel()
 {
