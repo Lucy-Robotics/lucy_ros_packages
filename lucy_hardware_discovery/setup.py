@@ -17,7 +17,7 @@ setup(
     maintainer_email="contact@sentience-robotics.fr",
     description="Hardware discovery services for Lucy (serial, V4L2, RealSense).",
     license="GPL-3.0",
-    tests_require=["pytest"],
+    extras_require={"test": ["pytest"]},
     entry_points={
         "console_scripts": [
             "hardware_discovery_node = lucy_hardware_discovery.discovery_node:main",

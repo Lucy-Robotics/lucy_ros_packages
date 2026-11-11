@@ -17,6 +17,7 @@ setup(
     maintainer_email="contact@lucy-robotics.com",
     description="End-effector position and inverse kinematics with Pinocchio.",
     license="GPL-3.0",
+    extras_require={"test": ["pytest"]},
     entry_points={
         "console_scripts": [
             "kinematics_node = lucy_kinematics.kinematics_node:main",
