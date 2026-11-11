@@ -393,7 +393,7 @@ class ControlSupervisorNode(Node):
 
         lucy.launch.py sets ``LUCY_BRIDGE`` from ``bridge:=`` in ``mode:=real``. ``linux``
         runs one ``lucy_embedded_firmware_linux`` per ros2_control node; ``mcu_bridge`` one
-        ``lucy_embedded_firmware_mcu_bridge`` per Mega board of the active YAML.
+        ``lucy_embedded_firmware_mcu_bridge`` per board (RP2040 or Mega) of the active YAML.
 
         Being children of this node, they follow every RELOAD: a new serial_id or board
         layout applies on Activate, not only on a full relaunch. Each bridge waits for its
@@ -418,7 +418,15 @@ class ControlSupervisorNode(Node):
             self.get_logger().error(f"LUCY_BRIDGE: {exc}")
             return
         if not processes:
-            self.get_logger().warning(f"{bridge}: nothing to drive in this robot")
+            self.get_logger().warning(
+                f"{bridge}: nothing to drive in this robot"
+                + (
+                    " (no board in hardware/active.yaml; with several boards, each "
+                    "needs a serial_id)"
+                    if bridge == "mcu_bridge"
+                    else ""
+                )
+            )
             return
         try:
             executable = bridge_executable(bridge)

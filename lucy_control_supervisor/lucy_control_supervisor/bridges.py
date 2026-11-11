@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from lucy_config_generator.schema import BOARD_CLASS_I2C_PWM_ONLY
 from lucy_config_generator.schema import derive_ros2_node_name
 import yaml
 
@@ -19,18 +18,15 @@ BRIDGE_EXECUTABLES = {
 }
 
 
-def mega_bridges(hardware_yaml: Path) -> list[tuple[str, str]]:
-    """Return ``(node_name, serial_id)`` per Mega board that has a serial_id."""
+def mcu_boards(hardware_yaml: Path) -> list[tuple[str, str]]:
+    """Return ``(node_name, serial_id)`` per board of the active YAML (``""``: no serial)."""
     if not hardware_yaml.is_file():
         return []
     data = yaml.safe_load(hardware_yaml.read_text(encoding="utf-8")) or {}
-    out = []
-    for board_id, board in (data.get("boards") or {}).items():
-        board = board or {}
-        serial = str(board.get("serial_id") or "").strip()
-        if board.get("board_class") == BOARD_CLASS_I2C_PWM_ONLY and serial:
-            out.append((derive_ros2_node_name(board_id), serial))
-    return out
+    return [
+        (derive_ros2_node_name(board_id), str((board or {}).get("serial_id") or "").strip())
+        for board_id, board in (data.get("boards") or {}).items()
+    ]
 
 
 def ros2_control_nodes(urdf_xml: str) -> set[str]:
@@ -47,17 +43,20 @@ def bridge_processes(
     """Return ``(node_name, argv tail)`` for each bridge process to start.
 
     ``linux``: one per ros2_control node of the URDF (it maps that node's shared memory).
-    ``mcu_bridge``: one per Mega board of the active YAML that the URDF drives.
+    ``mcu_bridge``: one per board of the active YAML that the URDF drives, RP2040 or Mega.
+    The bridge finds its board by ``serial_id``, or takes the first RP2040/Mega it sees
+    when none is given: fine for a robot with one board (SO-ARM101), ambiguous with
+    several, where boards without a ``serial_id`` are left out.
     """
     nodes = ros2_control_nodes(urdf_xml)
     if bridge == "linux":
         return [(node, [node]) for node in sorted(nodes)]
     if bridge == "mcu_bridge":
-        return [
-            (node, [node, serial])
-            for node, serial in mega_bridges(hardware_yaml)
-            if node in nodes
-        ]
+        boards = [(node, serial) for node, serial in mcu_boards(hardware_yaml) if node in nodes]
+        if len(boards) == 1:
+            node, serial = boards[0]
+            return [(node, [node, serial] if serial else [node])]
+        return [(node, [node, serial]) for node, serial in boards if serial]
     raise ValueError(f"unknown bridge {bridge!r} (expected {', '.join(BRIDGE_EXECUTABLES)})")
 
 

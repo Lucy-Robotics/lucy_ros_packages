@@ -140,8 +140,8 @@ def test_wait_times_out_and_still_allows_publish():
     assert pub.published == [[1.0, 1.0, 1.0, 1.0, 1.0, 1.0]]
 
 
-def test_mega_bridges_follow_the_active_yaml(tmp_path: Path):
-    from lucy_control_supervisor.bridges import mega_bridges
+def test_mcu_boards_follow_the_active_yaml(tmp_path: Path):
+    from lucy_control_supervisor.bridges import mcu_boards
 
     hw = tmp_path / "active.yaml"
     hw.write_text(
@@ -151,8 +151,8 @@ def test_mega_bridges_follow_the_active_yaml(tmp_path: Path):
         '  rp2040_torso_head: {board_class: internal_servo_only, serial_id: "BBB"}\n',
         encoding="utf-8",
     )
-    assert mega_bridges(hw) == [("left", "AAA")]
-    assert mega_bridges(tmp_path / "missing.yaml") == []
+    assert mcu_boards(hw) == [("left", "AAA"), ("right", ""), ("torso_head", "BBB")]
+    assert mcu_boards(tmp_path / "missing.yaml") == []
 
 
 def test_ros2_control_nodes_reads_the_hardware_blocks():
@@ -189,7 +189,7 @@ def test_linux_bridge_runs_one_firmware_per_ros2_control_node(tmp_path: Path):
     ]
 
 
-def test_mcu_bridge_runs_one_bridge_per_mega_board_the_urdf_drives(tmp_path: Path):
+def test_mcu_bridge_runs_one_bridge_per_board_the_urdf_drives(tmp_path: Path):
     from lucy_control_supervisor.bridges import bridge_processes
 
     hw = tmp_path / "active.yaml"
@@ -201,6 +201,32 @@ def test_mcu_bridge_runs_one_bridge_per_mega_board_the_urdf_drives(tmp_path: Pat
     )
     assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [("left", ["left", "AAA"])]
     assert bridge_processes("mcu_bridge", tmp_path / "missing.yaml", _TWO_NODE_URDF) == []
+
+
+def test_mcu_bridge_finds_a_single_board_without_serial(tmp_path: Path):
+    """SO-ARM101: one RP2040 and no serial_id, so the bridge takes the board it finds."""
+    from lucy_control_supervisor.bridges import bridge_processes
+
+    hw = tmp_path / "active.yaml"
+    hw.write_text(
+        'boards:\n  rp2040_so_arm: {board_class: bus_servo_only, serial_id: ""}\n',
+        encoding="utf-8",
+    )
+    assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [("so_arm", ["so_arm"])]
+
+
+def test_mcu_bridge_needs_serials_when_several_boards(tmp_path: Path):
+    """Two bridges without a serial_id would both take the first board they see."""
+    from lucy_control_supervisor.bridges import bridge_processes
+
+    hw = tmp_path / "active.yaml"
+    hw.write_text(
+        "boards:\n"
+        '  mega_left: {board_class: i2c_pwm_only, serial_id: "AAA"}\n'
+        '  rp2040_so_arm: {board_class: bus_servo_only, serial_id: ""}\n',
+        encoding="utf-8",
+    )
+    assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [("left", ["left", "AAA"])]
 
 
 def test_unknown_bridge_is_rejected(tmp_path: Path):
