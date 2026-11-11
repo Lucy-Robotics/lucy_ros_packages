@@ -4,18 +4,18 @@ System launch files and scripts for the Lucy robot on NVIDIA Jetson AGX Orin.
 
 ## Overview
 
-**`lucy.launch.py`** is the **single main entry**: it **always** includes **`web_ros_api.launch.py`** (rosbridge + **lucy_config_pipeline** for the control panel). Optional pieces are controlled by launch arguments (defaults match “full Jetson stack without RViz or Gazebo”):
+**`lucy.launch.py`** is the **single main entry**: it **always** includes **`web_ros_api.launch.py`** (rosbridge + **lucy_config_pipeline** for the control panel), then the robot package's ros2_control stack in the chosen **`mode`**. Invalid combinations stop the launch with a **`RuntimeError`** that names the fix.
 
-| Argument | Default | When true / meaning |
-|----------|---------|---------------------|
-| **`real`** | `true` | micro-ROS agents (serial arms), USB webcam (**`camera_ros`**), RealSense |
-| **`rviz`** | `false` | RViz2 with **`robot_package`** RViz config (`use_sim_time:=false`). If **`gazebo:=true`**, forwarded as **`start_rviz`** to **`thais_urdf/gazebo.launch.py`** (no duplicate RViz). |
-| **`gazebo`** | `false` | Include **`thais_urdf/gazebo.launch.py`**. **Requires `real:=false`** or launch aborts with **`RuntimeError`**. |
-| **`robot_package`** | `thais_urdf` | **`control.launch.py`**, config paths, RViz config share |
+| Argument | Default | Meaning |
+|----------|---------|---------|
+| **`mode`** | `mock` | **`mock`**: ros2_control on mock hardware (no robot, no simulator). **`sim`**: the robot package's **`gazebo.launch.py`**. **`real`**: the physical robot, through **`bridge`**. |
+| **`bridge`** | *(empty)* | Required with **`mode:=real`**, rejected otherwise. **`linux`**: the host drives USB-serial servos (`lucy_embedded_firmware_linux`, one per ros2_control node, e.g. SO-ARM101). **`mcu_bridge`**: the host relays to the microcontroller boards of the active hardware YAML (`lucy_embedded_firmware_mcu_bridge`, one per board). **`lucy_control_supervisor`** starts them (resolved like `ros2 run`) and restarts them with the stack. |
+| **`rviz`** | `false` | RViz2 with the **`robot_package`** RViz config (sim time in **`mode:=sim`**). |
+| **`headless`** | `false` | **`mode:=sim`** only: server-only gz-sim with EGL rendering, cameras still work without an X server. |
+| **`domain_id`** | `$ROS_DOMAIN_ID`, else `0` | **`ROS_DOMAIN_ID`** (0-101) for every process of the launch. One domain per robot on a shared network; tools run beside it (`ros2 topic`, rqt, lucy-cli) need the same `ROS_DOMAIN_ID`. |
+| **`robot_package`** | sole installed robot package, else `inmoov_urdf` | **`control.launch.py`**, config paths, RViz config share |
 | **`config_dir`** | *(empty)* | Override hardware YAML dir for **lucy_config_pipeline** |
-| **`urdf_path`**, **`base_path`** | *(see launch file)* | Forwarded to **`thais_urdf`** Gazebo when **`gazebo:=true`** |
-
-Audio nodes are not wired in **`lucy.launch.py`** today (reserved for future use).
+| **`urdf_path`**, **`base_path`**, **`controllers_yaml`** | *(empty = robot package defaults)* | Overrides of the robot package's `config/control.launch.yaml` |
 
 ## Building
 
@@ -48,21 +48,21 @@ Scripts resolve the colcon workspace as: **`LUCY_WS`** (if set and the directory
 # Source workspace
 source ~/lucy_ws/install/setup.zsh
 
-# Default Jetson + panel (no RViz / no Gazebo)
+# Mock hardware + panel (default)
 ros2 launch lucy_bringup lucy.launch.py
 
-# Jetson + RViz + panel
+# Mock hardware + RViz + panel
 ros2 launch lucy_bringup lucy.launch.py rviz:=true
 
-# Dev + panel + control + RViz (no micro-ROS / cameras)
-ros2 launch lucy_bringup lucy.launch.py real:=false rviz:=true
+# Gazebo sim + panel, server only
+ros2 launch lucy_bringup lucy.launch.py mode:=sim headless:=true
 
-# Gazebo sim + panel (``rviz:=false`` = headless Gazebo)
-ros2 launch lucy_bringup lucy.launch.py gazebo:=true real:=false
+# Real robot: host-driven USB servos, or microcontroller boards
+ros2 launch lucy_bringup lucy.launch.py mode:=real bridge:=linux robot_package:=so_arm101_urdf
+ros2 launch lucy_bringup lucy.launch.py mode:=real bridge:=mcu_bridge
 
-# Custom serial devices or robot package
-ros2 launch lucy_bringup lucy.launch.py device0:=/dev/ttyACM2 device1:=/dev/ttyACM3
-ros2 launch lucy_bringup lucy.launch.py robot_package:=my_robot_urdf
+# Second robot on the same network
+ros2 launch lucy_bringup lucy.launch.py mode:=real bridge:=mcu_bridge domain_id:=3
 ```
 
 ### Stopping (`stop_lucy.sh`)
@@ -106,9 +106,9 @@ The script interrupts the ROS pane (twice), stops the web pane, kills the tmux s
 
 ## Launch Arguments
 
-**`lucy.launch.py`:** `device0`, `device1`, `robot_package`, `config_dir`, **`real`**, **`rviz`**, **`gazebo`**, **`urdf_path`**, **`base_path`** (see **Overview** table). **`gazebo:=true`** with **`real:=true`** aborts at parse time.
+**`lucy.launch.py`:** **`mode`**, **`bridge`**, **`rviz`**, **`headless`**, **`domain_id`**, `robot_package`, `config_dir`, `urdf_path`, `base_path`, `controllers_yaml` (see **Overview** table, or `ros2 launch lucy_bringup lucy.launch.py --show-args`).
 
-**`realsense.launch.py`** is included as-is when **`real:=true`**; tune that file or wrap it if you need serial overrides.
+**`realsense.launch.py`** is a standalone launch file; it is not included by **`lucy.launch.py`**.
 
 ## System Requirements
 
@@ -169,7 +169,7 @@ These are informational warnings, not errors. The system continues to function n
 ```
 lucy_bringup/
 ├── launch/
-│   ├── lucy.launch.py                    # Main entry (``real``, ``rviz``, ``gazebo``, …)
+│   ├── lucy.launch.py                    # Main entry (``mode``, ``bridge``, ``rviz``, ``domain_id``, …)
 │   ├── web_ros_api.launch.py             # rosbridge + lucy_config_pipeline only
 │   └── realsense.launch.py               # RealSense D435i camera launch file
 ├── system_scripts/

@@ -85,7 +85,7 @@ tmux resize-pane -t $SESSION_NAME:0.1 -x 20
 # ============================================
 echo -e "${BLUE}🤖 Setting up ROS2 nodes pane...${NC}"
 tmux send-keys -t $SESSION_NAME:0.0 "source $WORKSPACE/install/setup.zsh" C-m
-tmux send-keys -t $SESSION_NAME:0.0 "ros2 launch lucy_bringup lucy.launch.py real:=true" C-m
+tmux send-keys -t $SESSION_NAME:0.0 "ros2 launch lucy_bringup lucy.launch.py mode:=real bridge:=mcu_bridge" C-m
 
 # ============================================
 # PANE 1 (Bottom-Left): Web Interface

@@ -200,7 +200,7 @@ protected:
   {
     const auto * info = ::testing::UnitTest::GetInstance()->current_test_info();
     node_name_ = "lucy_test_sys_" + std::to_string(getpid()) + "_" + info->name();
-    shm_name_ = "/" + node_name_;
+    shm_name_ = lucy_shm_name(node_name_);
     shm_unlink(shm_name_.c_str());
   }
 

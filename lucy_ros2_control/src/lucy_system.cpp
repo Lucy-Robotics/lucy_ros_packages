@@ -240,8 +240,9 @@ hardware_interface::CallbackReturn LucySystemHardware::on_error(
 hardware_interface::CallbackReturn LucySystemHardware::on_configure(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
-  RCLCPP_INFO(get_logger(), "Initializing shm");
-  shared_memory_channel_ = SharedMemoryChannel::create(node_name_, info_.joints.size());
+  const std::string shm_name = lucy_shm_name(node_name_);
+  RCLCPP_INFO(get_logger(), "Initializing shm %s", shm_name.c_str());
+  shared_memory_channel_ = SharedMemoryChannel::create(shm_name, info_.joints.size());
   if (!shared_memory_channel_.has_value()) {
     RCLCPP_FATAL(get_logger(), "Failed to create shared memory channel");
     return hardware_interface::CallbackReturn::ERROR;

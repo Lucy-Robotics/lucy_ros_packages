@@ -29,6 +29,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <optional>
 #include <string>
@@ -329,4 +330,54 @@ TEST_F(SharedMemoryChannelTest, BareNodeNameGetsLeadingSlash)
   ASSERT_TRUE(channel.has_value());
   ExternalMapping ext(name_, ActuatorSharedState::size_for(1));
   EXPECT_TRUE(ext.ok());
+}
+
+/// Restores ROS_DOMAIN_ID on scope exit.
+class DomainEnv
+{
+public:
+  explicit DomainEnv(const char * value)
+  {
+    if (const char * old = std::getenv("ROS_DOMAIN_ID")) {
+      saved_ = old;
+    }
+    if (value == nullptr) {
+      unsetenv("ROS_DOMAIN_ID");
+    } else {
+      setenv("ROS_DOMAIN_ID", value, 1);
+    }
+  }
+  ~DomainEnv()
+  {
+    if (saved_) {
+      setenv("ROS_DOMAIN_ID", saved_->c_str(), 1);
+    } else {
+      unsetenv("ROS_DOMAIN_ID");
+    }
+  }
+
+private:
+  std::optional<std::string> saved_;
+};
+
+// The firmware side builds the same name: crates/host/src/shm.rs in lucy_embedded_firmware.
+TEST(LucyShmName, CarriesTheRosDomain)
+{
+  {
+    DomainEnv env("3");
+    EXPECT_EQ(lucy_shm_name("so_arm"), "/so_arm.domain3");
+    EXPECT_EQ(lucy_shm_name("/so_arm"), "/so_arm.domain3");
+  }
+  {
+    DomainEnv env("07");
+    EXPECT_EQ(lucy_shm_name("so_arm"), "/so_arm.domain7");
+  }
+}
+
+TEST(LucyShmName, MissingOrInvalidDomainIsZero)
+{
+  for (const char * value : {static_cast<const char *>(nullptr), "", "abc", "3x", "-1"}) {
+    DomainEnv env(value);
+    EXPECT_EQ(lucy_shm_name("so_arm"), "/so_arm.domain0") << (value ? value : "(unset)");
+  }
 }
