@@ -5,8 +5,8 @@ from __future__ import annotations
 from lucy_msgs.srv import ControlLock
 from rclpy.node import Node
 
-from ..ros_wait import wait_for_future
 from .client_registry_node import CONTROL_LOCK_SERVICE
+from ..ros_wait import wait_for_future
 
 LOCK_OWNER = "calibration"
 LOCK_TIMEOUT_S = 2.0

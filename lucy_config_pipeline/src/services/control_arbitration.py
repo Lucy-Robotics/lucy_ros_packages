@@ -11,7 +11,8 @@ def decide_control(
     lock_owner: str,
     servo_powered: bool,
 ) -> tuple[str, bool, str]:
-    """Decide the next active client for `_on_control`.
+    """
+    Decide the next active client for `_on_control`.
 
     Returns (new_active_client, refused, locked_by).
     """
@@ -27,7 +28,8 @@ def decide_control(
 def decide_control_lock(
     *, owner: str, acquire: bool, lock_owner: str, active_client: str
 ) -> tuple[str, bool, str]:
-    """Decide the next lock owner for `_on_control_lock`.
+    """
+    Decide the next lock owner for `_on_control_lock`.
 
     Returns (new_lock_owner, success, message).
     """
