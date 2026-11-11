@@ -9,7 +9,7 @@ from lucy_config_generator.calibration import apply_urdf_limits
 from lucy_config_generator.calibration import generated_limit_mismatches
 import pytest
 from src.config_store import ConfigStore
-from src.pipeline.action_server import PipelineActionServer
+from src.pipeline.generate_phase import sync_urdf_limits
 
 URDF = (
     '<robot><joint name="Rotation" type="revolute">'
@@ -37,21 +37,16 @@ def server(tmp_path: Path):
     )
     store = ConfigStore(tmp_path / "hardware")
     store.ensure_layout()
-    server = SimpleNamespace(
-        _store=store,
-        _paths=SimpleNamespace(urdf_xacro=entry, robot_root=tmp_path),
-        urdf=limits_file,
-    )
-    server._limits_file = lambda: PipelineActionServer._limits_file(server)
-    return server
+    paths = SimpleNamespace(urdf_xacro=entry, robot_root=tmp_path)
+    return SimpleNamespace(store=store, paths=paths, urdf=limits_file)
 
 
 def sync(server, data):
-    return PipelineActionServer._sync_urdf_limits(server, data)
+    return sync_urdf_limits(server.store, server.paths, data)
 
 
 def stock(server):
-    server._store.stock_urdf_limits_yaml.write_text(
+    server.store.stock_urdf_limits_yaml.write_text(
         "urdf: limits.xacro\njoints:\n  Rotation: [-1.9, 1.9]\n", encoding="utf-8"
     )
 

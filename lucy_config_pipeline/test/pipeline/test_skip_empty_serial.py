@@ -108,14 +108,14 @@ def test_empty_serials_skip_build_flash_and_reload(
 
     with (
         patch(
-            "src.pipeline.action_server.resolve_mapping_input",
+            "src.pipeline.execute.resolve_mapping_input",
             return_value=("default", config_yaml),
         ),
-        patch("src.pipeline.action_server.validate_schema", return_value=data),
-        patch("src.pipeline.action_server.urdf_crosscheck") as cross,
-        patch("src.pipeline.action_server.generate") as gen,
-        patch("src.pipeline.action_server.run_build_phase") as build,
-        patch("src.pipeline.action_server.run_flash_phase") as flash,
+        patch("src.pipeline.execute.validate_schema", return_value=data),
+        patch("src.pipeline.execute.urdf_crosscheck") as cross,
+        patch("src.pipeline.generate_phase.generate") as gen,
+        patch("src.pipeline.execute.run_build_phase") as build,
+        patch("src.pipeline.execute.run_flash_phase") as flash,
     ):
         cross.return_value = MagicMock(errors=[])
         gen.side_effect = lambda **kwargs: _write_outputs(kwargs["output_dir"])
