@@ -45,11 +45,22 @@ def test_robot_list_is_published(node):
     assert json.loads(received[0])["available"] == ["inmoov_urdf", "so_arm101_urdf"]
 
 
-def test_launcher_stack_status_is_relayed_once(node, tmp_path):
-    published = []
-    node._status_pub.publish = lambda m: published.append(m.data)
-    node._relay_stack_status()
+def test_robots_and_stack_status_are_republished_for_late_subscribers(node, tmp_path):
+    robots, status = [], []
+    node._robots_pub.publish = lambda m: robots.append(m.data)
+    node._status_pub.publish = lambda m: status.append(m.data)
+    node._republish()
     (tmp_path / "status").write_text('{"ready": false, "index": 6}')
-    node._relay_stack_status()
-    node._relay_stack_status()
-    assert published == ['{"ready": false, "index": 6}']
+    node._republish()
+    node._republish()
+    assert status == ['{"ready": false, "index": 6}'] * 2
+    assert len(robots) == 3
+    assert json.loads(robots[0])["available"] == ["inmoov_urdf", "so_arm101_urdf"]
+
+
+def test_an_empty_stack_status_file_is_not_relayed(node, tmp_path):
+    status = []
+    node._status_pub.publish = lambda m: status.append(m.data)
+    (tmp_path / "status").write_text("")
+    node._republish()
+    assert status == []

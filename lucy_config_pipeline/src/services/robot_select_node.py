@@ -76,24 +76,23 @@ class RobotSelectNode(Node):
         self._available = installed_robot_packages() if available is None else available
         self._robots_pub = self.create_publisher(String, ROBOTS_TOPIC, _LATCHED_QOS)
         self.create_subscription(String, SELECT_TOPIC, self._on_select, 10)
-        self._robots_pub.publish(
-            String(
-                data=json.dumps({"active": self._active, "available": self._available})
-            )
+        self._robots_msg = String(
+            data=json.dumps({"active": self._active, "available": self._available})
         )
+        self._robots_pub.publish(self._robots_msg)
         self._status_pub = self.create_publisher(
             String, STACK_STATUS_TOPIC, _LATCHED_QOS
         )
-        self._last_status = ""
-        self.create_timer(STATUS_POLL_S, self._relay_stack_status)
+        self.create_timer(STATUS_POLL_S, self._republish)
 
-    def _relay_stack_status(self) -> None:
+    def _republish(self) -> None:
+        # rosbridge subscribes VOLATILE when it cannot see this publisher yet
+        self._robots_pub.publish(self._robots_msg)
         try:
             status = stack_status_file().read_text(encoding="utf-8")
         except OSError:
             return
-        if status and status != self._last_status:
-            self._last_status = status
+        if status:
             self._status_pub.publish(String(data=status))
 
     def _on_select(self, msg: String) -> None:
