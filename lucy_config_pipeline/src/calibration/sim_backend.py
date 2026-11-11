@@ -5,9 +5,10 @@ from __future__ import annotations
 import math
 import time
 
+from .session.constants import HALF_TURN_TICK
+from .session.constants import MAX_TICK
+
 SIM_SERIAL = "SIMULATED"
-MAX_TICK = 4095
-HALF_TURN_TICK = MAX_TICK // 2
 SWEEP_PERIOD_S = 2.0
 SWEEP_TICKS = 1300
 
