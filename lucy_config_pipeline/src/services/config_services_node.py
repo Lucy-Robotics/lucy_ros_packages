@@ -5,6 +5,7 @@ from pathlib import Path
 import zlib
 
 from ament_index_python.packages import get_package_share_directory
+from lucy_config_generator.motors import motors_used
 from lucy_msgs.srv import ActivateConfig
 from lucy_msgs.srv import DeleteConfig
 from lucy_msgs.srv import GetConfig
@@ -13,9 +14,11 @@ from lucy_msgs.srv import ListConfigs
 from lucy_msgs.srv import SaveConfig
 import rclpy
 from rclpy.node import Node
+import yaml
 
 from ..config_store import ConfigStore
 from ..error_format import format_error_lines
+from ..validation import parse_yaml_text
 from ..validation import urdf_crosscheck
 from ..validation import validate_schema
 
@@ -74,6 +77,9 @@ class ConfigServicesNode(Node):
             res.robot_package = self._robot_package
             res.flashed_config_name = self._store.get_flashed_name()
             res.flashed_at = self._store.get_flashed_at()
+            res.motors_yaml = yaml.safe_dump(
+                motors_used(parse_yaml_text(res.config_yaml)), sort_keys=False
+            )
             res.success = True
             res.message = "ok"
         except FileNotFoundError:

@@ -7,7 +7,7 @@ setup(
     name=package_name,
     version="0.0.0",
     packages=find_packages(exclude=["test"]),
-    package_data={package_name: ["templates/*.j2"]},
+    package_data={package_name: ["templates/*.j2", "motors.yaml"]},
     include_package_data=True,
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
