@@ -84,6 +84,7 @@ def test_empty_serials_skip_build_flash_and_reload(
 
     store = MagicMock()
     store.get_active_name.return_value = "default"
+    store.read_stock_urdf_limits.return_value = ("", {})
 
     node = PipelineActionServer(paths=pipeline_paths, config_store=store)
     node._reload_client.wait_for_service = MagicMock(return_value=True)  # type: ignore
