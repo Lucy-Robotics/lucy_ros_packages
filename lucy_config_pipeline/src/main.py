@@ -99,11 +99,13 @@ def main() -> None:
     )
     action_node = PipelineActionServer(paths=paths, config_store=store)
 
-    # 4 threads: 1 for the action's _execute (which blocks for minutes during
+    # 11 threads: 1 for the action's _execute (which blocks for minutes during
     # build/flash and seconds during reload), 1 for the reload service-client
-    # response callback that unblocks _execute, and 2 for the config services
-    # node so config/get/list/save remain responsive during a pipeline run.
-    executor = rclpy.executors.MultiThreadedExecutor(num_threads=4)
+    # response callback that unblocks _execute, 1 for config/get, list, save,
+    # activate and delete (mutually exclusive among themselves), and 8 for
+    # mesh/get so the viewer's concurrent mesh fetches run in parallel instead
+    # of queueing behind a single worker thread.
+    executor = rclpy.executors.MultiThreadedExecutor(num_threads=11)
     executor.add_node(services_node)
     executor.add_node(action_node)
     try:

@@ -13,6 +13,7 @@ from lucy_msgs.srv import GetMesh
 from lucy_msgs.srv import ListConfigs
 from lucy_msgs.srv import SaveConfig
 import rclpy
+from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 import yaml
 
@@ -49,7 +50,15 @@ class ConfigServicesNode(Node):
         self.create_service(SaveConfig, "config/save", self._on_save_config)
         self.create_service(ActivateConfig, "config/activate", self._on_activate_config)
         self.create_service(DeleteConfig, "config/delete", self._on_delete_config)
-        self.create_service(GetMesh, "mesh/get", self._on_get_mesh)
+        # Reentrant: mesh reads are independent and the viewer fires many of
+        # them concurrently, so they must not queue behind the default
+        # mutually exclusive group shared by the other config services.
+        self.create_service(
+            GetMesh,
+            "mesh/get",
+            self._on_get_mesh,
+            callback_group=ReentrantCallbackGroup(),
+        )
 
     def _on_list_configs(
         self, _req: ListConfigs.Request, res: ListConfigs.Response
