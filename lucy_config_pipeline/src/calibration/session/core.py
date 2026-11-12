@@ -83,6 +83,7 @@ class Session(
             "cancel": self._cancel,
             "resume": self._resume,
             "restore": self._restore,
+            "discard": self._discard,
             "verify_drive": self._verify_drive,
             "back_to_review": self._back_to_review,
             "finish": self._finish,

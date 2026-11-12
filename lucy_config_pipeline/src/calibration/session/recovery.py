@@ -47,6 +47,10 @@ class SessionRecoveryMixin:
         self._restore_previous()
         self._end("The previous calibration was restored.")
 
+    def _discard(self, _argument: str) -> None:
+        self._need_phase(RECOVERY)
+        self._end("The unfinished session was discarded. The servos were not touched.")
+
     def _restore_previous(self) -> None:
         if not self._old:
             return

@@ -96,6 +96,35 @@ def test_restore_from_recovery(session, arm, store, profile, lock):
     assert reborn.phase == IDLE
 
 
+def test_discard_from_recovery_touches_nothing(session, arm, store, profile, lock):
+    session.command("start")
+    session.command("capture_mid")
+
+    reborn = reborn_session(arm, store, profile, lock)
+    reborn.command("discard")
+
+    assert arm.restores == []
+    assert reborn.phase == IDLE
+    assert store.read_journal() == {}
+
+
+def test_discard_works_even_when_restore_would_be_refused(
+    session, arm, store, profile, lock
+):
+    session.command("start")
+    session.command("capture_mid")
+
+    reborn = reborn_session(arm, store, profile, lock)
+    reborn._serial = "a different adapter"
+    assert code_of(reborn, "restore") == "serial_mismatch"
+    attempts = len(arm.restores)
+
+    reborn.command("discard")
+
+    assert len(arm.restores) == attempts, "discard must not call the firmware"
+    assert reborn.phase == IDLE
+
+
 def test_resume_is_refused_if_homing_never_finished(session, arm, store, profile, lock):
     session.command("start")
     arm.dead_on = "set_half_turn"
