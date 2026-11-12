@@ -36,6 +36,10 @@ class ConfigStorePathsMixin:
     def calibration_profile_yaml(self) -> Path:
         return self.config_dir / "calibration_profile.yaml"
 
+    @property
+    def stock_urdf_limits_yaml(self) -> Path:
+        return self.config_dir / "urdf_limits_stock.yaml"
+
     def lerobot_json_path(self, config_name: str) -> Path:
         return self._named_path(config_name).with_suffix(".lerobot.json")
 

@@ -9,6 +9,7 @@ import shutil
 import yaml
 
 from .io import atomic_write_text
+from .io import read_mapping
 
 
 def _calibration_block(text: str) -> dict:
@@ -74,6 +75,15 @@ class ConfigStorePresetsMixin:
         if adapter_serial:
             self.bind_adapter(adapter_serial, config_name)
         return backup_name
+
+    def read_stock_urdf_limits(self) -> tuple[str, dict[str, tuple[float, float]]]:
+        """Return the file holding the URDF limits, and those for a preset with no calibration."""
+        data = read_mapping(self.stock_urdf_limits_yaml)
+        limits = data.get("joints") or {}
+        return str(data.get("urdf") or ""), {
+            str(joint): (float(pair[0]), float(pair[1]))
+            for joint, pair in limits.items()
+        }
 
     def delete(self, config_name: str) -> None:
         active = self.get_active_name()
