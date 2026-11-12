@@ -4,6 +4,7 @@ import zlib
 
 import pytest
 import rclpy
+from rclpy.callback_groups import ReentrantCallbackGroup
 from src.config_store import ConfigStore
 from src.services.config_services_node import (
     ConfigServicesNode,
@@ -82,6 +83,29 @@ class TestGetMesh:
             assert res.success is True
             assert res.encoding == MESH_ENCODING_UTF8
             assert res.data == "<COLLADA/>"
+        finally:
+            node.destroy_node()
+
+    def test_mesh_get_runs_in_its_own_reentrant_group(
+        self, rclpy_init_shutdown, tmp_path: Path
+    ):
+        desc = tmp_path / "description"
+        desc.mkdir()
+
+        node = ConfigServicesNode(
+            robot_package="test_pkg",
+            config_store=ConfigStore(tmp_path / "hardware"),
+            urdf_xacro=tmp_path / "missing.urdf.xacro",
+            base_path=desc,
+            controller_config=tmp_path / "controllers.yaml",
+        )
+        try:
+            mesh_service = next(s for s in node.services if s.srv_name == "/mesh/get")
+            other_service = next(
+                s for s in node.services if s.srv_name == "/config/get"
+            )
+            assert isinstance(mesh_service.callback_group, ReentrantCallbackGroup)
+            assert mesh_service.callback_group is not other_service.callback_group
         finally:
             node.destroy_node()
 
