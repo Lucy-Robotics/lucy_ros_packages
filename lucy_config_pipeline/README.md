@@ -34,8 +34,8 @@ After a successful build, each selected board with a non-empty `serial_id` is fl
   interface so **reflash does not need BOOTSEL** (`picotool load -x -f --ser …`).
   Boards still on legacy Custom VID ``16c0`` need **one** BOOTSEL flash to
   upgrade, then subsequent flashes are hands-free.
-- **`serial_id` in YAML is the Pico flash unique id** (same as `picotool info`
-  `flash id`, e.g. `E6617C93E3858429`). Firmware exposes that string as the USB
+- **`serial_id` in YAML is only ever the Pico flash unique id** (same as `picotool info`
+  `flash id`, e.g. `E6617C93E3858429`), never a USB adapter's (see `calibration.adapter_serial`). Firmware exposes that string as the USB
   CDC serial; flash success is **not** “picotool printed 100%” alone.
 - Optional pause after load (default **2 s**, env `LUCY_PIPELINE_FLASH_POST_LOAD_DELAY_SEC`,
   set `0` to disable) before polling USB.
@@ -106,3 +106,18 @@ ros2 launch lucy_config_pipeline config_pipeline.launch.py robot_package:=thais_
 ```
 
 Optional: pass `config_dir:=/abs/path/to/config/hardware` to override source-path detection.
+
+## Calibration (`calibration_node`)
+
+For robots with a `config/hardware/calibration_profile.yaml`; the others just idle.
+
+- `/lucy/calibration/command` (`lucy_msgs/srv/CalibrationCommand`), `/lucy/calibration/status`
+  (latched JSON): the wizard's session. See `src/calibration/session.py`.
+- `/lucy/hardware_identity` (`lucy_msgs/srv/GetHardwareIdentity`): which arm is connected, and
+  whether it may be driven.
+- `/lucy/control_lock` (`lucy_msgs/srv/ControlLock`, on the client registry): while held,
+  nobody can take control. Held during a session, and while a real arm isn't identified.
+
+With `real:=true` it reaches the servos only through the host firmware's maintenance socket;
+with `real:=false` it drives a simulated arm. Every EEPROM change is journaled first to
+`config/hardware/.calibration_session.yaml`, so an interrupted session can be restored.

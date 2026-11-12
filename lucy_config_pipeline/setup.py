@@ -28,6 +28,7 @@ setup(
             "config_pipeline_node = src.main:main",
             "client_registry_node = src.services.client_registry_node:main",
             "robot_select_node = src.services.robot_select_node:main",
+            "calibration_node = src.services.calibration_node:main",
         ],
     },
 )

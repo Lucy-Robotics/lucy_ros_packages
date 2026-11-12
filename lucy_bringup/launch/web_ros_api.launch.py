@@ -49,6 +49,8 @@ ROSBRIDGE_ADDRESS = LaunchConfiguration(
 )
 # Ports tried from rosbridge_port on: rosbridge_port .. rosbridge_port + span - 1.
 PORT_SEARCH_SPAN = 20
+# Kept in step with lucy.launch.py's own MODES.
+MODES = ("mock", "sim", "real")
 
 
 def port_is_free(address: str, port: int) -> bool:
@@ -118,6 +120,12 @@ def _select_rosbridge_port(context):
     ]
 
 
+def _derive_real(context):
+    """Set ``real`` (plain bool, for lucy_config_pipeline) from ``mode``."""
+    mode = LaunchConfiguration("mode").perform(context)
+    return [SetLaunchConfiguration("real", "true" if mode == "real" else "false")]
+
+
 def generate_launch_description():
     robot_package_arg = DeclareLaunchArgument(
         "robot_package",
@@ -141,6 +149,16 @@ def generate_launch_description():
         description=(
             "Override hardware config directory for lucy_config_pipeline "
             "(empty = <robot_package>/config/hardware)"
+        ),
+    )
+
+    mode_arg = DeclareLaunchArgument(
+        "mode",
+        default_value="real",
+        choices=list(MODES),
+        description=(
+            "mock/sim drive the calibration wizard's simulated arm; "
+            "real drives the physical one"
         ),
     )
 
@@ -185,6 +203,7 @@ def generate_launch_description():
         launch_arguments=[
             ("robot_package", LaunchConfiguration("robot_package")),
             ("config_dir", LaunchConfiguration("config_dir")),
+            ("real", LaunchConfiguration("real")),
         ],
     )
 
@@ -193,7 +212,9 @@ def generate_launch_description():
             robot_package_arg,
             rosbridge_port_arg,
             config_dir_arg,
+            mode_arg,
             OpaqueFunction(function=_select_rosbridge_port),
+            OpaqueFunction(function=_derive_real),
             rosbridge,
             config_pipeline_launch,
         ]

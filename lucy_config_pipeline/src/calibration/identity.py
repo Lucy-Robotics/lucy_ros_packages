@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from lucy_config_generator.safe_strings import SAFE_STRING
+import yaml
 
+from .firmware_client import FirmwareUnreachable
 from ..config_store import ConfigStore
 
 # A servo that has not answered for this long is not on the bus any more.
@@ -111,3 +113,42 @@ def decide(
         control_allowed=active,
         message="Calibrated arm recognised.",
     )
+
+
+def resolve_identity(
+    *, profile: dict | None, real: bool, backend, store: ConfigStore
+) -> Identity:
+    """Resolve what the calibration node's identity service and control gate both need."""
+    if profile is None:
+        return Identity("unsupported", control_allowed=True)
+    if not real:
+        return Identity("simulated", control_allowed=True, config_active=True)
+    try:
+        status = backend.status()
+    except FirmwareUnreachable:
+        status = None
+    homing = None
+    if status is not None and status.get("link") == "open":
+        try:
+            reply = backend.read_homing()
+            homing = reply.get("homing") if reply.get("ok") else None
+        except FirmwareUnreachable:
+            pass
+    return decide(
+        status=status,
+        store=store,
+        homing=homing,
+        joint_ids_by_actuator=_actuator_ids(store),
+    )
+
+
+def _actuator_ids(store: ConfigStore) -> dict[str, int]:
+    try:
+        config = yaml.safe_load(store.read_active_yaml())
+    except (OSError, yaml.YAMLError):
+        return {}
+    return {
+        str(a["id"]): int(a["physical_pin"])
+        for a in (config or {}).get("actuators") or []
+        if a.get("physical_pin") is not None
+    }
