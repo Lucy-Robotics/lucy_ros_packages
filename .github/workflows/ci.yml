@@ -21,138 +21,20 @@ jobs:
       - run: black --check --diff .
 
   build-and-test:
-    name: Build and test
-    runs-on: ubuntu-latest
-    container:
-      image: osrf/ros:jazzy-desktop
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install system and ROS dependencies
-        run: |
-          apt-get update && apt-get install -y --no-install-recommends \
-            python3-pip \
-            python3-rosdep \
-            python3-pytest \
-            python3-pytest-mock \
-            python3-pytest-cov \
-            python3-yaml \
-            python3-opencv \
-            gstreamer1.0-tools \
-            gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad \
-            gstreamer1.0-plugins-ugly \
-            v4l-utils \
-            build-essential \
-            cmake \
-            git
-          rosdep init || true
-          rosdep update || true
-
-      - name: Workspace layout
-        run: |
-          mkdir -p ws/src
-          cp -r camera_ros lucy_bringup lucy_ros2_control lucy_config_generator lucy_msgs lucy_config_pipeline lucy_control_supervisor ws/src/
-
-      # Do not `rm -rf /var/lib/apt/lists/*` before this: rosdep/apt need indexes for packages.ros.org.
-      # Skip keys: not in this CI tree (thais_urdf), external/third-party (audio_common), or hardware agents not needed to compile/test.
-      - name: rosdep install
-        working-directory: ws
-        shell: bash
-        run: |
-          apt-get update
-          source /opt/ros/jazzy/setup.bash
-          rosdep install --from-paths src --ignore-src -r -y \
-            --skip-keys="audio_common micro_ros_agent realsense2_camera thais_urdf"
-
-      - name: colcon build
-        working-directory: ws
-        shell: bash
-        run: |
-          source /opt/ros/jazzy/setup.bash
-          colcon build --symlink-install \
-            --packages-select camera_ros lucy_bringup lucy_ros2_control lucy_config_generator lucy_msgs lucy_config_pipeline lucy_control_supervisor \
-            --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
-
-      - name: colcon test
-        working-directory: ws
-        shell: bash
-        run: |
-          source /opt/ros/jazzy/setup.bash
-          source install/setup.bash
-          colcon test \
-            --packages-select camera_ros lucy_bringup lucy_ros2_control lucy_config_generator lucy_msgs lucy_config_pipeline lucy_control_supervisor \
-            --event-handlers console_direct+ \
-            --pytest-args -vv --tb=short
-
-      - name: colcon test-result
-        working-directory: ws
-        shell: bash
-        run: |
-          source /opt/ros/jazzy/setup.bash
-          source install/setup.bash
-          colcon test-result --verbose
-
-      - name: Code coverage (pytest-cov, all Python tests)
-        working-directory: ws
-        shell: bash
-        if: success()
-        run: |
-          set -e
-          source /opt/ros/jazzy/setup.bash
-          source install/setup.bash
-          mkdir -p build/coverage_reports
-          # camera_ros — production code under scripts/
-          python3 -m pytest src/camera_ros/test/ \
-            --cov=src/camera_ros/scripts \
-            --cov-report=xml:build/coverage_reports/camera_ros.xml \
-            --cov-report=html:build/coverage_reports/html_camera_ros \
-            --cov-report=term-missing \
-            --cov-branch
-          # lucy_bringup — launch/*.py (py_compile tests do not execute module bodies; expect low %)
-          python3 -m pytest src/lucy_bringup/test/ \
-            --cov=src/lucy_bringup/launch \
-            --cov-report=xml:build/coverage_reports/lucy_bringup.xml \
-            --cov-report=html:build/coverage_reports/html_lucy_bringup \
-            --cov-report=term-missing \
-            --cov-branch
-          # lucy_config_generator — golden template tests
-          python3 -m pytest src/lucy_config_generator/test/ \
-            --cov=src/lucy_config_generator/lucy_config_generator \
-            --cov-report=xml:build/coverage_reports/lucy_config_generator.xml \
-            --cov-report=html:build/coverage_reports/html_lucy_config_generator \
-            --cov-report=term-missing \
-            --cov-branch
-          # lucy_config_pipeline — config pipeline + services
-          python3 -m pytest src/lucy_config_pipeline/test/ \
-            --cov=src/lucy_config_pipeline/src \
-            --cov-report=xml:build/coverage_reports/lucy_config_pipeline.xml \
-            --cov-report=html:build/coverage_reports/html_lucy_config_pipeline \
-            --cov-report=term-missing \
-            --cov-branch
-          # lucy_control_supervisor — process supervisor
-          python3 -m pytest src/lucy_control_supervisor/test/ \
-            --cov=src/lucy_control_supervisor/lucy_control_supervisor \
-            --cov-report=xml:build/coverage_reports/lucy_control_supervisor.xml \
-            --cov-report=html:build/coverage_reports/html_lucy_control_supervisor \
-            --cov-report=term-missing \
-            --cov-branch
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        if: success()
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ws/build/coverage_reports/camera_ros.xml,ws/build/coverage_reports/lucy_bringup.xml,ws/build/coverage_reports/lucy_config_generator.xml,ws/build/coverage_reports/lucy_config_pipeline.xml,ws/build/coverage_reports/lucy_control_supervisor.xml
-          flags: lucy_ros_packages
-          name: lucy_ros_packages
-          fail_ci_if_error: false
-
-      - name: Upload coverage artifacts (XML + HTML)
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-lucy_ros_packages
-          path: ${{ github.workspace }}/ws/build/coverage_reports/
-          retention-days: 14
+    uses: Lucy-Robotics/.github/.github/workflows/robot-package-ci.yaml@cma/fix-robot-package-ci-generalize
+    with:
+      package_name: lucy_ros_packages
+      gz_packages: ""
+      extra_apt_packages: "python3-pip python3-pytest-mock python3-opencv gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly v4l-utils"
+      rosdep_skip_keys: "audio_common micro_ros_agent realsense2_camera thais_urdf"
+      repo_subpackages: true
+      build_packages: "camera_ros lucy_bringup lucy_ros2_control lucy_config_generator lucy_msgs lucy_config_pipeline lucy_control_supervisor"
+      coverage_map: |
+        camera_ros:scripts
+        lucy_bringup:launch
+        lucy_config_generator:lucy_config_generator
+        lucy_config_pipeline:src
+        lucy_control_supervisor:lucy_control_supervisor
+      flags: lucy_ros_packages
+      pytest_disable_plugin_autoload: false
+    secrets: inherit
