@@ -35,6 +35,13 @@ jobs:
         lucy_config_generator:lucy_config_generator
         lucy_config_pipeline:src
         lucy_control_supervisor:lucy_control_supervisor
-      flags: lucy_ros_packages
       pytest_disable_plugin_autoload: false
+
+  upload-coverage:
+    needs: build-and-test
+    uses: Lucy-Robotics/.github/.github/workflows/codecov-upload.yaml@cma/fix-robot-package-ci-generalize
+    with:
+      artifact_name: coverage-lucy_ros_packages
+      flags: lucy_ros_packages
+      name: lucy_ros_packages
     secrets: inherit
