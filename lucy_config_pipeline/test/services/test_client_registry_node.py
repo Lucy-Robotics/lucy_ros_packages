@@ -9,20 +9,6 @@ from std_msgs.msg import Int32
 from std_msgs.msg import String
 
 
-@pytest.fixture
-def rclpy_init_shutdown():
-    rclpy.init()
-    yield
-    rclpy.shutdown()
-
-
-@pytest.fixture
-def node(rclpy_init_shutdown):
-    n = ClientRegistryNode()
-    yield n
-    n.destroy_node()
-
-
 class TestClientRegistryNode:
     def test_heartbeat_registers_and_counts(self, node):
         from lucy_msgs.srv import GetInt

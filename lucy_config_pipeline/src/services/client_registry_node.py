@@ -13,8 +13,8 @@ import threading
 import time
 
 from control_msgs.msg import DynamicJointState
-from lucy_config_generator.motors import motor_values_by_joint
 from lucy_msgs.srv import ClientControl
+from lucy_msgs.srv import ControlLock
 from lucy_msgs.srv import GetInt
 import rclpy
 from rclpy.node import Node
@@ -24,7 +24,11 @@ from rclpy.qos import QoSProfile
 from rclpy.qos import QoSReliabilityPolicy
 from std_msgs.msg import Int32
 from std_msgs.msg import String
-import yaml
+
+from .control_arbitration import decide_control
+from .control_arbitration import decide_control_lock
+from .power_monitor import extract_voltages
+from .power_monitor import load_min_volts
 
 HEARTBEAT_TOPIC = "/lucy/client_heartbeat"
 GOODBYE_TOPIC = "/lucy/client_goodbye"
@@ -35,6 +39,7 @@ GET_CLIENT_COUNT_SERVICE = "/lucy/get_client_count"
 CONTROL_SERVICE = "/lucy/control"
 DYNAMIC_JOINT_STATES_TOPIC = "/dynamic_joint_states"
 NO_SERVO_POWER = "servos are not powered, connect the power supply"
+CONTROL_LOCK_SERVICE = "/lucy/control_lock"
 
 TICK_PERIOD_S = 1.0
 CLIENT_TTL_S = 10.0  # ~10 missed beats at the 1 Hz client cadence
@@ -66,6 +71,9 @@ class ClientRegistryNode(Node):
         # (Not _clients — Node uses that.)
         self._last_seen: dict[str, float] = {}
         self._active_client: str = ""
+        # While set, nobody can take control: torque must stay off, e.g. with the
+        # arm in someone's hands during calibration.
+        self._lock_owner: str = ""
         self._bridge_clients: int | None = None
         self._servo_powered = True
         self._read_active_config = read_active_config
@@ -96,6 +104,7 @@ class ClientRegistryNode(Node):
         )
         self.create_service(GetInt, GET_CLIENT_COUNT_SERVICE, self._on_get_client_count)
         self.create_service(ClientControl, CONTROL_SERVICE, self._on_control)
+        self.create_service(ControlLock, CONTROL_LOCK_SERVICE, self._on_control_lock)
 
         self._tick_timer = self.create_timer(TICK_PERIOD_S, self._on_tick)
 
@@ -169,11 +178,7 @@ class ClientRegistryNode(Node):
     def _reload_min_volts(self) -> None:
         if self._read_active_config is None:
             return
-        try:
-            config = yaml.safe_load(self._read_active_config()) or {}
-            min_volts, error = motor_values_by_joint(config, "min_volts"), ""
-        except (OSError, KeyError, yaml.YAMLError) as e:
-            min_volts, error = {}, str(e)
+        min_volts, error = load_min_volts(self._read_active_config)
         if error and error != self._motor_specs_error:
             self.get_logger().warning(
                 f"Motor specs unavailable, no power check: {error}"
@@ -183,12 +188,7 @@ class ClientRegistryNode(Node):
             self._min_volts = min_volts
 
     def _on_dynamic_joint_states(self, msg: DynamicJointState) -> None:
-        volts = {
-            joint: value
-            for joint, interfaces in zip(msg.joint_names, msg.interface_values)
-            for name, value in zip(interfaces.interface_names, interfaces.values)
-            if name == "voltage"
-        }
+        volts = extract_voltages(msg)
         with self._state_lock:
             checked = [joint for joint in volts if joint in self._min_volts]
             if not checked:
@@ -232,11 +232,13 @@ class ClientRegistryNode(Node):
                 req.client_id not in self._last_seen
             )  # a request also proves liveness
             self._last_seen[req.client_id] = time.monotonic()
-            refused = req.acquire and not self._servo_powered
-            if req.acquire and not refused:
-                self._active_client = req.client_id
-            elif not req.acquire and self._active_client == req.client_id:
-                self._active_client = ""
+            self._active_client, refused, locked_by = decide_control(
+                client_id=req.client_id,
+                acquire=req.acquire,
+                active_client=self._active_client,
+                lock_owner=self._lock_owner,
+                servo_powered=self._servo_powered,
+            )
             res.active_client = self._active_client
         if is_new:
             self._publish_count()
@@ -244,12 +246,37 @@ class ClientRegistryNode(Node):
             res.success = False
             res.message = NO_SERVO_POWER
             return res
+        if locked_by:
+            self.get_logger().warning(
+                f"Control refused to {req.client_id}: locked by {locked_by}"
+            )
+            res.success = False
+            res.message = f"control is locked by {locked_by}"
+            return res
         self.get_logger().info(
             f"Control {'granted to' if req.acquire else 'released by'} {req.client_id}"
         )
         self._publish_active()
         res.success = True
         res.message = "ok"
+        return res
+
+    def _on_control_lock(
+        self, req: ControlLock.Request, res: ControlLock.Response
+    ) -> ControlLock.Response:
+        """Hold control free. Atomic with `_on_control`, and fails while someone has control."""
+        if not req.owner:
+            res.success = False
+            res.message = "empty owner"
+            return res
+        with self._state_lock:
+            res.active_client = self._active_client
+            self._lock_owner, res.success, res.message = decide_control_lock(
+                owner=req.owner,
+                acquire=req.acquire,
+                lock_owner=self._lock_owner,
+                active_client=self._active_client,
+            )
         return res
 
     def _publish_count(self) -> None:
