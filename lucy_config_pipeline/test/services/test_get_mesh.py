@@ -100,10 +100,8 @@ class TestGetMesh:
             controller_config=tmp_path / "controllers.yaml",
         )
         try:
-            mesh_service = next(s for s in node.services if s.srv_name == "/mesh/get")
-            other_service = next(
-                s for s in node.services if s.srv_name == "/config/get"
-            )
+            mesh_service = next(s for s in node.services if s.srv_name == "mesh/get")
+            other_service = next(s for s in node.services if s.srv_name == "config/get")
             assert isinstance(mesh_service.callback_group, ReentrantCallbackGroup)
             assert mesh_service.callback_group is not other_service.callback_group
         finally:
