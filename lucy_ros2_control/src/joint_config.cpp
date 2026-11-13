@@ -1,4 +1,4 @@
-// Copyright 2025 Sentience Robotics Team
+// Copyright 2026 Lucy Robotics Team
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -29,20 +29,6 @@
 
 namespace lucy_ros2_control
 {
-namespace
-{
-constexpr double kPi = 3.14159265358979323846;
-}  // namespace
-
-double rad_to_deg(double rad)
-{
-  return rad * 180.0 / kPi;
-}
-
-double deg_to_rad(double deg)
-{
-  return deg * kPi / 180.0;
-}
 
 double parse_double_string_or_throw(const std::string & raw, const std::string & context)
 {
@@ -78,39 +64,16 @@ double parse_optional_interface_limit(
   return parse_double_string_or_throw(value.value(), context);
 }
 
-std::string validate_joint_interfaces(const hardware_interface::ComponentInfo & joint)
-{
-  if (joint.command_interfaces.size() != 1) {
-    return "Joint '" + joint.name + "' has " +
-           std::to_string(joint.command_interfaces.size()) +
-           " command interfaces found. 1 expected.";
-  }
-  if (joint.command_interfaces[0].name != hardware_interface::HW_IF_POSITION) {
-    return "Joint '" + joint.name + "' has '" + joint.command_interfaces[0].name +
-           "' command interface. '" + hardware_interface::HW_IF_POSITION + "' expected.";
-  }
-  if (joint.state_interfaces.size() != 1) {
-    return "Joint '" + joint.name + "' has " +
-           std::to_string(joint.state_interfaces.size()) +
-           " state interfaces found. 1 expected.";
-  }
-  if (joint.state_interfaces[0].name != hardware_interface::HW_IF_POSITION) {
-    return "Joint '" + joint.name + "' has '" + joint.state_interfaces[0].name +
-           "' state interface. '" + hardware_interface::HW_IF_POSITION + "' expected.";
-  }
-  return std::string();
-}
-
 JointLimits parse_joint_limits(const hardware_interface::ComponentInfo & joint)
 {
   JointLimits limits{};
-  if (joint.command_interfaces.empty()) {
+  const auto it = std::find_if(
+    joint.command_interfaces.begin(), joint.command_interfaces.end(),
+    [](const auto & i) {return i.name == hardware_interface::HW_IF_POSITION;});
+  if (it == joint.command_interfaces.end()) {
     return limits;
   }
-  const auto & cmd_if = joint.command_interfaces[0];
-  if (cmd_if.name != hardware_interface::HW_IF_POSITION) {
-    return limits;
-  }
+  const auto & cmd_if = *it;
   limits.min_rad = parse_optional_interface_limit(
     cmd_if.min,
     "joint '" + joint.name + "' command_interface min",
@@ -141,14 +104,14 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
     throw std::runtime_error(
             "invalid virtual_pin '" + it_vpin->second + "' for joint '" + joint.name + "'");
   }
-  m.offset_deg = parse_required_double(joint, "offset_deg");
+  m.offset = parse_required_double(joint, "offset");
   m.direction = parse_required_double(joint, "direction");
   m.scale = parse_required_double(joint, "scale");
-  m.servo_min_deg = parse_required_double(joint, "servo_min_deg");
-  m.servo_max_deg = parse_required_double(joint, "servo_max_deg");
-  m.servo_default_deg = parse_required_double(joint, "servo_default_deg");
-  m.min_rad = min_rad;
-  m.max_rad = max_rad;
+  m.limit_min = parse_required_double(joint, "limit_min");
+  m.limit_max = parse_required_double(joint, "limit_max");
+  m.default_val = parse_required_double(joint, "default");
+  m.command.min = min_rad;
+  m.command.max = max_rad;
 
   if (m.virtual_pin < 0) {
     throw std::runtime_error(
@@ -159,11 +122,13 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
     throw std::runtime_error(
             "joint '" + joint.name + "' has invalid direction/scale (must be non-zero)");
   }
-  if (m.servo_min_deg > m.servo_max_deg) {
+  if (m.limit_min > m.limit_max) {
     throw std::runtime_error(
-            "joint '" + joint.name + "' has servo_min_deg > servo_max_deg");
+            "joint '" + joint.name + "' has limit_min > limit_max");
   }
-  if (std::isfinite(m.min_rad) && std::isfinite(m.max_rad) && m.min_rad > m.max_rad) {
+  if (std::isfinite(m.command.min) && std::isfinite(m.command.max) &&
+    m.command.min > m.command.max)
+  {
     throw std::runtime_error(
             "joint '" + joint.name + "' has command_interface min > max");
   }
@@ -171,17 +136,22 @@ std::optional<ActuatedJointMapping> build_actuated_joint_mapping(
   return m;
 }
 
-double default_joint_position_rad(const ActuatedJointMapping & m)
+double default_joint_position(const ActuatedJointMapping & m)
 {
-  return deg_to_rad((m.servo_default_deg - m.offset_deg) * m.direction * m.scale);
+  return servo_rad_to_joint_position(m, m.default_val);
 }
 
-double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd_rad)
+double actuator_command_to_servo_rad(const ActuatedJointMapping & m, double cmd)
 {
-  const double joint_deg = rad_to_deg(cmd_rad);
-  const double servo_deg = (joint_deg / (m.direction * m.scale)) + m.offset_deg;
-  const double clamped_deg = clamp_position_command(servo_deg, m.servo_min_deg, m.servo_max_deg);
-  return deg_to_rad(clamped_deg);
+  cmd = clamp_position_command(cmd, m.command.min, m.command.max);
+  cmd = (cmd / (m.direction * m.scale)) + m.offset;
+  cmd = clamp_position_command(cmd, m.limit_min, m.limit_max);
+  return cmd;
+}
+
+double servo_rad_to_joint_position(const ActuatedJointMapping & m, double servo_rad)
+{
+  return (servo_rad - m.offset) * m.direction * m.scale;
 }
 
 std::optional<int> sort_and_find_duplicate_virtual_pin(

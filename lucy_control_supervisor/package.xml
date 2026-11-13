@@ -4,16 +4,20 @@
   <name>lucy_control_supervisor</name>
   <version>0.0.0</version>
   <description>Supervises ros2_control stack restart for LCP-driven configuration reload.</description>
-  <maintainer email="contact@sentience-robotics.fr">Sentience Robotics Team</maintainer>
+  <maintainer email="contact@lucy-robotics.com">Lucy Robotics Team</maintainer>
   <license>GPL-3.0</license>
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>ament_index_python</depend>
+  <exec_depend>lucy_config_generator</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>controller_manager</exec_depend>
+  <exec_depend>forward_command_controller</exec_depend>
   <exec_depend>xacro</exec_depend>
+  <!-- Bridge firmwares are looked up the way `ros2 run` does. -->
+  <exec_depend>ros2run</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

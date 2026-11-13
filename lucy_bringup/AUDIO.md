@@ -766,7 +766,7 @@ Currently, audio nodes don't expose ROS2 services. For on-demand control, consid
 
 This documentation is part of the Lucy Robot project and is licensed under **GPL-3.0**.
 
-**Copyright 2024 Sentience Robotics Team**
+**Copyright 2024 Lucy Robotics Team**
 
 ---
 
@@ -784,8 +784,8 @@ This documentation is part of the Lucy Robot project and is licensed under **GPL
 ## Support
 
 For issues, questions, or contributions:
-- **Email:** contact@sentience-robotics.fr
-- **Repository:** [Lucy ROS Packages](https://github.com/sentience-robotics/lucy_ros_packages)
+- **Email:** contact@lucy-robotics.com
+- **Repository:** [Lucy ROS Packages](https://github.com/Lucy-Robotics/lucy_ros_packages)
 
 ---
 

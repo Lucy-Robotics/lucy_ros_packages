@@ -1,21 +1,31 @@
 from __future__ import annotations
 
+import base64
 from pathlib import Path
+import zlib
 
-import rclpy
-from rclpy.node import Node
-
+from ament_index_python.packages import get_package_share_directory
+from lucy_config_generator.motors import motors_used
 from lucy_msgs.srv import ActivateConfig
 from lucy_msgs.srv import DeleteConfig
 from lucy_msgs.srv import GetConfig
 from lucy_msgs.srv import GetMesh
 from lucy_msgs.srv import ListConfigs
 from lucy_msgs.srv import SaveConfig
+import rclpy
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.node import Node
+import yaml
 
 from ..config_store import ConfigStore
 from ..error_format import format_error_lines
+from ..validation import parse_yaml_text
 from ..validation import urdf_crosscheck
 from ..validation import validate_schema
+
+# Wire encodings for GetMesh.data (must match lucy_msgs/srv/GetMesh.srv comments).
+MESH_ENCODING_UTF8 = "utf8"
+MESH_ENCODING_ZLIB_BASE64 = "zlib_base64"
 
 
 class ConfigServicesNode(Node):
@@ -28,19 +38,27 @@ class ConfigServicesNode(Node):
         base_path: Path,
         controller_config: Path,
     ):
-        super().__init__('lucy_config_services')
+        super().__init__("lucy_config_services")
         self._robot_package = robot_package
         self._store = config_store
         self._urdf_xacro = urdf_xacro
         self._base_path = base_path
         self._controller_config = controller_config
 
-        self.create_service(ListConfigs, 'config/list', self._on_list_configs)
-        self.create_service(GetConfig, 'config/get', self._on_get_config)
-        self.create_service(SaveConfig, 'config/save', self._on_save_config)
-        self.create_service(ActivateConfig, 'config/activate', self._on_activate_config)
-        self.create_service(DeleteConfig, 'config/delete', self._on_delete_config)
-        self.create_service(GetMesh, 'mesh/get', self._on_get_mesh)
+        self.create_service(ListConfigs, "config/list", self._on_list_configs)
+        self.create_service(GetConfig, "config/get", self._on_get_config)
+        self.create_service(SaveConfig, "config/save", self._on_save_config)
+        self.create_service(ActivateConfig, "config/activate", self._on_activate_config)
+        self.create_service(DeleteConfig, "config/delete", self._on_delete_config)
+        # Reentrant: mesh reads are independent and the viewer fires many of
+        # them concurrently, so they must not queue behind the default
+        # mutually exclusive group shared by the other config services.
+        self.create_service(
+            GetMesh,
+            "mesh/get",
+            self._on_get_mesh,
+            callback_group=ReentrantCallbackGroup(),
+        )
 
     def _on_list_configs(
         self, _req: ListConfigs.Request, res: ListConfigs.Response
@@ -49,7 +67,7 @@ class ConfigServicesNode(Node):
             res.config_names = self._store.list_configs()
             res.active_config = self._store.get_active_name()
             res.success = True
-            res.message = 'ok'
+            res.message = "ok"
         except Exception as e:  # pragma: no cover - defensive wrapper
             res.success = False
             res.message = str(e)
@@ -68,24 +86,27 @@ class ConfigServicesNode(Node):
             res.robot_package = self._robot_package
             res.flashed_config_name = self._store.get_flashed_name()
             res.flashed_at = self._store.get_flashed_at()
+            res.motors_yaml = yaml.safe_dump(
+                motors_used(parse_yaml_text(res.config_yaml)), sort_keys=False
+            )
             res.success = True
-            res.message = 'ok'
+            res.message = "ok"
         except FileNotFoundError:
             res.success = False
-            res.message = 'Configuration not found'
+            res.message = "Configuration not found"
             res.robot_package = self._robot_package
-            res.config_name = ''
-            res.config_yaml = ''
-            res.flashed_config_name = ''
-            res.flashed_at = ''
+            res.config_name = ""
+            res.config_yaml = ""
+            res.flashed_config_name = ""
+            res.flashed_at = ""
         except Exception as e:
             res.success = False
             res.message = str(e)
             res.robot_package = self._robot_package
-            res.config_name = ''
-            res.config_yaml = ''
-            res.flashed_config_name = ''
-            res.flashed_at = ''
+            res.config_name = ""
+            res.config_yaml = ""
+            res.flashed_config_name = ""
+            res.flashed_at = ""
         return res
 
     def _on_save_config(
@@ -103,17 +124,17 @@ class ConfigServicesNode(Node):
             if report.errors:
                 res.validation_errors = report.errors
                 res.success = False
-                res.message = 'validation failed'
+                res.message = "validation failed"
                 return res
 
             self._store.write_named_yaml(req.config_name, req.config_yaml)
             if req.activate:
                 self._store.activate(req.config_name)
             res.success = True
-            res.message = 'saved'
+            res.message = "saved"
         except ValueError as e:
             res.success = False
-            res.message = 'validation failed'
+            res.message = "validation failed"
             lines = [line for line in str(e).splitlines() if line.strip()]
             res.validation_errors = format_error_lines(lines)
         except Exception as e:
@@ -127,7 +148,7 @@ class ConfigServicesNode(Node):
         try:
             res.backup_name = self._store.activate(req.config_name)
             res.success = True
-            res.message = 'activated'
+            res.message = "activated"
         except Exception as e:
             res.success = False
             res.message = str(e)
@@ -139,56 +160,102 @@ class ConfigServicesNode(Node):
         try:
             self._store.delete(req.config_name)
             res.success = True
-            res.message = 'deleted'
+            res.message = "deleted"
         except Exception as e:
             res.success = False
             res.message = str(e)
         return res
 
-    def _on_get_mesh(self, req: GetMesh.Request, res: GetMesh.Response) -> GetMesh.Response:
+    def _mesh_allowed_roots(self) -> list[Path]:
+        """Directories mesh reads may come from (src + install description trees)."""
+        roots = [self._base_path.resolve()]
+        try:
+            share_desc = (
+                Path(get_package_share_directory(self._robot_package)) / "description"
+            ).resolve()
+            if share_desc not in roots:
+                roots.append(share_desc)
+        except Exception:  # pragma: no cover - package may be missing in unit tests
+            pass
+        return roots
+
+    def _path_allowed(self, candidate: Path) -> bool:
+        for root in self._mesh_allowed_roots():
+            if candidate == root or root in candidate.parents:
+                return True
+        return False
+
+    def _on_get_mesh(
+        self, req: GetMesh.Request, res: GetMesh.Response
+    ) -> GetMesh.Response:
         # Serves the mesh files referenced by the URDF (file:// / package:// /
         # absolute) so the web viewer can fetch them over ROS instead of the
-        # filesystem. Reads are confined to the robot's description tree.
+        # filesystem. Reads are confined to the robot's description tree(s).
         try:
             candidate = self._mesh_path_from_ref(req.path)
-            base = self._base_path.resolve()
-            if base != candidate and base not in candidate.parents:
+            if not self._path_allowed(candidate):
                 res.success = False
-                res.message = f'path outside robot description: {candidate}'
+                res.message = f"path outside robot description: {candidate}"
+                res.encoding = ""
+                res.data = ""
                 return res
             if not candidate.is_file():
                 res.success = False
-                res.message = f'mesh not found: {candidate}'
+                res.message = f"mesh not found: {candidate}"
+                res.encoding = ""
+                res.data = ""
                 return res
-            # COLLADA is UTF-8; without this the locale codec is used, which is
-            # cp1252 on a French Windows and mangles or rejects the file.
-            res.data = candidate.read_text(encoding='utf-8')
+            # COLLADA/DAE as UTF-8. Binary STL as zlib+base64 so rosbridge can
+            # carry large meshes in a string field without locale corruption.
+            suffix = candidate.suffix.lower()
+            if suffix == ".stl":
+                compressed = zlib.compress(candidate.read_bytes(), 6)
+                res.data = base64.b64encode(compressed).decode("ascii")
+                res.encoding = MESH_ENCODING_ZLIB_BASE64
+            else:
+                res.data = candidate.read_text(encoding="utf-8")
+                res.encoding = MESH_ENCODING_UTF8
             res.success = True
-            res.message = 'ok'
+            res.message = "ok"
         except Exception as e:
             res.success = False
             res.message = str(e)
+            res.encoding = ""
+            res.data = ""
         return res
 
     def _mesh_path_from_ref(self, ref: str) -> Path:
         """Resolve a URDF mesh reference to an absolute filesystem path."""
-        if ref.startswith('file://'):
-            return Path(ref[len('file://'):]).resolve()
-        if ref.startswith('package://'):
-            # package://<pkg>/<rel> — robot packages are rooted at base_path's parent.
-            _, _, rel = ref[len('package://'):].partition('/')
-            return (self._base_path.parent / rel).resolve()
+        if ref.startswith("file://"):
+            return Path(ref.removeprefix("file://")).resolve()
+        if ref.startswith("package://"):
+            # package://<pkg>/<rel> — prefer ament share, fall back to robot root.
+            rest = ref.removeprefix("package://")
+            pkg, _, rel = rest.partition("/")
+            if not pkg or not rel:
+                raise ValueError(f"invalid package:// URI: {ref}")
+            try:
+                share = Path(get_package_share_directory(pkg))
+                return (share / rel).resolve()
+            except Exception:
+                if pkg == self._robot_package:
+                    return (self._base_path.parent / rel).resolve()
+                raise
         return Path(ref).resolve()
 
 
 def main() -> None:  # pragma: no cover
+    from ..robot_paths import resolve_robot_description_paths
+
     rclpy.init()
+    robot_root = Path(".")
+    urdf, base, controllers = resolve_robot_description_paths(robot_root)
     node = ConfigServicesNode(
-        robot_package='thais_urdf',
-        config_store=ConfigStore(Path('.')),
-        urdf_xacro=Path('inmoov.urdf.xacro'),
-        base_path=Path('.'),
-        controller_config=Path('controllers.yaml'),
+        robot_package="thais_urdf",
+        config_store=ConfigStore(Path(".")),
+        urdf_xacro=urdf,
+        base_path=base,
+        controller_config=controllers,
     )
     rclpy.spin(node)
     node.destroy_node()

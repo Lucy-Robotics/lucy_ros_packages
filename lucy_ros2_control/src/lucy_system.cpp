@@ -1,4 +1,4 @@
-// Copyright 2025 Sentience Robotics Team
+// Copyright 2026 Lucy Robotics Team
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,7 +15,14 @@
 
 #include "include/lucy_system.hpp"
 
+#include <algorithm>
+#include <chrono>
+#include <format>
+#include <cctype>
+#include <cerrno>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <cstddef>
 #include <exception>
 #include <limits>
@@ -26,10 +33,18 @@
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "include/joint_config.hpp"
 #include "include/position_limit_clamp.hpp"
-#include "rclcpp/qos.hpp"
 
 namespace lucy_ros2_control
 {
+
+namespace
+{
+constexpr std::chrono::seconds kLinkWarningPeriod{1};
+}  // namespace
+
+LucySystemHardware::~LucySystemHardware()
+{
+}
 
 hardware_interface::CallbackReturn LucySystemHardware::on_init(
   const hardware_interface::HardwareComponentInterfaceParams & params)
@@ -41,81 +56,38 @@ hardware_interface::CallbackReturn LucySystemHardware::on_init(
     return hardware_interface::CallbackReturn::ERROR;
   }
 
-  logger_ = std::make_shared<rclcpp::Logger>(
-    rclcpp::get_logger((info_.name).c_str()));
+  {
+    auto it = info_.hardware_parameters.find("node_name");
+    if (it != info_.hardware_parameters.end()) {
+      node_name_ = it->second;
+    } else {
+      node_name_ = "lucy";
+    }
+  }
+  {
+    auto it = info_.hardware_parameters.find("publish_actuators");
+    loopback_encoders_ = it != info_.hardware_parameters.end() && it->second == "false";
+  }
 
-  // resizing command and state vectors
-  hw_positions_.resize(info_.joints.size(), 0);
-  // hw_velocities_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN()); // no velocities for our servos
+  logger_ = std::make_shared<rclcpp::Logger>(rclcpp::get_logger(node_name_.c_str()));
+
   hw_commands_.resize(info_.joints.size(), 0);
+  hw_velocities_.resize(info_.joints.size(), 0);
+  hw_accelerations_.resize(info_.joints.size(), 0);
+  hw_positions_.resize(info_.joints.size(), 0);
+  hw_temperatures_.resize(info_.joints.size(), 0);
+  hw_efforts_.resize(info_.joints.size(), 0);
+  hw_currents_.resize(info_.joints.size(), 0);
+  hw_loads_.resize(info_.joints.size(), 0);
+  hw_voltages_.resize(info_.joints.size(), 0);
+  // torque_enable is claimed by a forward_command_controller. Stay off until it writes.
+  hw_torque_enabled_.resize(info_.joints.size(), 0.0);
 
-  if (validate_joints() != hardware_interface::CallbackReturn::SUCCESS) {
-    return hardware_interface::CallbackReturn::ERROR;
-  }
-  if (configure_publisher() != hardware_interface::CallbackReturn::SUCCESS) {
-    return hardware_interface::CallbackReturn::ERROR;
-  }
   if (init_joint_limits() != hardware_interface::CallbackReturn::SUCCESS) {
     return hardware_interface::CallbackReturn::ERROR;
   }
   if (init_actuator_mappings() != hardware_interface::CallbackReturn::SUCCESS) {
     return hardware_interface::CallbackReturn::ERROR;
-  }
-
-  return hardware_interface::CallbackReturn::SUCCESS;
-}
-
-hardware_interface::CallbackReturn LucySystemHardware::validate_joints()
-{
-  for (const hardware_interface::ComponentInfo & joint : info_.joints) {
-    const std::string error = validate_joint_interfaces(joint);
-    if (!error.empty()) {
-      RCLCPP_FATAL(get_logger(), "%s", error.c_str());
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-  }
-  return hardware_interface::CallbackReturn::SUCCESS;
-}
-
-hardware_interface::CallbackReturn LucySystemHardware::configure_publisher()
-{
-  auto it_publish = info_.hardware_parameters.find("publish_actuators");
-  if (it_publish != info_.hardware_parameters.end()) {
-    const std::string & v = it_publish->second;
-    publish_actuators_ = !(v == "false" || v == "0" || v == "False");
-  }
-
-  std::string publisher_topic;
-  auto it_topic = info_.hardware_parameters.find("publisher_topic");
-  if (publish_actuators_) {
-    if (it_topic == info_.hardware_parameters.end() || it_topic->second.empty()) {
-      RCLCPP_FATAL(get_logger(), "Hardware parameter 'publisher_topic' is missing or empty.");
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-    publisher_topic = it_topic->second;
-  }
-
-  std::string node_name = "lucy_hardware_interface";
-  auto it_node = info_.hardware_parameters.find("node_name");
-  if (it_node != info_.hardware_parameters.end() && !it_node->second.empty()) {
-    node_name = it_node->second;
-  }
-  node_ = std::make_shared<rclcpp::Node>(node_name);
-
-  // RELIABLE to match micro-ROS rclc_subscription_init_default (RELIABLE). A BEST_EFFORT publisher
-  // does not match a RELIABLE subscription in ROS 2, so the Pico would receive no commands.
-  if (publish_actuators_) {
-    rclcpp::QoS qos(rclcpp::KeepLast(10));
-    qos.reliable();
-    joint_publisher_ = node_->create_publisher<sensor_msgs::msg::JointState>(publisher_topic, qos);
-    RCLCPP_INFO(
-      get_logger(),
-      "Publishing joint state on topic '%s' (RELIABLE for micro-ROS default subscriber)",
-      publisher_topic.c_str());
-  } else {
-    RCLCPP_INFO(
-      get_logger(),
-      "publish_actuators=false: URDF limits enforced in-process only (no actuator topics).");
   }
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -170,30 +142,30 @@ hardware_interface::CallbackReturn LucySystemHardware::init_actuator_mappings()
     }
 
     const ActuatedJointMapping & m = mapping.value();
-    if (!std::isfinite(m.min_rad) || !std::isfinite(m.max_rad)) {
+    if (!std::isfinite(m.command.min) || !std::isfinite(m.command.max)) {
       RCLCPP_WARN(
         get_logger(),
         "Joint '%s' has no finite URDF position limits on command interface; "
-        "only servo_min/max_deg will bound output.",
+        "only limit_min/limit_max will bound output.",
         joint.name.c_str());
     }
 
     mappings_.push_back(m);
-    hw_commands_[i] = default_joint_position_rad(m);
+    hw_commands_[i] = default_joint_position(m);
     hw_positions_[i] = hw_commands_[i];
   }
 
-  const std::optional<int> duplicate = sort_and_find_duplicate_virtual_pin(mappings_);
-  if (duplicate.has_value()) {
-    RCLCPP_FATAL(
-      get_logger(), "Duplicate virtual_pin %d in hardware '%s'.", duplicate.value(),
-      info_.name.c_str());
-    return hardware_interface::CallbackReturn::ERROR;
+  if (const auto duplicate = sort_and_find_duplicate_virtual_pin(mappings_)) {
+    RCLCPP_WARN(
+      get_logger(),
+      "virtual_pin %d is shared by several joints: they overwrite each other's "
+      "registers every cycle, and only the last one written reaches the board. "
+      "Give each joint its own slot.",
+      duplicate.value());
   }
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
-
 
 std::vector<hardware_interface::StateInterface> LucySystemHardware::export_state_interfaces()
 {
@@ -202,6 +174,21 @@ std::vector<hardware_interface::StateInterface> LucySystemHardware::export_state
     state_interfaces.emplace_back(
       hardware_interface::StateInterface(
         info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_positions_[i]));
+    state_interfaces.emplace_back(
+      hardware_interface::StateInterface(
+        info_.joints[i].name, "temperature", &hw_temperatures_[i]));
+    state_interfaces.emplace_back(
+      hardware_interface::StateInterface(
+        info_.joints[i].name, "current", &hw_currents_[i]));
+    state_interfaces.emplace_back(
+      hardware_interface::StateInterface(
+        info_.joints[i].name, "load", &hw_loads_[i]));
+    state_interfaces.emplace_back(
+      hardware_interface::StateInterface(
+        info_.joints[i].name, "voltage", &hw_voltages_[i]));
+    state_interfaces.emplace_back(
+      hardware_interface::StateInterface(
+        info_.joints[i].name, hardware_interface::HW_IF_EFFORT, &hw_efforts_[i]));
   }
 
   return state_interfaces;
@@ -213,16 +200,62 @@ std::vector<hardware_interface::CommandInterface> LucySystemHardware::export_com
   for (auto i = 0u; i < info_.joints.size(); i++) {
     command_interfaces.emplace_back(
       hardware_interface::CommandInterface(
-        info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_commands_[i]));
+        info_.joints[i].name,
+        hardware_interface::HW_IF_POSITION, &hw_commands_[i]));
+    command_interfaces.emplace_back(
+      hardware_interface::CommandInterface(
+        info_.joints[i].name,
+        hardware_interface::HW_IF_VELOCITY, &hw_velocities_[i]));
+    command_interfaces.emplace_back(
+      hardware_interface::CommandInterface(
+        info_.joints[i].name,
+        "torque_enable", &hw_torque_enabled_[i]));
   }
 
   return command_interfaces;
 }
 
-/*
-This function should be used to initialize/activate the hardware.
-In our case, the hardware is already ready to receive informations
-*/
+void LucySystemHardware::drop_torque_and_release_shm()
+{
+  // Last SHM write before unmap. The forward controller may already be stopped;
+  // the host firmware must still see torque off.
+  if (shared_memory_channel_.has_value()) {
+    auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
+    for (const auto & m : mappings_) {
+      (*access).hw_torque_enabled()[m.joint_index] = 0.0f;
+    }
+  }
+  std::fill(hw_torque_enabled_.begin(), hw_torque_enabled_.end(), 0.0);
+  shared_memory_channel_.reset();
+}
+
+hardware_interface::CallbackReturn LucySystemHardware::on_error(
+  const rclcpp_lifecycle::State & /*state*/)
+{
+  drop_torque_and_release_shm();
+  RCLCPP_ERROR(get_logger(), "LucySystemHardware encountered an error and was cleaned up.");
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+
+hardware_interface::CallbackReturn LucySystemHardware::on_configure(
+  const rclcpp_lifecycle::State & /*previous_state*/)
+{
+  const std::string shm_name = lucy_shm_name(node_name_);
+  RCLCPP_INFO(get_logger(), "Initializing shm %s", shm_name.c_str());
+  shared_memory_channel_ = SharedMemoryChannel::create(shm_name, info_.joints.size());
+  if (!shared_memory_channel_.has_value()) {
+    RCLCPP_FATAL(get_logger(), "Failed to create shared memory channel");
+    return hardware_interface::CallbackReturn::ERROR;
+  }
+  RCLCPP_INFO(get_logger(), "SHM initialized");
+
+  // create() zeroed the header: the firmware gets a full timeout to start beating.
+  link_monitor_ = LinkMonitor(LinkMonitor::Clock::now());
+  last_link_warning_ = {};
+
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+
 hardware_interface::CallbackReturn LucySystemHardware::on_activate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
@@ -234,56 +267,113 @@ hardware_interface::CallbackReturn LucySystemHardware::on_activate(
 hardware_interface::CallbackReturn LucySystemHardware::on_deactivate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
+  drop_torque_and_release_shm();
   RCLCPP_INFO(get_logger(), "Successfully deactivated!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
-hardware_interface::return_type LucySystemHardware::read(
-  const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+void LucySystemHardware::update_link_health()
 {
-  // Updating the position of each joint from the command
-  for (std::size_t i = 0; i < hw_commands_.size(); i++) {
-    // No encoder for our servos, we assume that the position is always reached
+  // Mock hardware has no firmware behind the segment.
+  if (loopback_encoders_) {
+    return;
+  }
+
+  const auto now = LinkMonitor::Clock::now();
+  const LinkHealth previous = link_monitor_.health();
+  const LinkHealth health = link_monitor_.update(
+    shared_memory_channel_->heartbeat(), shared_memory_channel_->link_state(), now);
+
+  if (health == LinkHealth::Healthy) {
+    if (previous != LinkHealth::Healthy) {
+      RCLCPP_INFO(get_logger(), "Firmware link is up.");
+      if (link_monitor_.rearm_required()) {
+        RCLCPP_WARN(
+          get_logger(),
+          "Torque stays off until torque_enable goes to 0 then back to 1 "
+          "(Control Robot OFF, then ON).");
+      }
+    }
+    return;
+  }
+
+  // Not RCLCPP_WARN_THROTTLE: its state is static per call site, so the hardware
+  // components of a multi-board robot would mask each other's warnings.
+  if (health != previous || now - last_link_warning_ >= kLinkWarningPeriod) {
+    last_link_warning_ = now;
+    RCLCPP_WARN(
+      get_logger(), "%s Positions are stale and torque is held off.",
+      health == LinkHealth::FirmwareFrozen ?
+      "No firmware heartbeat: the firmware is hung, stopped or not started yet." :
+      "The firmware reports its hardware link down.");
+  }
+}
+
+hardware_interface::return_type LucySystemHardware::read(
+  const rclcpp::Time &, const rclcpp::Duration &)
+{
+  if (!shared_memory_channel_.has_value()) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 1000, "Shared memory channel is not available."
+    );
+    return hardware_interface::return_type::ERROR;
+  }
+
+  // A lost link is not an ERROR: on_error would release the shm, and the firmware
+  // could then never reconnect without a restart.
+  update_link_health();
+
+  // Passive/unmapped joints have no feedback: echo their last command.
+  for (std::size_t i = 0; i < hw_commands_.size(); ++i) {
     hw_positions_[i] = hw_commands_[i];
+  }
+
+  auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
+  for (const auto & m : mappings_) {
+    const std::size_t i = m.joint_index;
+    if (loopback_encoders_) {
+      (*access).hw_positions()[i] =
+        static_cast<float>(actuator_command_to_servo_rad(m, hw_commands_[i]));
+    }
+    const double servo_rad = (*access).hw_positions()[i];
+    hw_positions_[i] = servo_rad_to_joint_position(
+      m, std::isfinite(servo_rad) ? servo_rad : actuator_command_to_servo_rad(m, hw_commands_[i]));
+    hw_temperatures_[i] = (*access).hw_temperatures()[i];
+    hw_efforts_[i] = (*access).hw_efforts()[i];
+    hw_currents_[i] = (*access).hw_currents()[i];
+    hw_loads_[i] = (*access).hw_loads()[i];
+    hw_voltages_[i] = (*access).hw_voltages()[i];
   }
 
   return hardware_interface::return_type::OK;
 }
 
 hardware_interface::return_type lucy_ros2_control::LucySystemHardware::write(
-  const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+  const rclcpp::Time &, const rclcpp::Duration &)
 {
-  for (std::size_t i = 0; i < hw_commands_.size(); ++i) {
-    const double cmd_rad = lucy_ros2_control::clamp_position_command(
-      hw_commands_[i], joint_min_rad_[i], joint_max_rad_[i]);
-    hw_commands_[i] = cmd_rad;
-    hw_positions_[i] = cmd_rad;
+  if (!shared_memory_channel_.has_value()) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 1000, "Shared memory channel is not available."
+    );
+    return hardware_interface::return_type::ERROR;
   }
 
-  if (!publish_actuators_ || !joint_publisher_) {
-    return hardware_interface::return_type::OK;
-  }
+  const bool torque_requested = std::any_of(
+    mappings_.begin(), mappings_.end(),
+    [this](const ActuatedJointMapping & m) {return hw_torque_enabled_[m.joint_index] >= 0.5;});
+  const bool torque_allowed = loopback_encoders_ || link_monitor_.torque_allowed(torque_requested);
 
-  // Firmware reads inputs->position.data[joint->config.virtual_pin] per configured joint.
-  sensor_msgs::msg::JointState msg;
-  msg.header.stamp = node_->get_clock()->now();
-  msg.name.clear();
-
-  if (mappings_.empty()) {
-    joint_publisher_->publish(msg);
-    return hardware_interface::return_type::OK;
-  }
-
-  int max_vp = mappings_.back().virtual_pin;
-  msg.position.assign(static_cast<size_t>(max_vp) + 1U, 0.0);
-
+  auto access = SharedMemoryChannel::Access(shared_memory_channel_.value());
   for (const auto & m : mappings_) {
-    msg.position[static_cast<size_t>(m.virtual_pin)] =
-      actuator_command_to_servo_rad(m, hw_commands_[m.joint_index]);
+    const std::size_t i = m.joint_index;
+    (*access).hw_commands()[i] =
+      static_cast<float>(actuator_command_to_servo_rad(m, hw_commands_[i]));
+    (*access).hw_velocities()[i] = static_cast<float>(hw_velocities_[i]);
+    (*access).hw_accelerations()[i] = static_cast<float>(hw_accelerations_[i]);
+    (*access).hw_torque_enabled()[i] =
+      torque_allowed ? static_cast<float>(hw_torque_enabled_[i]) : 0.0f;
   }
-
-  joint_publisher_->publish(msg);
 
   return hardware_interface::return_type::OK;
 }

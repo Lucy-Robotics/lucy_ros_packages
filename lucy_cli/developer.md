@@ -6,7 +6,7 @@ The core of the Lucy control system is a set of ROS 2 topics and services. By in
 
 The recommended way to interface with Lucy is to use the `lucy_cli.ros_interface.LucyROSInterface` class as a reference. It provides a high-level, well-documented Python API that handles all the underlying ROS 2 complexity. This guide will walk through the key concepts and provide code snippets based on that reference implementation.
 
-> Please note that the LucyROSInterface class is a simple example. You will find that more topics & services are available if needed, with for example a complete configuration workflow. If you need more feature or want to write your interface in another language, please check the differents packages available in this repository. The [Lucy Control Panel](https://github.com/Sentience-Robotics/lucy_control_panel/tree/master/) is a good example of a more in-depth implementation.
+> Please note that the LucyROSInterface class is a simple example. You will find that more topics & services are available if needed, with for example a complete configuration workflow. If you need more feature or want to write your interface in another language, please check the differents packages available in this repository. The [Lucy Control Panel](https://github.com/Lucy-Robotics/lucy_control_panel/tree/master/) is a good example of a more in-depth implementation.
 
 ## 1. Core Concepts
 
@@ -19,7 +19,10 @@ The registry is the only writer of the count and the active controller; clients 
 A good client ID is one that is both unique and descriptive, for example: `my_app_1678886400_a3f7`.
 
 **Registering presence (heartbeat).** Pulse your client ID on `/lucy/client_heartbeat` (`std_msgs/msg/String`, volatile) roughly once per second.
-The registry counts you as connected while your heartbeats keep arriving and prunes you automatically about three seconds after they stop (three missed beats at the 1 Hz cadence) — so a crash or a closed tab is handled for free, with no explicit "disconnect" step.
+The registry counts you as connected while your heartbeats keep arriving and prunes you automatically about ten seconds after they stop (ten missed beats at the 1 Hz cadence) — so a crash or a closed tab is handled for free, with no explicit "disconnect" step.
+To leave at once instead, publish your client ID on `/lucy/client_goodbye` (`std_msgs/msg/String`, volatile): the registry drops you and releases control if you held it.
+
+A browser can lose that message while its tab closes. When rosbridge's own `/client_count` drops, the registry drops within 1.5 s every client that stops heart-beating, so a closed tab leaves quickly either way.
 
 ```python
 # A unique identifier for this specific client instance.
@@ -127,7 +130,7 @@ def publish_joint_trajectory(self, controller_topic: str, joint_names: list[str]
     publisher = self._joint_publishers[controller_topic]
     
     msg = JointTrajectory()
-    msg.header.stamp = self.get_clock().now().to_msg()
+    # msg.header.stamp = 0  # Empty because get_clock() gives wall time.
     msg.joint_names = joint_names # Must be in the correct order
     
     point = JointTrajectoryPoint()
@@ -185,6 +188,7 @@ def get_initial_client_count(self) -> int | None:
 | Endpoint | Type | Message/Service Type | QoS Durability | Purpose |
 |---|---|---|---|---|
 | `/lucy/client_heartbeat` | Topic | `std_msgs/msg/String` | `VOLATILE` | Pulse your client ID ~1 Hz to register as connected. |
+| `/lucy/client_goodbye` | Topic | `std_msgs/msg/String` | `VOLATILE` | Publish your client ID once to leave immediately. |
 | `/lucy/active_client` | Topic | `std_msgs/msg/String` | `TRANSIENT_LOCAL` | Monitor which client currently holds control. |
 | `/lucy/client_count` | Topic | `std_msgs/msg/Int32` | `TRANSIENT_LOCAL` | Get live updates on the number of connected clients. |
 | `/lucy/control` | Service | `lucy_msgs/srv/ClientControl` | N/A | Take or release control (`acquire` flag). |

@@ -1,4 +1,4 @@
-# Copyright 2025 Sentience Robotics Team
+# Copyright 2026 Lucy Robotics Team
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,13 +14,14 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Verify launch Python files compile (syntax only; no ROS runtime)."""
+
 from pathlib import Path
 import py_compile
 
 
 def test_launch_py_files_compile():
-    launch_dir = Path(__file__).resolve().parents[1] / 'launch'
-    files = sorted(launch_dir.glob('*.py'))
-    assert files, 'expected launch/*.py'
+    launch_dir = Path(__file__).resolve().parents[1] / "launch"
+    files = sorted(launch_dir.glob("*.py"))
+    assert files, "expected launch/*.py"
     for path in files:
         py_compile.compile(str(path), doraise=True)

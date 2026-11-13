@@ -1,4 +1,4 @@
-# Copyright 2025 Sentience Robotics Team
+# Copyright 2026 Lucy Robotics Team
 #
 # SPDX-License-Identifier: GPL-3.0-only
 
@@ -8,11 +8,11 @@ URDF position limits in generated ros2_control (real + mock enforcement).
 The generated ``inmoov_ros2_control.xacro`` is consumed by different
 ``<plugin>`` implementations at xacro-expansion time:
 
-* ``gz_ros2_control/GazeboSimSystem`` (Gazebo) — receives the same ``min``/``max``
+* ``gz_ros2_control/GazeboSimSystem`` (Gazebo) - receives the same ``min``/``max``
   params but stock upstream does **not** clamp in ``write()`` (we do not patch
   ``gz_ros2_control`` in this workspace).
 * ``lucy_ros2_control/LucySystemHardware`` with ``publish_actuators=false``
-  (RViz / mock) — clamps ``hw_commands_`` to ``min``/``max``.
+  (RViz / mock) - clamps ``hw_commands_`` to ``min``/``max``.
 * ``lucy_ros2_control/LucySystemHardware`` with a micro-ROS publisher (real).
 
 These tests assert that ``min``/``max`` are emitted for every actuated joint,
@@ -30,25 +30,25 @@ from lucy_config_generator.generate import generate_from_xacro_string_for_tests
 
 import yaml
 
-_FIXTURES = Path(__file__).resolve().parent / 'fixtures'
+_FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
 def _load_mapping() -> dict:
-    with (_FIXTURES / 'test_mapping.yaml').open(encoding='utf-8') as f:
+    with (_FIXTURES / "test_mapping.yaml").open(encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 def _fixture_urdf_xml() -> str:
-    return (_FIXTURES / 'test_robot.urdf.xacro').read_text(encoding='utf-8')
+    return (_FIXTURES / "test_robot.urdf.xacro").read_text(encoding="utf-8")
 
 
 def _render_ros2_control(simulation_only: bool) -> str:
     return generate_from_xacro_string_for_tests(
         _load_mapping(),
         _fixture_urdf_xml(),
-        targets={'ros2_control'},
+        targets={"ros2_control"},
         simulation_only=simulation_only,
-    )['inmoov_ros2_control.xacro']
+    )["inmoov_ros2_control.xacro"]
 
 
 def _parse(xacro_xml: str) -> ET.Element:
@@ -57,29 +57,33 @@ def _parse(xacro_xml: str) -> ET.Element:
     # ``xml.etree`` would otherwise reject; declare the namespace so it parses.
     decl = '<robot xmlns:xacro="http://www.ros.org/wiki/xacro"'
     if decl not in xacro_xml:
-        xacro_xml = xacro_xml.replace('<robot', decl, 1)
+        xacro_xml = xacro_xml.replace("<robot", decl, 1)
     return ET.fromstring(xacro_xml)
 
 
-def _find_joint_command_interface(joint_el: ET.Element) -> ET.Element:
-    cmd = joint_el.find('command_interface')
-    assert cmd is not None, f"joint {joint_el.attrib.get('name')!r} missing command_interface"
-    assert cmd.attrib.get('name') == 'position'
-    return cmd
+def _find_joint_command_interface(
+    joint_el: ET.Element, name: str = "position"
+) -> ET.Element:
+    for cmd in joint_el.findall("command_interface"):
+        if cmd.attrib.get("name") == name:
+            return cmd
+    raise AssertionError(
+        f"joint {joint_el.attrib.get('name')!r} missing command_interface {name!r}"
+    )
 
 
 def _expected_limits_from_urdf(urdf_xml: str) -> dict[str, tuple[float, float]]:
     root = ET.fromstring(urdf_xml)
     limits: dict[str, tuple[float, float]] = {}
-    for joint in root.findall('joint'):
-        name = joint.attrib.get('name')
-        if joint.attrib.get('type') not in ('revolute', 'prismatic'):
+    for joint in root.findall("joint"):
+        name = joint.attrib.get("name")
+        if joint.attrib.get("type") not in ("revolute", "prismatic"):
             continue
-        limit = joint.find('limit')
+        limit = joint.find("limit")
         if name is None or limit is None:
             continue
-        lo = limit.attrib.get('lower')
-        hi = limit.attrib.get('upper')
+        lo = limit.attrib.get("lower")
+        hi = limit.attrib.get("upper")
         if lo is None or hi is None:
             continue
         limits[name] = (float(lo), float(hi))
@@ -92,22 +96,26 @@ def test_every_actuated_joint_emits_position_limits():
     xacro = _render_ros2_control(simulation_only=False)
     root = _parse(xacro)
 
-    actuator_joints = {a['urdf_joint'] for a in data['actuators']}
+    actuator_joints = {a["urdf_joint"] for a in data["actuators"]}
 
     seen: set[str] = set()
-    for joint_el in root.iter('joint'):
-        name = joint_el.attrib.get('name')
+    for joint_el in root.iter("joint"):
+        name = joint_el.attrib.get("name")
         if name not in actuator_joints:
             continue
         seen.add(name)
         cmd = _find_joint_command_interface(joint_el)
-        params = {p.attrib['name']: p.text for p in cmd.findall('param')}
-        assert 'min' in params, f'joint {name!r} command_interface missing <param name="min">'
-        assert 'max' in params, f'joint {name!r} command_interface missing <param name="max">'
+        params = {p.attrib["name"]: p.text for p in cmd.findall("param")}
+        assert (
+            "min" in params
+        ), f'joint {name!r} command_interface missing <param name="min">'
+        assert (
+            "max" in params
+        ), f'joint {name!r} command_interface missing <param name="max">'
 
-    assert seen == actuator_joints, (
-        f'actuator joints not present in generated xacro: {actuator_joints - seen}'
-    )
+    assert (
+        seen == actuator_joints
+    ), f"actuator joints not present in generated xacro: {actuator_joints - seen}"
 
 
 def test_position_limits_match_urdf():
@@ -115,20 +123,20 @@ def test_position_limits_match_urdf():
     urdf_xml = _fixture_urdf_xml()
     expected = _expected_limits_from_urdf(urdf_xml)
     data = _load_mapping()
-    actuator_joints = {a['urdf_joint'] for a in data['actuators']}
+    actuator_joints = {a["urdf_joint"] for a in data["actuators"]}
 
     xacro = _render_ros2_control(simulation_only=False)
     root = _parse(xacro)
 
-    for joint_el in root.iter('joint'):
-        name = joint_el.attrib.get('name')
+    for joint_el in root.iter("joint"):
+        name = joint_el.attrib.get("name")
         if name not in actuator_joints or name not in expected:
             continue
         lo_expected, hi_expected = expected[name]
         cmd = _find_joint_command_interface(joint_el)
-        params = {p.attrib['name']: p.text for p in cmd.findall('param')}
-        assert float(params['min']) == lo_expected, name
-        assert float(params['max']) == hi_expected, name
+        params = {p.attrib["name"]: p.text for p in cmd.findall("param")}
+        assert float(params["min"]) == lo_expected, name
+        assert float(params["max"]) == hi_expected, name
 
 
 def test_position_limits_apply_to_every_plugin_path():
@@ -145,12 +153,12 @@ def test_position_limits_apply_to_every_plugin_path():
     # subtree, then re-check that limits remain. If a limit param were nested
     # inside one of those gates it would disappear from this stripped view.
     stripped = re.sub(
-        r'<xacro:(if|unless)\b[^>]*>.*?</xacro:\1>',
-        '',
+        r"<xacro:(if|unless)\b[^>]*>.*?</xacro:\1>",
+        "",
         xacro,
         flags=re.DOTALL,
     )
-    assert stripped.count('<command_interface') == xacro.count('<command_interface')
+    assert stripped.count("<command_interface") == xacro.count("<command_interface")
     assert stripped.count('<param name="min">') == xacro.count('<param name="min">')
     assert stripped.count('<param name="max">') == xacro.count('<param name="max">')
 
@@ -164,27 +172,30 @@ def test_position_limits_identical_between_simulation_and_hardware_modes():
         """Map joint name to (min, max) param text from generated xacro."""
         root = _parse(xacro_xml)
         out: dict[str, tuple[str, str]] = {}
-        for joint_el in root.iter('joint'):
-            name = joint_el.attrib.get('name')
-            cmd = joint_el.find('command_interface')
-            if name is None or cmd is None:
+        for joint_el in root.iter("joint"):
+            name = joint_el.attrib.get("name")
+            if name is None:
                 continue
-            params = {p.attrib['name']: p.text for p in cmd.findall('param')}
-            if 'min' in params and 'max' in params:
-                out[name] = (params['min'], params['max'])
+            try:
+                cmd = _find_joint_command_interface(joint_el, "position")
+            except AssertionError:
+                continue
+            params = {p.attrib["name"]: p.text for p in cmd.findall("param")}
+            if "min" in params and "max" in params:
+                out[name] = (params["min"], params["max"])
         return out
 
-    assert collect(xacro_hw) == collect(xacro_sim), (
-        'URDF limits must match across simulation_only and hardware modes'
-    )
+    assert collect(xacro_hw) == collect(
+        xacro_sim
+    ), "URDF limits must match across simulation_only and hardware modes"
 
 
 def test_lucy_plugin_used_for_both_real_and_mock_hardware():
     """Real and mock both use ``LucySystemHardware`` for shared URDF clamping."""
     xacro = _render_ros2_control(simulation_only=False)
-    hw_plugin = 'lucy_ros2_control/LucySystemHardware'
+    hw_plugin = "lucy_ros2_control/LucySystemHardware"
     assert hw_plugin in xacro
-    assert 'mock_components/GenericSystem' not in xacro
+    assert "mock_components/GenericSystem" not in xacro
 
     # ``publish_actuators`` is the toggle used to suppress the micro-ROS
     # actuator publisher in mock mode while keeping the same plugin (and the

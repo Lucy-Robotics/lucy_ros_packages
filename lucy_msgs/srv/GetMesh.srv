@@ -4,4 +4,8 @@ string path                   # mesh reference from the URDF (file://, package:/
 # Response
 bool success
 string message
-string data                   # mesh file contents as text (e.g. Collada/DAE XML)
+# Payload encoding for `data`:
+#   utf8         — text mesh (Collada/DAE XML)
+#   zlib_base64  — zlib-compressed binary (STL), then standard base64
+string encoding
+string data
