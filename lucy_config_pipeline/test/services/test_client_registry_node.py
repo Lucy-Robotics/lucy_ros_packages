@@ -151,7 +151,7 @@ def _supply(node, *volts):
     from control_msgs.msg import DynamicJointState
     from control_msgs.msg import InterfaceValue
 
-    node._on_dynamic_joint_states(
+    node._on_joint_telemetry(
         DynamicJointState(
             joint_names=[f"j{i}" for i in range(len(volts))],
             interface_values=[
@@ -240,7 +240,7 @@ class TestServoPower:
         from control_msgs.msg import InterfaceValue
 
         _control(node, "cp_1", True)
-        node._on_dynamic_joint_states(
+        node._on_joint_telemetry(
             DynamicJointState(
                 joint_names=["j0"],
                 interface_values=[

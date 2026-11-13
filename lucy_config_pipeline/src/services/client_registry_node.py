@@ -37,7 +37,7 @@ CLIENT_COUNT_TOPIC = "/lucy/client_count"
 ACTIVE_CLIENT_TOPIC = "/lucy/active_client"
 GET_CLIENT_COUNT_SERVICE = "/lucy/get_client_count"
 CONTROL_SERVICE = "/lucy/control"
-DYNAMIC_JOINT_STATES_TOPIC = "/dynamic_joint_states"
+JOINT_TELEMETRY_TOPIC = "/dynamic_joint_states"
 NO_SERVO_POWER = "servos are not powered, connect the power supply"
 CONTROL_LOCK_SERVICE = "/lucy/control_lock"
 
@@ -98,8 +98,8 @@ class ClientRegistryNode(Node):
         )
         self.create_subscription(
             DynamicJointState,
-            DYNAMIC_JOINT_STATES_TOPIC,
-            self._on_dynamic_joint_states,
+            JOINT_TELEMETRY_TOPIC,
+            self._on_joint_telemetry,
             10,
         )
         self.create_service(GetInt, GET_CLIENT_COUNT_SERVICE, self._on_get_client_count)
@@ -187,7 +187,7 @@ class ClientRegistryNode(Node):
         with self._state_lock:
             self._min_volts = min_volts
 
-    def _on_dynamic_joint_states(self, msg: DynamicJointState) -> None:
+    def _on_joint_telemetry(self, msg: DynamicJointState) -> None:
         volts = extract_voltages(msg)
         with self._state_lock:
             checked = [joint for joint in volts if joint in self._min_volts]
