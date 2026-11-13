@@ -96,12 +96,6 @@ class ClientRegistryNode(Node):
         self.create_subscription(
             Int32, BRIDGE_CLIENT_COUNT_TOPIC, self._on_bridge_client_count, _LATCHED_QOS
         )
-        self.create_subscription(
-            DynamicJointState,
-            DYNAMIC_JOINT_STATES_TOPIC,
-            self._on_dynamic_joint_states,
-            10,
-        )
         self.create_service(GetInt, GET_CLIENT_COUNT_SERVICE, self._on_get_client_count)
         self.create_service(ClientControl, CONTROL_SERVICE, self._on_control)
         self.create_service(ControlLock, CONTROL_LOCK_SERVICE, self._on_control_lock)
