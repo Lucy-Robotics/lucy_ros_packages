@@ -9,6 +9,7 @@ active controller, so the web panel (rosbridge) and the CLI (DDS) behave alike.
 from __future__ import annotations
 
 from collections.abc import Callable
+import os
 import threading
 import time
 
@@ -29,6 +30,7 @@ from .control_arbitration import decide_control
 from .control_arbitration import decide_control_lock
 from .power_monitor import extract_voltages
 from .power_monitor import load_min_volts
+from .power_monitor import on_real_hardware
 
 HEARTBEAT_TOPIC = "/lucy/client_heartbeat"
 GOODBYE_TOPIC = "/lucy/client_goodbye"
@@ -300,7 +302,11 @@ def main() -> None:  # pragma: no cover
     config_dir = bootstrap.declare_parameter("config_dir", "").value
     bootstrap.destroy_node()
     store = ConfigStore(_resolve_paths(robot_package, config_dir).config_dir)
-    node = ClientRegistryNode(read_active_config=store.read_active_yaml)
+    node = ClientRegistryNode(
+        read_active_config=(
+            store.read_active_yaml if on_real_hardware(os.environ) else None
+        )
+    )
     try:
         rclpy.spin(node)
     finally:
