@@ -391,7 +391,8 @@ class ControlSupervisorNode(Node):
     def _start_bridges(self, cfg: _StackConfig, urdf_xml: str) -> None:
         """Start the host bridge firmwares picked by ``LUCY_BRIDGE`` (restarted with the stack).
 
-        lucy.launch.py sets ``LUCY_BRIDGE`` from ``bridge:=`` in ``mode:=real``. ``linux``
+        lucy.launch.py sets ``LUCY_BRIDGE`` in ``mode:=real`` from the ``bridge:`` the robot
+        package names in ``config/control.launch.yaml``. ``linux``
         runs one ``lucy_embedded_firmware_linux`` per ros2_control node; ``mcu_bridge`` one
         ``lucy_embedded_firmware_mcu_bridge`` per board (RP2040 or Mega) of the active YAML.
 
@@ -403,9 +404,9 @@ class ControlSupervisorNode(Node):
         if not bridge:
             self.get_logger().warning(
                 "real hardware without a bridge: LUCY_BRIDGE is unset, so no host firmware "
-                "drives the robot. Launch lucy.launch.py with mode:=real bridge:=<"
+                "drives the robot. Set bridge: <"
                 + "|".join(BRIDGE_EXECUTABLES)
-                + ">"
+                + "> in the robot package's config/control.launch.yaml"
             )
             return
         config_dir = (
