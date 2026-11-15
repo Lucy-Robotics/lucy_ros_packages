@@ -138,8 +138,10 @@ def _run_cargo_builds(
     failed: list[str] = []
     built: set[str] = set()
     total = max(len(plan), 1)
+    # Each firmware is its own cargo project (built by colcon too): no workspace root.
+    crate = source_dir / "firmwares" / "rp2040"
     elf = (
-        source_dir
+        crate
         / "target"
         / "thumbv6m-none-eabi"
         / "release"
@@ -201,7 +203,7 @@ def _run_cargo_builds(
                     "-p",
                     "lucy-embedded-firmware-rp2040",
                 ],
-                cwd=source_dir,
+                cwd=crate,
                 timeout_seconds=timeout_seconds,
                 feedback=feedback,
                 stream_progress=index / total,

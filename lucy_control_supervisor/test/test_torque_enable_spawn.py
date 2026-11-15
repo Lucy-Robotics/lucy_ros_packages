@@ -159,11 +159,15 @@ def test_mcu_boards_follow_the_active_yaml(tmp_path: Path):
         '  rp2040_torso_head: {board_class: internal_servo_only, serial_id: "BBB"}\n',
         encoding="utf-8",
     )
-    assert mega_bridges(hw) == [
+    assert mcu_boards(hw) == [("left", "AAA"), ("right", ""), ("torso_head", "BBB")]
+    assert mcu_boards(tmp_path / "missing.yaml") == []
+    from lucy_control_supervisor.bridges import board_entries
+
+    assert board_entries(hw) == [
         ("mega_left", "left", "AAA", "0x41,0x40"),
         ("mega_right", "right", "", ""),
+        ("rp2040_torso_head", "torso_head", "BBB", ""),
     ]
-    assert mega_bridges(tmp_path / "missing.yaml") == []
 
 
 def test_ros2_control_nodes_reads_the_hardware_blocks():
@@ -213,3 +217,104 @@ def test_board_unreachable_tracks_bridge_lines():
     assert board_unreachable("Board AAA connected") is None
     assert board_unreachable("Board AAA answering") == ""
     assert board_unreachable("PCA9685 0x40 answering") is None
+
+
+_TWO_NODE_URDF = (
+    '<robot name="r">'
+    '<ros2_control name="a" type="system"><hardware>'
+    '<param name="node_name">left</param></hardware></ros2_control>'
+    '<ros2_control name="b" type="system"><hardware>'
+    '<param name="node_name">so_arm</param></hardware></ros2_control>'
+    "</robot>"
+)
+
+
+def test_linux_bridge_runs_one_firmware_per_ros2_control_node(tmp_path: Path):
+    from lucy_control_supervisor.bridges import bridge_processes
+
+    assert bridge_processes("linux", tmp_path / "missing.yaml", _TWO_NODE_URDF) == [
+        ("left", ["left"]),
+        ("so_arm", ["so_arm"]),
+    ]
+
+
+def test_mcu_bridge_runs_one_bridge_per_board_the_urdf_drives(tmp_path: Path):
+    from lucy_control_supervisor.bridges import bridge_processes
+
+    hw = tmp_path / "active.yaml"
+    hw.write_text(
+        "boards:\n"
+        '  mega_left: {board_class: i2c_pwm_only, serial_id: "AAA"}\n'
+        '  mega_right: {board_class: i2c_pwm_only, serial_id: "CCC"}\n',
+        encoding="utf-8",
+    )
+    assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [
+        ("left", ["left", "AAA"])
+    ]
+    assert (
+        bridge_processes("mcu_bridge", tmp_path / "missing.yaml", _TWO_NODE_URDF) == []
+    )
+
+
+def test_mcu_bridge_names_the_pca9685s_of_a_mega(tmp_path: Path):
+    from lucy_control_supervisor.bridges import bridge_processes
+
+    hw = tmp_path / "active.yaml"
+    hw.write_text(
+        "boards:\n"
+        '  mega_left: {board_class: i2c_pwm_only, serial_id: "AAA", pca_addresses: [65, 64]}\n'
+        '  mega_so_arm: {board_class: i2c_pwm_only, serial_id: "BBB"}\n',
+        encoding="utf-8",
+    )
+    assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [
+        ("left", ["left", "AAA", "0x41,0x40"]),
+        ("so_arm", ["so_arm", "BBB"]),
+    ]
+
+
+def test_mcu_bridge_finds_a_single_board_without_serial(tmp_path: Path):
+    """SO-ARM101: one RP2040 and no serial_id, so the bridge takes the board it finds."""
+    from lucy_control_supervisor.bridges import bridge_processes
+
+    hw = tmp_path / "active.yaml"
+    hw.write_text(
+        'boards:\n  rp2040_so_arm: {board_class: bus_servo_only, serial_id: ""}\n',
+        encoding="utf-8",
+    )
+    assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [
+        ("so_arm", ["so_arm"])
+    ]
+
+
+def test_mcu_bridge_needs_serials_when_several_boards(tmp_path: Path):
+    """Two bridges without a serial_id would both take the first board they see."""
+    from lucy_control_supervisor.bridges import bridge_processes
+
+    hw = tmp_path / "active.yaml"
+    hw.write_text(
+        "boards:\n"
+        '  mega_left: {board_class: i2c_pwm_only, serial_id: "AAA"}\n'
+        '  rp2040_so_arm: {board_class: bus_servo_only, serial_id: ""}\n',
+        encoding="utf-8",
+    )
+    assert bridge_processes("mcu_bridge", hw, _TWO_NODE_URDF) == [
+        ("left", ["left", "AAA"])
+    ]
+
+
+def test_unknown_bridge_is_rejected(tmp_path: Path):
+    from lucy_control_supervisor.bridges import bridge_processes
+
+    with pytest.raises(ValueError, match="unknown bridge"):
+        bridge_processes("usb", tmp_path / "active.yaml", _TWO_NODE_URDF)
+
+
+def test_bridge_executable_names_the_missing_package(monkeypatch):
+    pytest.importorskip("ros2run")
+    import ros2run.api
+
+    from lucy_control_supervisor import bridges
+
+    monkeypatch.setattr(ros2run.api, "get_executable_path", lambda **_k: None)
+    with pytest.raises(LookupError, match="lucy_embedded_firmware_linux is not built"):
+        bridges.bridge_executable("linux")

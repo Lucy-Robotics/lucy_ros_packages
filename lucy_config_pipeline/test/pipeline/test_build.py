@@ -170,7 +170,8 @@ def test_cargo_build_writes_one_uf2_per_board(
     def fake_run_command(*, cmd: list[str], **_kwargs):
         calls.append(cmd)
         if Path(cmd[0]) == cargo:
-            elf = source / "target" / "thumbv6m-none-eabi" / "release"
+            elf = source / "firmwares" / "rp2040" / "target" / "thumbv6m-none-eabi"
+            elf = elf / "release"
             elf.mkdir(parents=True, exist_ok=True)
             (elf / "lucy-embedded-firmware-rp2040").write_bytes(b"\0" * 10_000)
         if Path(cmd[0]).name in ("elf2uf2-rs", "elf2uf2-rs.exe"):
