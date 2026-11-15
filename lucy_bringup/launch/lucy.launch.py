@@ -24,9 +24,9 @@ Arguments:
 ---------
 - ``mode`` (default ``mock``): ``mock`` runs ros2_control on mock hardware (no robot,
   no simulator); ``sim`` runs the robot package's Gazebo stack; ``real`` drives the
-  physical robot through the host firmware picked by ``bridge``.
-- ``bridge`` (required with ``mode:=real``, rejected otherwise): ``linux`` drives
-  USB-serial Feetech servos from the host (``lucy_embedded_firmware_linux``, one per
+  physical robot through the host firmware its robot package names with ``bridge:`` in
+  ``config/control.launch.yaml`` (fork the package to drive it another way): ``linux``
+  drives USB-serial Feetech servos from the host (``lucy_embedded_firmware_linux``, one per
   ros2_control node); ``mcu_bridge`` relays to the microcontroller boards of the active
   hardware YAML (``lucy_embedded_firmware_mcu_bridge``, one per board).
   ``lucy_control_supervisor`` starts them with ``ros2 run`` and restarts them with the stack.
@@ -43,8 +43,8 @@ Examples::
 
     ros2 launch lucy_bringup lucy.launch.py rviz:=true
     ros2 launch lucy_bringup lucy.launch.py mode:=sim headless:=true
-    ros2 launch lucy_bringup lucy.launch.py mode:=real bridge:=linux robot_package:=so_arm101_urdf
-    ros2 launch lucy_bringup lucy.launch.py mode:=real bridge:=mcu_bridge domain_id:=3
+    ros2 launch lucy_bringup lucy.launch.py mode:=real robot_package:=so_arm101_urdf
+    ros2 launch lucy_bringup lucy.launch.py mode:=real robot_package:=inmoov_urdf domain_id:=3
 
 """
 
@@ -145,11 +145,17 @@ def _load_robot_launch_defaults(robot_root: Path) -> dict[str, str]:
     if not isinstance(data, dict):
         return {}
     out: dict[str, str] = {}
-    for key in ("urdf_path", "base_path", "controllers_yaml"):
+    for key in ("urdf_path", "base_path", "controllers_yaml", "bridge"):
         value = data.get(key)
         if isinstance(value, str) and value.strip():
             out[key] = value.strip()
     return out
+
+
+def _robot_root(robot_package: str) -> Path:
+    return _infer_robot_source_root(
+        robot_package, get_package_share_directory(robot_package)
+    )
 
 
 def _resolve_robot_paths(context):
@@ -167,8 +173,7 @@ def _resolve_robot_paths(context):
     if not robot_package:
         # _validate_lucy_launch already raised; nothing to resolve.
         return []
-    share = get_package_share_directory(robot_package)
-    robot_root = _infer_robot_source_root(robot_package, share)
+    robot_root = _robot_root(robot_package)
     launch_defaults = _load_robot_launch_defaults(robot_root)
 
     def _abs(rel_or_abs: str) -> str:
@@ -205,25 +210,21 @@ def _flag(context, name: str) -> bool:
 
 def launch_settings(context) -> dict:
     """
-    Read and check bridge / headless / domain_id / robot_package against mode.
+    Read and check the launch settings against mode.
 
-    ``mode`` itself is checked by its DeclareLaunchArgument choices.
+    headless, domain_id and robot_package are checked against mode, and mode:=real
+    reads the bridge its robot package names. ``mode`` itself is checked by its
+    DeclareLaunchArgument choices.
     """
     mode = LaunchConfiguration("mode").perform(context)
-    bridge = LaunchConfiguration("bridge").perform(context).strip().lower()
+    bridge_arg = LaunchConfiguration("bridge", default="").perform(context).strip()
     domain_id = LaunchConfiguration("domain_id").perform(context).strip()
     robot_package = LaunchConfiguration("robot_package").perform(context).strip()
 
-    if mode == "real" and bridge not in BRIDGES:
+    if bridge_arg:
         raise RuntimeError(
-            "lucy.launch.py: mode:=real needs bridge:=linux (USB-serial servos driven "
-            "from this host) or bridge:=mcu_bridge (microcontroller boards)"
-            + (f", not bridge:={bridge!r}." if bridge else ".")
-        )
-    if mode != "real" and bridge:
-        raise RuntimeError(
-            f"lucy.launch.py: bridge:={bridge} only applies to mode:=real "
-            f"(got mode:={mode}). Drop bridge:= or add mode:=real."
+            f"lucy.launch.py: bridge:={bridge_arg} is no longer an argument: the robot "
+            "package names its bridge in config/control.launch.yaml. Drop bridge:=."
         )
     if _flag(context, "headless") and mode != "sim":
         raise RuntimeError(
@@ -241,6 +242,17 @@ def launch_settings(context) -> dict:
             "inmoov_urdf). Clone/build a robot package, or pass one "
             "explicitly with robot_package:=<pkg>."
         )
+    bridge = ""
+    if mode == "real":
+        declared = _load_robot_launch_defaults(_robot_root(robot_package))
+        bridge = declared.get("bridge", "").lower()
+        if bridge not in BRIDGES:
+            raise RuntimeError(
+                f"lucy.launch.py: mode:=real needs {robot_package}/config/"
+                "control.launch.yaml to name its bridge: linux (USB-serial servos "
+                "driven from this host) or mcu_bridge (microcontroller boards)"
+                + (f", not {bridge!r}." if bridge else ".")
+            )
     return {
         "mode": mode,
         "bridge": bridge,
@@ -285,17 +297,7 @@ def generate_launch_description():
         choices=list(MODES),
         description=(
             "mock: mock hardware (no robot, no simulator); sim: Gazebo; "
-            "real: physical robot through bridge:="
-        ),
-    )
-
-    bridge_arg = DeclareLaunchArgument(
-        "bridge",
-        default_value="",
-        description=(
-            "mode:=real only (required there). linux: host drives USB-serial servos "
-            "(one lucy_embedded_firmware_linux per ros2_control node); mcu_bridge: host "
-            "relays to the microcontroller boards of the hardware YAML"
+            "real: physical robot through the bridge its robot package names"
         ),
     )
 
@@ -500,7 +502,6 @@ def generate_launch_description():
     return LaunchDescription(
         [
             mode_arg,
-            bridge_arg,
             domain_id_arg,
             robot_package_arg,
             config_dir_arg,
