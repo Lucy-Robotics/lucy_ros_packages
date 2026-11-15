@@ -91,7 +91,9 @@ def call_reload_service(
     return True, resp.message or "reload complete"
 
 
-def verify_bridge_links_after_reload(goal_handle, flashed_boards: list[str]) -> list[str]:
+def verify_bridge_links_after_reload(
+    goal_handle, flashed_boards: list[str]
+) -> list[str]:
     """Return error strings if flashed boards' mcu_bridge links stay dead."""
     import time
 
