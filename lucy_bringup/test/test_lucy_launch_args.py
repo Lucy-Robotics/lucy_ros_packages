@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""lucy.launch.py argument rules: mode / bridge / headless / domain_id (no ROS graph)."""
+"""lucy.launch.py argument rules: mode / headless / domain_id and the robot's bridge."""
 
 from __future__ import annotations
 
@@ -26,7 +26,6 @@ _LAUNCH = Path(__file__).resolve().parents[1] / "launch" / "lucy.launch.py"
 
 DEFAULTS = {
     "mode": "mock",
-    "bridge": "",
     "headless": "false",
     "rviz": "false",
     "domain_id": "0",
@@ -50,6 +49,17 @@ def mod():
     return _load_launch_module()
 
 
+@pytest.fixture
+def robot(mod, tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, "_robot_root", lambda _package: tmp_path)
+
+    def declare(text: str) -> None:
+        (tmp_path / "config").mkdir(exist_ok=True)
+        (tmp_path / "config" / "control.launch.yaml").write_text(text)
+
+    return declare
+
+
 def _context(**overrides):
     from launch import LaunchContext
 
@@ -67,19 +77,57 @@ def _applied(mod, **overrides):
 
 
 @pytest.mark.parametrize(
-    "overrides, gazebo, mock, bridge",
-    [
-        ({}, "false", "true", ""),
-        ({"mode": "sim", "headless": "true"}, "true", "false", ""),
-        ({"mode": "real", "bridge": "linux"}, "false", "false", "linux"),
-        ({"mode": "real", "bridge": "MCU_BRIDGE"}, "false", "false", "mcu_bridge"),
-    ],
+    "mode, gazebo, mock",
+    [("mock", "false", "true"), ("sim", "true", "false")],
 )
-def test_mode_drives_gazebo_mock_and_bridge(mod, overrides, gazebo, mock, bridge):
-    configs, env = _applied(mod, **overrides)
+def test_mode_drives_gazebo_and_mock_without_a_bridge(mod, robot, mode, gazebo, mock):
+    robot("bridge: linux\n")
+    configs, env = _applied(mod, mode=mode)
     assert configs["use_gazebo"] == gazebo
     assert configs["use_mock_hardware"] == mock
+    assert env["LUCY_BRIDGE"] == ""
+
+
+@pytest.mark.parametrize(
+    "declared, bridge",
+    [("bridge: linux\n", "linux"), ("bridge: MCU_BRIDGE\n", "mcu_bridge")],
+)
+def test_real_hardware_runs_the_bridge_the_robot_package_names(
+    mod, robot, declared, bridge
+):
+    robot("urdf_path: description/urdf/robot.urdf.xacro\n" + declared)
+    configs, env = _applied(mod, mode="real")
+    assert configs["use_gazebo"] == "false"
+    assert configs["use_mock_hardware"] == "false"
     assert env["LUCY_BRIDGE"] == bridge
+
+
+@pytest.mark.parametrize(
+    "declared, message",
+    [
+        ("urdf_path: description/urdf/robot.urdf.xacro\n", "to name its bridge"),
+        ("bridge: usb\n", "not 'usb'"),
+    ],
+)
+def test_real_hardware_needs_the_robot_package_to_name_a_known_bridge(
+    mod, robot, declared, message
+):
+    robot(declared)
+    with pytest.raises(RuntimeError, match=message):
+        mod.launch_settings(_context(mode="real"))
+
+
+def test_a_robot_package_without_control_launch_yaml_cannot_run_real_hardware(
+    mod, robot
+):
+    with pytest.raises(RuntimeError, match="to name its bridge"):
+        mod.launch_settings(_context(mode="real"))
+
+
+def test_bridge_argument_is_refused_with_where_it_moved(mod, robot):
+    robot("bridge: linux\n")
+    with pytest.raises(RuntimeError, match="config/control.launch.yaml"):
+        mod.launch_settings(_context(mode="real", bridge="mcu_bridge"))
 
 
 def test_domain_id_is_exported(mod):
@@ -90,10 +138,6 @@ def test_domain_id_is_exported(mod):
 @pytest.mark.parametrize(
     "overrides, message",
     [
-        ({"mode": "real"}, "needs bridge:=linux"),
-        ({"mode": "real", "bridge": "usb"}, "not bridge:='usb'"),
-        ({"bridge": "linux"}, "only applies to mode:=real"),
-        ({"mode": "sim", "bridge": "linux"}, "only applies to mode:=real"),
         ({"headless": "true"}, "headless:=true only applies to mode:=sim"),
         ({"mode": "sim", "headless": "maybe"}, "must be true or false"),
         ({"domain_id": "102"}, "from 0 to 101"),

@@ -10,7 +10,7 @@ from lucy_config_generator.schema import BOARD_CLASS_I2C_PWM_ONLY
 from lucy_config_generator.schema import derive_ros2_node_name
 import yaml
 
-# lucy.launch.py bridge:= value -> (colcon package, executable), as for `ros2 run`.
+# Robot package `bridge:` value -> (colcon package, executable), as for `ros2 run`.
 BRIDGE_EXECUTABLES = {
     "linux": ("lucy_embedded_firmware_linux", "lucy-embedded-firmware-linux"),
     "mcu_bridge": (
