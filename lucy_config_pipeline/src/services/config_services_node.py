@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 from pathlib import Path
+import threading
+import time
 import zlib
 
 from ament_index_python.packages import get_package_share_directory
@@ -186,6 +188,20 @@ class ConfigServicesNode(Node):
         return False
 
     def _on_get_mesh(
+        self, req: GetMesh.Request, res: GetMesh.Response
+    ) -> GetMesh.Response:
+        # DIAGNOSTIC (cma/diag-mesh-stall): time every request. Do not merge.
+        t0 = time.monotonic()
+        try:
+            return self._on_get_mesh_impl(req, res)
+        finally:
+            self.get_logger().info(
+                f"MESHDIAG thread={threading.get_ident()} "
+                f"ms={(time.monotonic() - t0) * 1000:.0f} bytes={len(res.data)} "
+                f"path={req.path.rsplit('/', 1)[-1]}"
+            )
+
+    def _on_get_mesh_impl(
         self, req: GetMesh.Request, res: GetMesh.Response
     ) -> GetMesh.Response:
         # Serves the mesh files referenced by the URDF (file:// / package:// /
