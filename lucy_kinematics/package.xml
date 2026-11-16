@@ -11,7 +11,6 @@
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
-  <depend>lucy_msgs</depend>
   <exec_depend>pinocchio</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
