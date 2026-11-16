@@ -41,3 +41,28 @@ def test_robot_without_end_effector_stays_idle(node):
     node._on_target(Point(x=0.1))
     node._publish_end_effector()
     assert node.published == []
+
+
+def test_pose_target_is_answered_without_the_roll(node):
+    from lucy_msgs.msg import IkTarget
+    from test_pitch import WRIST_ARM
+
+    node._on_description(String(data=WRIST_ARM))
+    node._on_joint_states(
+        JointState(
+            name=["pan", "shoulder", "elbow", "wrist_pitch", "wrist_roll"],
+            position=[0.0, 0.0, 0.4, 0.2, 0.7],
+        )
+    )
+    node._on_pose_target(IkTarget(x=0.12, y=0.05, z=0.02, pitch=-0.6))
+    assert node.published[-1].name == ["pan", "shoulder", "elbow", "wrist_pitch"]
+
+
+def test_end_effector_pitch_is_published_with_its_position(node):
+    from test_pitch import WRIST_ARM
+
+    node._pitch_pub.publish = node.published.append
+    node._on_description(String(data=WRIST_ARM))
+    node._on_joint_states(JointState(name=["wrist_pitch"], position=[0.5]))
+    node._publish_end_effector()
+    assert node.published[-1].data == pytest.approx(-0.5)
