@@ -226,6 +226,10 @@ def generate_launch_description():
         package="lucy_kinematics", executable="kinematics_node", output="screen"
     )
 
+    eye_leds = Node(
+        package="lucy_eye_leds", executable="eye_leds_node", output="screen"
+    )
+
     return LaunchDescription(
         [
             robot_package_arg,
@@ -238,5 +242,6 @@ def generate_launch_description():
             config_pipeline_launch,
             hardware_discovery_launch,
             kinematics,
+            eye_leds,
         ]
     )
