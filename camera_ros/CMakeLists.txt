@@ -28,12 +28,14 @@ endif()
 install(PROGRAMS
   scripts/camera_publisher.py
   scripts/camera_stream_controller.py
+  scripts/depth_colorizer.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
 # Install launch files
 install(DIRECTORY
   launch
+  config
   DESTINATION share/${PROJECT_NAME}/
 )
 
@@ -80,6 +82,11 @@ if(BUILD_TESTING)
   )
 
   ament_add_pytest_test(test_camera_stream_controller test/test_camera_stream_controller.py
+    TIMEOUT 60
+    PYTHON_EXECUTABLE "${PYTHON3_EXECUTABLE}"
+    APPEND_ENV PYTHONPATH="${CMAKE_CURRENT_SOURCE_DIR}/scripts:${CMAKE_CURRENT_SOURCE_DIR}"
+  )
+  ament_add_pytest_test(test_depth_colorizer test/test_depth_colorizer.py
     TIMEOUT 60
     PYTHON_EXECUTABLE "${PYTHON3_EXECUTABLE}"
     APPEND_ENV PYTHONPATH="${CMAKE_CURRENT_SOURCE_DIR}/scripts:${CMAKE_CURRENT_SOURCE_DIR}"

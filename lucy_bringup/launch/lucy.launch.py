@@ -51,6 +51,7 @@ Examples::
 from pathlib import Path
 
 from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import PackageNotFoundError
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.actions import GroupAction
@@ -274,6 +275,54 @@ def _apply_launch_settings(context):
                 f"bridge={bridge} ROS_DOMAIN_ID={settings['domain_id']}"
             )
         ),
+    ]
+
+
+def _oak_camera(context):
+    """
+    In mode:=real, start the OAK-D when the active hardware YAML lists an ``/oak/`` camera.
+
+    Skipped (with a log line) when depthai_ros_driver is not installed (e.g. macOS).
+    """
+    if LaunchConfiguration("mode").perform(context) != "real":
+        return []
+    robot_package = LaunchConfiguration("robot_package").perform(context).strip()
+    config_dir = LaunchConfiguration("config_dir").perform(context).strip()
+    if not config_dir:
+        share = get_package_share_directory(robot_package)
+        config_dir = str(
+            _infer_robot_source_root(robot_package, share) / "config" / "hardware"
+        )
+    try:
+        import yaml
+
+        doc = yaml.safe_load(
+            (Path(config_dir) / "active.yaml").read_text(encoding="utf-8")
+        )
+    except (OSError, yaml.YAMLError):
+        return []
+    cameras = (doc or {}).get("cameras") or []
+    if not any(
+        str(c.get("topic", "")).startswith("/oak/")
+        for c in cameras
+        if isinstance(c, dict)
+    ):
+        return []
+    try:
+        get_package_share_directory("depthai_ros_driver")
+    except PackageNotFoundError:
+        return [
+            LogInfo(
+                msg="lucy.launch: hardware YAML lists an OAK camera but "
+                "depthai_ros_driver is not installed; skipping it."
+            )
+        ]
+    return [
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                f"{get_package_share_directory('camera_ros')}/launch/oak.launch.py"
+            )
+        )
     ]
 
 
@@ -523,6 +572,7 @@ def generate_launch_description():
             ros2_control_launch,
             rviz,
             gazebo,
+            OpaqueFunction(function=_oak_camera),
             LogInfo(msg="========================================"),
         ]
     )

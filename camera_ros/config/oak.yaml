@@ -1,0 +1,13 @@
+# depthai_ros_driver defaults (config/camera.yaml) plus hot-plug recovery:
+# on unplug the diagnostics error makes the driver drop the device and wait for it again.
+/**:
+  ros__parameters:
+    camera:
+      i_enable_imu: true
+      i_enable_ir: true
+      i_nn_type: spatial
+      i_pipeline_type: RGBD
+      i_enable_diagnostics: true
+      i_restart_on_diagnostics_error: true
+    nn:
+      i_nn_config_path: depthai_ros_driver/mobilenet
