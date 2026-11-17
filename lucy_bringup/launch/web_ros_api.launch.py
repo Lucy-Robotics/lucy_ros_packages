@@ -207,6 +207,10 @@ def generate_launch_description():
         ],
     )
 
+    eye_leds = Node(
+        package="lucy_eye_leds", executable="eye_leds_node", output="screen"
+    )
+
     return LaunchDescription(
         [
             robot_package_arg,
@@ -217,5 +221,6 @@ def generate_launch_description():
             OpaqueFunction(function=_derive_real),
             rosbridge,
             config_pipeline_launch,
+            eye_leds,
         ]
     )
