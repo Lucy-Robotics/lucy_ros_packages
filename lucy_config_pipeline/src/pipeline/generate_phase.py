@@ -85,11 +85,13 @@ def install_ros2_control_outputs(
 def install_firmware_outputs(paths: PipelinePaths, out_dir: Path, data: dict) -> None:
     if not str(data.get("firmware", {}).get("source_dir", "")).strip():
         return
-    fw_cfg_dir = resolve_firmware_paths(data, paths.workspace_src).source_dir / "config"
+    fw_paths = resolve_firmware_paths(data, paths.workspace_src)
+    fw_cfg_dir = fw_paths.source_dir / "config"
     fw_cfg_dir.mkdir(parents=True, exist_ok=True)
-    for cfile in out_dir.glob("config_*.c"):
-        shutil.copy2(cfile, fw_cfg_dir / cfile.name)
-    mega_dir = mega_artifact_dir(resolve_firmware_paths(data, paths.workspace_src))
+    for pattern in ("config_*.c", "config_*.yaml"):
+        for cfile in out_dir.glob(pattern):
+            shutil.copy2(cfile, fw_cfg_dir / cfile.name)
+    mega_dir = mega_artifact_dir(fw_paths)
     for board_id, board in (data.get("boards") or {}).items():
         generated = out_dir / f"config_{board_id}.rs"
         if is_mega_board(board) and generated.is_file():

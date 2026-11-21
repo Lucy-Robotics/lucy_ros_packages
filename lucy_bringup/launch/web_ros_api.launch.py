@@ -41,6 +41,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import EnvironmentVariable
 from launch.substitutions import LaunchConfiguration
 from launch.substitutions import PathJoinSubstitution
+from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 DEFAULT_ROSBRIDGE_ADDRESS = "127.0.0.1"
@@ -207,6 +208,28 @@ def generate_launch_description():
         ],
     )
 
+    hardware_discovery_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            [
+                PathJoinSubstitution(
+                    [
+                        FindPackageShare("lucy_hardware_discovery"),
+                        "launch",
+                        "hardware_discovery.launch.py",
+                    ]
+                )
+            ]
+        ),
+    )
+
+    kinematics = Node(
+        package="lucy_kinematics", executable="kinematics_node", output="screen"
+    )
+
+    eye_leds = Node(
+        package="lucy_eye_leds", executable="eye_leds_node", output="screen"
+    )
+
     return LaunchDescription(
         [
             robot_package_arg,
@@ -217,5 +240,8 @@ def generate_launch_description():
             OpaqueFunction(function=_derive_real),
             rosbridge,
             config_pipeline_launch,
+            hardware_discovery_launch,
+            kinematics,
+            eye_leds,
         ]
     )

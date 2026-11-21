@@ -127,7 +127,11 @@ class ConfigServicesNode(Node):
                 res.message = "validation failed"
                 return res
 
-            self._store.write_named_yaml(req.config_name, req.config_yaml)
+            # Persist schema-normalized labels (e.g. derived board_class).
+            self._store.write_named_yaml(
+                req.config_name,
+                yaml.safe_dump(data, sort_keys=False, default_flow_style=False),
+            )
             if req.activate:
                 self._store.activate(req.config_name)
             res.success = True
