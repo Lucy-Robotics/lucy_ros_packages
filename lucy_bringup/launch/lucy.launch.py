@@ -210,10 +210,11 @@ def _flag(context, name: str) -> bool:
 
 def launch_settings(context) -> dict:
     """
-    Read and check headless / domain_id / robot_package against mode, and the bridge
-    the robot package names for mode:=real.
+    Read and check the launch settings against mode.
 
-    ``mode`` itself is checked by its DeclareLaunchArgument choices.
+    headless, domain_id and robot_package are checked against mode, and mode:=real
+    reads the bridge its robot package names. ``mode`` itself is checked by its
+    DeclareLaunchArgument choices.
     """
     mode = LaunchConfiguration("mode").perform(context)
     bridge_arg = LaunchConfiguration("bridge", default="").perform(context).strip()
