@@ -17,12 +17,12 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 import yaml
 
+from .mesh_glb_cache import cached_glb
 from ..config_store import ConfigStore
 from ..error_format import format_error_lines
 from ..validation import parse_yaml_text
 from ..validation import urdf_crosscheck
 from ..validation import validate_schema
-from .mesh_glb_cache import cached_glb
 
 # Wire encodings for GetMesh.data (must match lucy_msgs/srv/GetMesh.srv comments).
 MESH_ENCODING_UTF8 = "utf8"
