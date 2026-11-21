@@ -1,5 +1,6 @@
 # Request
 string path                   # mesh reference from the URDF (file://, package://, or absolute)
+string quality                # full, balanced or light: the cached GLB when built; empty: the source file
 ---
 # Response
 bool success
@@ -7,5 +8,6 @@ string message
 # Payload encoding for `data`:
 #   utf8         — text mesh (Collada/DAE XML)
 #   zlib_base64  — zlib-compressed binary (STL), then standard base64
+#   glb_base64   : meshopt GLB at the requested quality, then standard base64
 string encoding
 string data
