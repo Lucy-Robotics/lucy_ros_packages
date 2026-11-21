@@ -17,7 +17,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 import yaml
 
-from .mesh_glb_cache import cached_glb
+from .mesh_glb import glb_beside
 from ..config_store import ConfigStore
 from ..error_format import format_error_lines
 from ..validation import parse_yaml_text
@@ -210,7 +210,7 @@ class ConfigServicesNode(Node):
             # COLLADA/DAE as UTF-8. Binary STL as zlib+base64 so rosbridge can
             # carry large meshes in a string field without locale corruption.
             suffix = candidate.suffix.lower()
-            glb = cached_glb(candidate, req.quality)
+            glb = glb_beside(candidate, req.quality)
             if glb is not None:
                 res.data = base64.b64encode(glb.read_bytes()).decode("ascii")
                 res.encoding = MESH_ENCODING_GLB_BASE64

@@ -1,6 +1,6 @@
 # Request
 string path                   # mesh reference from the URDF (file://, package://, or absolute)
-string quality                # full, balanced or light: the cached GLB when built; empty: the source file
+string quality                # full, balanced or light: the GLB beside the mesh when committed; empty: the source file
 ---
 # Response
 bool success
