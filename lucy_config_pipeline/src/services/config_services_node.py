@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from pathlib import Path
 import zlib
 
@@ -194,45 +195,39 @@ class ConfigServicesNode(Node):
     def _on_get_mesh(
         self, req: GetMesh.Request, res: GetMesh.Response
     ) -> GetMesh.Response:
+        # TEMP (tmp/mesh-load-bench): a JSON list in `path` answers every mesh in one call.
+        if req.path.startswith("["):
+            out = {}
+            for ref in json.loads(req.path):
+                ok, message, encoding, data = self._load_mesh(ref, req.quality)
+                out[ref] = {"success": ok, "message": message, "encoding": encoding, "data": data}
+            res.success, res.message, res.encoding = True, "ok", "batch_json"
+            res.data = json.dumps(out)
+            return res
+        res.success, res.message, res.encoding, res.data = self._load_mesh(req.path, req.quality)
+        return res
+
+    def _load_mesh(self, ref: str, quality: str) -> tuple[bool, str, str, str]:
         # Serves the mesh files referenced by the URDF (file:// / package:// /
         # absolute) so the web viewer can fetch them over ROS instead of the
         # filesystem. Reads are confined to the robot's description tree(s).
         try:
-            candidate = self._mesh_path_from_ref(req.path)
+            candidate = self._mesh_path_from_ref(ref)
             if not self._path_allowed(candidate):
-                res.success = False
-                res.message = f"path outside robot description: {candidate}"
-                res.encoding = ""
-                res.data = ""
-                return res
+                return False, f"path outside robot description: {candidate}", "", ""
             if not candidate.is_file():
-                res.success = False
-                res.message = f"mesh not found: {candidate}"
-                res.encoding = ""
-                res.data = ""
-                return res
+                return False, f"mesh not found: {candidate}", "", ""
             # COLLADA/DAE as UTF-8. Binary STL as zlib+base64 so rosbridge can
             # carry large meshes in a string field without locale corruption.
-            suffix = candidate.suffix.lower()
-            glb = glb_beside(candidate, req.quality)
+            glb = glb_beside(candidate, quality)
             if glb is not None:
-                res.data = base64.b64encode(glb.read_bytes()).decode("ascii")
-                res.encoding = MESH_ENCODING_GLB_BASE64
-            elif suffix == ".stl":
+                return True, "ok", MESH_ENCODING_GLB_BASE64, base64.b64encode(glb.read_bytes()).decode("ascii")
+            if candidate.suffix.lower() == ".stl":
                 compressed = zlib.compress(candidate.read_bytes(), 6)
-                res.data = base64.b64encode(compressed).decode("ascii")
-                res.encoding = MESH_ENCODING_ZLIB_BASE64
-            else:
-                res.data = candidate.read_text(encoding="utf-8")
-                res.encoding = MESH_ENCODING_UTF8
-            res.success = True
-            res.message = "ok"
+                return True, "ok", MESH_ENCODING_ZLIB_BASE64, base64.b64encode(compressed).decode("ascii")
+            return True, "ok", MESH_ENCODING_UTF8, candidate.read_text(encoding="utf-8")
         except Exception as e:
-            res.success = False
-            res.message = str(e)
-            res.encoding = ""
-            res.data = ""
-        return res
+            return False, str(e), "", ""
 
     def _mesh_path_from_ref(self, ref: str) -> Path:
         """Resolve a URDF mesh reference to an absolute filesystem path."""
