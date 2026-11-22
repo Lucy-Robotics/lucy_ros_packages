@@ -73,3 +73,48 @@ def test_failed_spawner_raises_and_writes_no_marker(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="boom"):
         _spawn(node, monkeypatch, ["x", "y"], 1)
     assert not marker.exists()
+
+
+def test_unwritable_marker_does_not_stop_torque_binding(tmp_path, monkeypatch):
+    node, _ = _node(tmp_path, [_child("cm", 99)])
+    node.CONTROL_READY_FILE = tmp_path / "missing" / "ready"
+    bound = []
+    node._bind_torque_controllers = bound.append
+    _spawn(node, monkeypatch, ["a"], 0)
+    assert len(bound) == 1
+    assert not node.CONTROL_READY_FILE.exists()
+
+
+def _start_cm(tmp_path, monkeypatch, answers):
+    node, marker = _node(tmp_path, [])
+    warnings = []
+    node.get_logger = lambda: SimpleNamespace(warning=warnings.append)
+    node.READY_TIMEOUT_S = 3.0
+    node._service_available = lambda name: name.endswith("/list_controllers")
+
+    def track(name, popen, kind):
+        node._children.append(SimpleNamespace(kind=kind, popen=popen))
+
+    node._track = track
+    node._wait_for = lambda pred, timeout: answers and pred()
+    monkeypatch.setattr(sn, "node_argv", lambda p, e: [e])
+    monkeypatch.setattr(
+        sn.subprocess, "Popen", lambda cmd, **kw: SimpleNamespace(pid=555)
+    )
+    ControlSupervisorNode._start_cm(node, SimpleNamespace(controllers_yaml="x"))
+    return marker, warnings
+
+
+def test_start_cm_writes_marker_once_list_controllers_answers(tmp_path, monkeypatch):
+    marker, warnings = _start_cm(tmp_path, monkeypatch, True)
+    assert marker.read_text() == "555 0\n"
+    assert warnings == []
+
+
+def test_start_cm_without_list_controllers_warns_and_writes_no_marker(
+    tmp_path, monkeypatch
+):
+    marker, warnings = _start_cm(tmp_path, monkeypatch, False)
+    assert not marker.exists()
+    assert len(warnings) == 1
+    assert "list_controllers" in warnings[0]
