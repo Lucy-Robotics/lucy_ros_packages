@@ -129,6 +129,7 @@ class ControlSupervisorNode(Node):
     DISCOVERY_SETTLE_S = 2.0
     CONTROLLER_MANAGER_NODE = "controller_manager"
     SPAWNER_TIMEOUT_S = 60.0
+    SPAWNER_PER_CONTROLLER_S = 30.0
     # ForwardCommandController ~/commands is volatile; wait for DDS match after spawn.
     TORQUE_MATCH_TIMEOUT_S = 2.0
 
@@ -235,6 +236,15 @@ class ControlSupervisorNode(Node):
         if r.returncode != 0:
             raise RuntimeError(f"xacro failed: {r.stderr or r.stdout}")
         return r.stdout
+
+    def _write_ready_marker(self, active: int) -> None:
+        cm = next((c for c in self._children if c.kind == "cm"), None)
+        if cm is None:
+            return
+        try:
+            self.CONTROL_READY_FILE.write_text(f"{cm.popen.pid} {active}\n")
+        except OSError:
+            pass
 
     def _clear_ready_marker(self) -> None:
         try:
@@ -444,10 +454,12 @@ class ControlSupervisorNode(Node):
         self._track("ros2_control_node", popen, "cm")
         # Spawners hold a global lock while waiting for this service, so starting
         # them before it answers costs each one a full 20s lock attempt.
-        if not self._wait_for(
+        if self._wait_for(
             lambda: self._service_available("/controller_manager/list_controllers"),
             self.READY_TIMEOUT_S,
         ):
+            self._write_ready_marker(0)
+        else:
             self.get_logger().warning(
                 "controller_manager did not offer list_controllers within "
                 f"{self.READY_TIMEOUT_S:.0f}s; spawners may block on the lock"
@@ -539,7 +551,6 @@ class ControlSupervisorNode(Node):
 
         Must run on every restart (including pipeline RELOAD): launch-file
         spawners are one-shot and do not re-run when only this node restarts CM.
-        Sequential to avoid the spawner global lock burning 20s per waiter.
         """
         names = controllers_to_spawn(
             cfg.controllers_yaml,
@@ -550,28 +561,29 @@ class ControlSupervisorNode(Node):
                 f"no controllers to spawn in {cfg.controllers_yaml}"
             )
             return
-        for name in names:
-            cmd = [
-                *node_argv("controller_manager", "spawner"),
-                name,
-                "--switch-timeout",
-                "10",
-            ]
-            self.get_logger().info(f"spawning controller {name}")
-            r = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=self.SPAWNER_TIMEOUT_S,
-                check=False,
-                env=os.environ.copy(),
+        cmd = [
+            *node_argv("controller_manager", "spawner"),
+            *names,
+            "--switch-timeout",
+            "10",
+        ]
+        self.get_logger().info(f"spawning controllers {' '.join(names)}")
+        r = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=self.SPAWNER_TIMEOUT_S
+            + self.SPAWNER_PER_CONTROLLER_S * (len(names) - 1),
+            check=False,
+            env=os.environ.copy(),
+        )
+        if r.returncode != 0:
+            detail = (r.stderr or r.stdout or "").strip()
+            raise RuntimeError(
+                f"spawner for {' '.join(names)} failed (exit {r.returncode})"
+                + (f": {detail}" if detail else "")
             )
-            if r.returncode != 0:
-                detail = (r.stderr or r.stdout or "").strip()
-                raise RuntimeError(
-                    f"spawner for {name} failed (exit {r.returncode})"
-                    + (f": {detail}" if detail else "")
-                )
+        self._write_ready_marker(len(names))
         self._bind_torque_controllers(cfg)
         self._publish_torque_after_match()
 
