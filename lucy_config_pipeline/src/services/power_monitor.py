@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from collections.abc import Mapping
 
 from control_msgs.msg import DynamicJointState
 from lucy_config_generator.motors import motor_values_by_joint
@@ -26,3 +27,7 @@ def load_min_volts(
         return motor_values_by_joint(config, "min_volts"), ""
     except (OSError, KeyError, yaml.YAMLError) as e:
         return {}, str(e)
+
+
+def on_real_hardware(environ: Mapping[str, str]) -> bool:
+    return bool(environ.get("LUCY_BRIDGE", "").strip())

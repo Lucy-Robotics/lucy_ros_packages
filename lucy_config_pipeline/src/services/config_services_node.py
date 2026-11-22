@@ -17,6 +17,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 import yaml
 
+from .mesh_glb import glb_beside
 from ..config_store import ConfigStore
 from ..error_format import format_error_lines
 from ..validation import parse_yaml_text
@@ -26,6 +27,7 @@ from ..validation import validate_schema
 # Wire encodings for GetMesh.data (must match lucy_msgs/srv/GetMesh.srv comments).
 MESH_ENCODING_UTF8 = "utf8"
 MESH_ENCODING_ZLIB_BASE64 = "zlib_base64"
+MESH_ENCODING_GLB_BASE64 = "glb_base64"
 
 
 class ConfigServicesNode(Node):
@@ -127,7 +129,11 @@ class ConfigServicesNode(Node):
                 res.message = "validation failed"
                 return res
 
-            self._store.write_named_yaml(req.config_name, req.config_yaml)
+            # Persist schema-normalized labels (e.g. derived board_class).
+            self._store.write_named_yaml(
+                req.config_name,
+                yaml.safe_dump(data, sort_keys=False, default_flow_style=False),
+            )
             if req.activate:
                 self._store.activate(req.config_name)
             res.success = True
@@ -208,7 +214,11 @@ class ConfigServicesNode(Node):
             # COLLADA/DAE as UTF-8. Binary STL as zlib+base64 so rosbridge can
             # carry large meshes in a string field without locale corruption.
             suffix = candidate.suffix.lower()
-            if suffix == ".stl":
+            glb = glb_beside(candidate, req.quality)
+            if glb is not None:
+                res.data = base64.b64encode(glb.read_bytes()).decode("ascii")
+                res.encoding = MESH_ENCODING_GLB_BASE64
+            elif suffix == ".stl":
                 compressed = zlib.compress(candidate.read_bytes(), 6)
                 res.data = base64.b64encode(compressed).decode("ascii")
                 res.encoding = MESH_ENCODING_ZLIB_BASE64

@@ -48,7 +48,6 @@ actuators:
   - id: left_a
     urdf_joint: left_a_joint
     board: rp2040_left_arm
-    virtual_pin: 0
     physical_pin: 10
     servo_type: "270"
     offset: 0.0
@@ -61,7 +60,6 @@ actuators:
   - id: left_disabled
     urdf_joint: left_disabled_joint
     board: rp2040_left_arm
-    virtual_pin: 1
     physical_pin: 11
     servo_type: "270"
     offset: 0.0
@@ -74,7 +72,6 @@ actuators:
   - id: right_a
     urdf_joint: right_a_joint
     board: rp2040_right_arm
-    virtual_pin: 0
     physical_pin: 10
     servo_type: "270"
     offset: 0.0
@@ -87,7 +84,6 @@ actuators:
   - id: torso_left_y
     urdf_joint: left_shoulder_y_link_joint
     board: rp2040_torso_head
-    virtual_pin: 0
     physical_pin: 5
     servo_type: "270"
     offset: 0.0
@@ -100,7 +96,6 @@ actuators:
   - id: torso_right_y
     urdf_joint: right_shoulder_y_link_joint
     board: rp2040_torso_head
-    virtual_pin: 1
     physical_pin: 6
     servo_type: "270"
     offset: 0.0
@@ -116,8 +111,7 @@ sensors:
     type: pressure
     associated_actuator: left_a
     board: rp2040_left_arm
-    virtual_pin: 0
-    physical_pin: 16
+    physical_pin: 1
     min_value: null
     max_value: null
     enabled: true

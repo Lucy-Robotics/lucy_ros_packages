@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import deque
 import ctypes
 from dataclasses import dataclass
+import json
 import os
 from pathlib import Path
 import shutil
@@ -20,9 +21,13 @@ import threading
 import time
 from typing import List
 
+from lucy_control_supervisor.bridges import board_entries
+from lucy_control_supervisor.bridges import board_unreachable
 from lucy_control_supervisor.bridges import bridge_executable
 from lucy_control_supervisor.bridges import BRIDGE_EXECUTABLES
 from lucy_control_supervisor.bridges import bridge_processes
+from lucy_control_supervisor.bridges import pca_warning
+from lucy_control_supervisor.bridges import ros2_control_nodes
 from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
 from lucy_control_supervisor.controllers_spawn import torque_command_values
 from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
@@ -108,8 +113,14 @@ class _StackConfig:
 class ControlSupervisorNode(Node):
     RESTART_SERVICE = "/lucy_control/restart"
     GAZEBO_RUNNING_TOPIC = "/lucy/gazebo_running"
+    # Latched JSON list of hardware problems the bridges report (e.g. a PCA9685 not answering).
+    HARDWARE_WARNINGS_TOPIC = "/lucy/hardware_warnings"
+    # Latched JSON {board_id: reason} of the Mega boards their bridge cannot reach.
+    UNREACHABLE_BOARDS_TOPIC = "/lucy/unreachable_boards"
     # Latched by lucy_client_registry. Non-empty means Control Robot is ON.
     ACTIVE_CLIENT_TOPIC = "/lucy/active_client"
+    # Latched JSON list of joint names the LCP keeps limp while Control Robot is ON.
+    DISABLED_JOINTS_TOPIC = "/lucy/disabled_joints"
     TERMINATE_TIMEOUT_S = 10.0
     BRIDGE_DRAIN_S = 0.2
     READY_TIMEOUT_S = 60.0
@@ -118,6 +129,7 @@ class ControlSupervisorNode(Node):
     DISCOVERY_SETTLE_S = 2.0
     CONTROLLER_MANAGER_NODE = "controller_manager"
     SPAWNER_TIMEOUT_S = 60.0
+    SPAWNER_PER_CONTROLLER_S = 30.0
     # ForwardCommandController ~/commands is volatile; wait for DDS match after spawn.
     TORQUE_MATCH_TIMEOUT_S = 2.0
 
@@ -146,11 +158,28 @@ class ControlSupervisorNode(Node):
             Bool, self.GAZEBO_RUNNING_TOPIC, latched_qos
         )
         self._publish_gazebo_running()
-        # name -> (publisher, joint count). Filled after the torque controllers spawn.
+        # bridge name -> its current warnings; pump threads write, hence the lock.
+        self._hardware_warnings: dict[str, set[str]] = {}
+        self._warnings_lock = threading.Lock()
+        self._hardware_warnings_pub = self.create_publisher(
+            String, self.HARDWARE_WARNINGS_TOPIC, latched_qos
+        )
+        # bridge name -> board_id, and board_id -> why it is unreachable; same lock.
+        self._bridge_boards: dict[str, str] = {}
+        self._unreachable: dict[str, str] = {}
+        self._unreachable_pub = self.create_publisher(
+            String, self.UNREACHABLE_BOARDS_TOPIC, latched_qos
+        )
+        self._publish_hardware_warnings()
+        # name -> (publisher, joint names). Filled after the torque controllers spawn.
         self._torque_pubs: dict[str, tuple] = {}
         self._torque_enabled = False
+        self._disabled_joints: frozenset[str] = frozenset()
         self.create_subscription(
             String, self.ACTIVE_CLIENT_TOPIC, self._on_active_client, latched_qos
+        )
+        self.create_subscription(
+            String, self.DISABLED_JOINTS_TOPIC, self._on_disabled_joints, latched_qos
         )
         if self.get_parameter("autostart").value:
             ok, msg = self._restart_stack()
@@ -207,6 +236,15 @@ class ControlSupervisorNode(Node):
         if r.returncode != 0:
             raise RuntimeError(f"xacro failed: {r.stderr or r.stdout}")
         return r.stdout
+
+    def _write_ready_marker(self, active: int) -> None:
+        cm = next((c for c in self._children if c.kind == "cm"), None)
+        if cm is None:
+            return
+        try:
+            self.CONTROL_READY_FILE.write_text(f"{cm.popen.pid} {active}\n")
+        except OSError:
+            pass
 
     def _clear_ready_marker(self) -> None:
         try:
@@ -344,6 +382,7 @@ class ControlSupervisorNode(Node):
                     tail.append(text)
                     if kind == "bridge":
                         self.get_logger().info(f"[{name}] {text}")
+                        self._note_bridge_line(name, text)
                     else:
                         self.get_logger().debug(f"[{name}] {text}")
             except (OSError, ValueError):
@@ -356,10 +395,46 @@ class ControlSupervisorNode(Node):
                 code = popen.poll()
             if code and not child.stopping:
                 self.get_logger().error(f"{name} exited with code {code}")
+                if kind == "bridge":
+                    self._set_unreachable(name, f"its mcu_bridge exited (code {code})")
                 for text in tail:
                     self.get_logger().error(f"[{name}] {text}")
 
         threading.Thread(target=pump, name=f"pump-{name}", daemon=True).start()
+
+    def _note_bridge_line(self, bridge: str, text: str) -> None:
+        """Keep what a bridge reports (PCA9685 or whole board not answering) on the topics."""
+        reason = board_unreachable(text)
+        if reason is not None:
+            self._set_unreachable(bridge, reason)
+            return
+        warning = pca_warning(bridge.removeprefix("mcu_bridge_"), text)
+        if warning is None:
+            return
+        message, active = warning
+        with self._warnings_lock:
+            board = self._hardware_warnings.setdefault(bridge, set())
+            (board.add if active else board.discard)(message)
+        self._publish_hardware_warnings()
+
+    def _set_unreachable(self, bridge: str, reason: str) -> None:
+        with self._warnings_lock:
+            board = self._bridge_boards.get(bridge)
+            if board is None:
+                return
+            if reason:
+                self._unreachable[board] = reason
+            else:
+                self._unreachable.pop(board, None)
+        self._publish_hardware_warnings()
+
+    def _publish_hardware_warnings(self) -> None:
+        with self._warnings_lock:
+            warnings = sorted(
+                w for board in self._hardware_warnings.values() for w in board
+            )
+            self._hardware_warnings_pub.publish(String(data=json.dumps(warnings)))
+            self._unreachable_pub.publish(String(data=json.dumps(self._unreachable)))
 
     def _start_cm(self, cfg: _StackConfig) -> None:
         cmd = [
@@ -379,10 +454,12 @@ class ControlSupervisorNode(Node):
         self._track("ros2_control_node", popen, "cm")
         # Spawners hold a global lock while waiting for this service, so starting
         # them before it answers costs each one a full 20s lock attempt.
-        if not self._wait_for(
+        if self._wait_for(
             lambda: self._service_available("/controller_manager/list_controllers"),
             self.READY_TIMEOUT_S,
         ):
+            self._write_ready_marker(0)
+        else:
             self.get_logger().warning(
                 "controller_manager did not offer list_controllers within "
                 f"{self.READY_TIMEOUT_S:.0f}s; spawners may block on the lock"
@@ -391,7 +468,8 @@ class ControlSupervisorNode(Node):
     def _start_bridges(self, cfg: _StackConfig, urdf_xml: str) -> None:
         """Start the host bridge firmwares picked by ``LUCY_BRIDGE`` (restarted with the stack).
 
-        lucy.launch.py sets ``LUCY_BRIDGE`` from ``bridge:=`` in ``mode:=real``. ``linux``
+        lucy.launch.py sets ``LUCY_BRIDGE`` in ``mode:=real`` from the ``bridge:`` the robot
+        package names in ``config/control.launch.yaml``. ``linux``
         runs one ``lucy_embedded_firmware_linux`` per ros2_control node; ``mcu_bridge`` one
         ``lucy_embedded_firmware_mcu_bridge`` per board (RP2040 or Mega) of the active YAML.
 
@@ -403,22 +481,36 @@ class ControlSupervisorNode(Node):
         if not bridge:
             self.get_logger().warning(
                 "real hardware without a bridge: LUCY_BRIDGE is unset, so no host firmware "
-                "drives the robot. Launch lucy.launch.py with mode:=real bridge:=<"
+                "drives the robot. Set bridge: <"
                 + "|".join(BRIDGE_EXECUTABLES)
-                + ">"
+                + "> in the robot package's config/control.launch.yaml"
             )
             return
         config_dir = (
             os.environ.get("LUCY_CONFIG_DIR")
             or cfg.controllers_yaml.parent / "hardware"
         )
+        hardware_yaml = Path(config_dir) / "active.yaml"
         try:
-            processes = bridge_processes(
-                bridge, Path(config_dir) / "active.yaml", urdf_xml
-            )
+            processes = bridge_processes(bridge, hardware_yaml, urdf_xml)
         except ValueError as exc:
             self.get_logger().error(f"LUCY_BRIDGE: {exc}")
             return
+        # New bridges report every PCA again; boards gone from the YAML take their warnings along.
+        nodes = ros2_control_nodes(urdf_xml)
+        boards = {
+            f"{bridge}_{node}": board
+            for board, node, _, _ in board_entries(hardware_yaml)
+            if bridge == "mcu_bridge" and node in nodes
+        }
+        with self._warnings_lock:
+            self._hardware_warnings.clear()
+            self._unreachable.clear()
+            self._bridge_boards = boards
+        self._publish_hardware_warnings()
+        started = {f"{bridge}_{node}" for node, _ in processes}
+        for name in boards.keys() - started:
+            self._set_unreachable(name, "no serial_id set for it")
         if not processes:
             self.get_logger().warning(
                 f"{bridge}: nothing to drive in this robot"
@@ -434,25 +526,31 @@ class ControlSupervisorNode(Node):
             executable = bridge_executable(bridge)
         except LookupError as exc:
             self.get_logger().error(str(exc))
+            for name in started:
+                self._set_unreachable(name, f"its {bridge} is not built")
             return
         for node_name, args in processes:
+            name = f"{bridge}_{node_name}"
             self.get_logger().info(f"starting {bridge} {' '.join(args)}")
-            popen = subprocess.Popen(
-                [executable, *args],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                env=os.environ.copy(),
-                start_new_session=True,
-                preexec_fn=_die_with_parent if sys.platform == "linux" else None,
-            )
-            self._track(f"{bridge}_{node_name}", popen, "bridge")
+            try:
+                popen = subprocess.Popen(
+                    [executable, *args],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    env=os.environ.copy(),
+                    start_new_session=True,
+                    preexec_fn=_die_with_parent if sys.platform == "linux" else None,
+                )
+            except OSError as e:
+                self._set_unreachable(name, f"its {bridge} failed to start ({e})")
+                continue
+            self._track(name, popen, "bridge")
 
     def _spawn_controllers(self, cfg: _StackConfig) -> None:
         """Load and activate controllers after controller_manager is up.
 
         Must run on every restart (including pipeline RELOAD): launch-file
         spawners are one-shot and do not re-run when only this node restarts CM.
-        Sequential to avoid the spawner global lock burning 20s per waiter.
         """
         names = controllers_to_spawn(
             cfg.controllers_yaml,
@@ -463,28 +561,29 @@ class ControlSupervisorNode(Node):
                 f"no controllers to spawn in {cfg.controllers_yaml}"
             )
             return
-        for name in names:
-            cmd = [
-                *node_argv("controller_manager", "spawner"),
-                name,
-                "--switch-timeout",
-                "10",
-            ]
-            self.get_logger().info(f"spawning controller {name}")
-            r = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=self.SPAWNER_TIMEOUT_S,
-                check=False,
-                env=os.environ.copy(),
+        cmd = [
+            *node_argv("controller_manager", "spawner"),
+            *names,
+            "--switch-timeout",
+            "10",
+        ]
+        self.get_logger().info(f"spawning controllers {' '.join(names)}")
+        r = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=self.SPAWNER_TIMEOUT_S
+            + self.SPAWNER_PER_CONTROLLER_S * (len(names) - 1),
+            check=False,
+            env=os.environ.copy(),
+        )
+        if r.returncode != 0:
+            detail = (r.stderr or r.stdout or "").strip()
+            raise RuntimeError(
+                f"spawner for {' '.join(names)} failed (exit {r.returncode})"
+                + (f": {detail}" if detail else "")
             )
-            if r.returncode != 0:
-                detail = (r.stderr or r.stdout or "").strip()
-                raise RuntimeError(
-                    f"spawner for {name} failed (exit {r.returncode})"
-                    + (f": {detail}" if detail else "")
-                )
+        self._write_ready_marker(len(names))
         self._bind_torque_controllers(cfg)
         self._publish_torque_after_match()
 
@@ -493,15 +592,32 @@ class ControlSupervisorNode(Node):
         self._torque_enabled = bool(msg.data)
         self._publish_torque_commands()
 
+    def _on_disabled_joints(self, msg: String) -> None:
+        """Keep the listed joints limp (torque 0) even with Control Robot ON."""
+        try:
+            names = json.loads(msg.data or "[]")
+        except ValueError:
+            self.get_logger().warning(
+                f"ignoring malformed {self.DISABLED_JOINTS_TOPIC}: {msg.data!r}"
+            )
+            return
+        if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+            self.get_logger().warning(
+                f"{self.DISABLED_JOINTS_TOPIC} must be a JSON list of joint names"
+            )
+            return
+        self._disabled_joints = frozenset(names)
+        self._publish_torque_commands()
+
     def _bind_torque_controllers(self, cfg: _StackConfig) -> None:
         """Create a commands publisher for each torque_enable forward controller."""
         if cfg.use_gazebo_sim:
             return
-        for name, count in torque_enable_controllers(cfg.controllers_yaml):
+        for name, joints in torque_enable_controllers(cfg.controllers_yaml):
             pub, _old = self._torque_pubs.get(name, (None, None))
             if pub is None:
                 pub = self.create_publisher(Float64MultiArray, f"/{name}/commands", 10)
-            self._torque_pubs[name] = (pub, count)
+            self._torque_pubs[name] = (pub, joints)
 
     def _publish_torque_after_match(self) -> None:
         """Publish stored Control Robot flag once torque command topics are matched."""
@@ -521,9 +637,11 @@ class ControlSupervisorNode(Node):
 
     def _publish_torque_commands(self) -> None:
         """Write 1.0 or 0.0 on every joint of each torque_enable controller."""
-        for pub, count in self._torque_pubs.values():
+        for pub, joints in self._torque_pubs.values():
             msg = Float64MultiArray()
-            msg.data = torque_command_values(self._torque_enabled, count)
+            msg.data = torque_command_values(
+                self._torque_enabled, joints, self._disabled_joints
+            )
             pub.publish(msg)
 
     def _restart_stack(self) -> tuple[bool, str]:
