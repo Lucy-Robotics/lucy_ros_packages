@@ -6,8 +6,8 @@ from .pipeline.selection import resolve_mapping_input
 from .pipeline.selection import select_boards_to_process
 
 __all__ = [
-    'PipelineActionServer',
-    'PipelinePaths',
-    'resolve_mapping_input',
-    'select_boards_to_process',
+    "PipelineActionServer",
+    "PipelinePaths",
+    "resolve_mapping_input",
+    "select_boards_to_process",
 ]

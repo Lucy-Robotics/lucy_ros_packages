@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2025 Sentience Robotics Team
+# Copyright 2026 Lucy Robotics Team
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@ import rclpy
 from std_msgs.msg import Int32
 
 # Add scripts directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'scripts'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 
 @pytest.fixture
@@ -40,6 +40,7 @@ def rclpy_init_shutdown():
 def controller_node(rclpy_init_shutdown):
     """Create a CameraStreamController and destroy it before rclpy shuts down."""
     from camera_stream_controller import CameraStreamController
+
     node = CameraStreamController()
     yield node
     node.destroy_node()
@@ -52,7 +53,7 @@ class TestCameraStreamController:
         """Test that controller node initializes correctly."""
         node = controller_node
 
-        assert node.get_name() == 'camera_stream_controller'
+        assert node.get_name() == "camera_stream_controller"
         assert node.current_client_count == 0
         assert node.is_streaming is False
         assert node.start_streaming_client is not None
@@ -61,8 +62,9 @@ class TestCameraStreamController:
     def test_client_count_callback_start(self, controller_node):
         """Test client count callback starts streaming when clients > 0."""
         from camera_stream_controller import CameraStreamController
+
         node = controller_node
-        with patch.object(CameraStreamController, 'start_streaming') as mock_start:
+        with patch.object(CameraStreamController, "start_streaming") as mock_start:
             node.is_streaming = False
 
             msg = Int32()
@@ -75,8 +77,9 @@ class TestCameraStreamController:
     def test_client_count_callback_stop(self, controller_node):
         """Test client count callback stops streaming when clients == 0."""
         from camera_stream_controller import CameraStreamController
+
         node = controller_node
-        with patch.object(CameraStreamController, 'stop_streaming') as mock_stop:
+        with patch.object(CameraStreamController, "stop_streaming") as mock_stop:
             node.is_streaming = True
 
             msg = Int32()

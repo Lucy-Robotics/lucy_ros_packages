@@ -1,4 +1,4 @@
-// Copyright 2025 Sentience Robotics Team
+// Copyright 2026 Lucy Robotics Team
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -24,10 +24,23 @@
 #ifndef LUCY_ROS2_CONTROL__LUCY_SYSTEM_HPP_
 #define LUCY_ROS2_CONTROL__LUCY_SYSTEM_HPP_
 
-#include <memory>
+#include <atomic>
 #include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <string>
+#include <thread>
 #include <vector>
+#include <array>
+
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <semaphore.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+
 
 #include "hardware_interface/handle.hpp"
 #include "hardware_interface/hardware_info.hpp"
@@ -43,70 +56,86 @@
 #include "rclcpp_lifecycle/node_interfaces/lifecycle_node_interface.hpp"
 #include "rclcpp_lifecycle/state.hpp"
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/string.hpp>
 
 #include "joint_config.hpp"
+#include "link_monitor.hpp"
+#include "shared_memory_channel.hpp"
 
 namespace lucy_ros2_control
 {
+
 class LucySystemHardware : public hardware_interface::SystemInterface
 {
 public:
   RCLCPP_SHARED_PTR_DEFINITIONS(LucySystemHardware)
 
-  hardware_interface::CallbackReturn on_init(
-    const hardware_interface::HardwareComponentInterfaceParams & params) override;
+  ~LucySystemHardware();
+
 
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
-
   std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
 
+  hardware_interface::CallbackReturn on_error(
+    const rclcpp_lifecycle::State & previous_state) override;
+  hardware_interface::CallbackReturn on_init(
+    const hardware_interface::HardwareComponentInterfaceParams & params) override;
+  hardware_interface::CallbackReturn on_configure(
+    const rclcpp_lifecycle::State & previous_state) override;
   hardware_interface::CallbackReturn on_activate(
     const rclcpp_lifecycle::State & previous_state) override;
-
   hardware_interface::CallbackReturn on_deactivate(
     const rclcpp_lifecycle::State & previous_state) override;
 
   hardware_interface::return_type read(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
-
   hardware_interface::return_type write(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
-  rclcpp::Logger get_logger() const {return *logger_;}
-  // rclcpp::Clock::SharedPtr get_clock() const { return clock_; }
+  rclcpp::Logger get_logger() const override {return *logger_;}
 
 private:
-  /// Validate every joint's command/state interfaces (see on_init step 1).
-  hardware_interface::CallbackReturn validate_joints();
-
-  /// Read publish/topic/node params and create the actuator publisher + node.
-  hardware_interface::CallbackReturn configure_publisher();
-
-  /// Fill joint_min_rad_ / joint_max_rad_ from command_interface min/max.
   hardware_interface::CallbackReturn init_joint_limits();
-
-  /// Build mappings_, seed default positions, sort and reject duplicate pins.
   hardware_interface::CallbackReturn init_actuator_mappings();
+  /// Last SHM write of torque off, then release the channel (error / deactivate).
+  void drop_torque_and_release_shm();
+  /// Read the firmware liveness fields and log state changes (no-op in loopback).
+  void update_link_health();
 
-  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_publisher_;
   rclcpp::Node::SharedPtr node_;
+
+  std::string node_name_;
+  bool loopback_encoders_{false};
 
   // Objects for logging
   std::shared_ptr<rclcpp::Logger> logger_;
   // rclcpp::Clock::SharedPtr clock_;
 
+  std::optional<SharedMemoryChannel> shared_memory_channel_;
+
+  LinkMonitor link_monitor_{LinkMonitor::Clock::now()};
+  LinkMonitor::Clock::time_point last_link_warning_{};
+
   // Store the command for the simulated robot
+  std::vector<double> hw_torque_enabled_;
   std::vector<double> hw_commands_;
+  std::vector<double> hw_velocities_;
+  std::vector<double> hw_accelerations_;
+
   std::vector<double> hw_positions_;
-  // std::vector<double> hw_velocities_; // We have no velocity for our servos
+  std::vector<double> hw_temperatures_;
+  std::vector<double> hw_efforts_;
+  std::vector<double> hw_currents_;
+  std::vector<double> hw_loads_;
+  std::vector<double> hw_voltages_;
 
   /** Per-joint URDF limits from command_interface min/max (rad); ±inf when unset. */
   std::vector<double> joint_min_rad_;
   std::vector<double> joint_max_rad_;
 
-  bool publish_actuators_{true};
-
   std::vector<ActuatedJointMapping> mappings_;
+
+  std::atomic<bool> controlled_{false};
 };
 
 }  // namespace lucy_ros2_control

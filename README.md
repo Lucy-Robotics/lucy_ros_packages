@@ -1,13 +1,19 @@
 # lucy_ros_packages
 
-ROS 2 **Jazzy** repository for **Lucy** (Sentience Robotics): runtime bringup, `ros2_control` hardware integration, and camera tooling. This is a **multi-package** repo; each subdirectory under `src/` in your colcon workspace is one `ament` package.
+[![CI: dev](https://github.com/Lucy-Robotics/lucy_ros_packages/actions/workflows/ci.yml/badge.svg?branch=dev)](https://github.com/Lucy-Robotics/lucy_ros_packages/actions/workflows/ci.yml?query=branch%3Adev)
+[![CI: master](https://github.com/Lucy-Robotics/lucy_ros_packages/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Lucy-Robotics/lucy_ros_packages/actions/workflows/ci.yml?query=branch%3Amaster)
+[![codecov](https://codecov.io/gh/Lucy-Robotics/lucy_ros_packages/branch/master/graph/badge.svg)](https://codecov.io/gh/Lucy-Robotics/lucy_ros_packages)
+[![release](https://img.shields.io/github/v/release/Lucy-Robotics/lucy_ros_packages)](https://github.com/Lucy-Robotics/lucy_ros_packages/releases)
+[![Discord](https://img.shields.io/discord/1272611839775084564?label=Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.com/invite/g4KNZ3eeBd)
+
+ROS 2 **Jazzy** repository for **Lucy** (Lucy Robotics): runtime bringup, `ros2_control` hardware integration, and camera tooling. This is a **multi-package** repo; each subdirectory under `src/` in your colcon workspace is one `ament` package.
 
 ## What lives here
 
 | Package | One-line role |
 |---------|----------------|
-| [**lucy_bringup**](lucy_bringup/) | Jetson **system launch**: micro-ROS agents, **`web_ros_api`** (rosbridge + **`lucy_config_pipeline`**), RealSense, `camera_ros`, delayed [`lucy_ros2_control`](lucy_ros2_control/) bringup; **`lucy_*_development`** composes the web stack with **`thais_urdf`** RViz/Gazebo. |
-| [**lucy_ros2_control**](lucy_ros2_control/) | **Hardware** `ros2_control` plugin (`LucySystemHardware`), controller YAML, `control.launch.py` for the real robot stack (no RViz/rosbridge in that launch). |
+| [**lucy_bringup**](lucy_bringup/) | Jetson **system launch**: **`web_ros_api`** (rosbridge + **`lucy_config_pipeline`**), RealSense, `camera_ros`, [`lucy_ros2_control`](lucy_ros2_control/) bringup; **`lucy_*_development`** composes the web stack with **`thais_urdf`** RViz/Gazebo. |
+| [**lucy_ros2_control**](lucy_ros2_control/) | **Hardware** `ros2_control` plugin (`LucySystemHardware`, f32 SHM), controller YAML, `control.launch.py` for the real robot stack (no RViz/rosbridge in that launch). |
 | [**lucy_config_generator**](lucy_config_generator/) | **Config pipeline**: reads **`thais_urdf`** hardware YAML and emits RP2040 firmware C, `ros2_control` xacro, and `controllers.yaml` (see package README). |
 | [**lucy_config_pipeline**](lucy_config_pipeline/) | **Config store + `ConfigurePipeline` action**: validate YAML, generate artifacts, build/flash RP2040 firmware via `picotool` [README](lucy_config_pipeline/README.md). |
 | [**camera_ros**](camera_ros/) | GStreamer-based **MJPEG** → `sensor_msgs/CompressedImage`; client-aware activation. |
@@ -16,14 +22,14 @@ Package names match directories (`<name>` in each `package.xml`).
 
 ## How this repo fits the platform
 
-- **Robot model, RViz, and Gazebo** live in the sibling repo **[thais_urdf](https://github.com/Sentience-Robotics/thais_urdf)** (package name `thais_urdf`). **`lucy_bringup`** owns **rosbridge + hardware config** (**`web_ros_api.launch.py`**) and **`lucy.launch.py`** (composition via **`real`**, **`rviz`**, **`gazebo`**). `lucy_ros2_control` expects URDF/xacro and meshes from **`thais_urdf`** when using default paths.
+- **Robot model, RViz, and Gazebo** live in the sibling repo **[thais_urdf](https://github.com/Lucy-Robotics/thais_urdf)** (package name `thais_urdf`). **`lucy_bringup`** owns **rosbridge + hardware config** (**`web_ros_api.launch.py`**) and **`lucy.launch.py`** (composition via **`real`**, **`rviz`**, **`gazebo`**). `lucy_ros2_control` expects URDF/xacro and meshes from **`thais_urdf`** when using default paths.
 - **Web control panel** and teleop semantics are **not** in this repo; they consume the same topics/controllers documented in lucy_ws docs.
 
 ## Requirements
 
 - **OS**: Ubuntu 24.04
 - **ROS**: [ROS 2 Jazzy](https://docs.ros.org/en/jazzy/Installation.html).
-- **Per-package extras**: Jetson-typical USB video and audio stacks for bringup; RealSense SDK stack for `realsense2_camera`; serial devices for micro-ROS. See each package README and `lucy_bringup/REALSENSE.md`.
+- **Per-package extras**: Jetson-typical USB video and audio stacks for bringup; RealSense SDK stack for `realsense2_camera`; USB serial for host Feetech / MCU link. See each package README and `lucy_bringup/REALSENSE.md`.
 
 ## Picotool and passwordless sudo
 
@@ -129,4 +135,4 @@ Packages in this repository are licensed under **GPL-3.0** unless a subdirectory
 
 ## Maintainer
 
-Sentience Robotics Team — `contact@sentience-robotics.fr` (see `package.xml` files).
+Lucy Robotics Team — `contact@lucy-robotics.com` (see `package.xml` files).

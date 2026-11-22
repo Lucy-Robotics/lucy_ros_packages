@@ -9,6 +9,17 @@ on:
       - dev
 
 jobs:
+  lint:
+    name: Lint (black)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install black==24.10.0
+      - run: black --check --diff .
+
   build-and-test:
     name: Build and test
     runs-on: ubuntu-latest
@@ -42,7 +53,7 @@ jobs:
       - name: Workspace layout
         run: |
           mkdir -p ws/src
-          cp -r camera_ros lucy_bringup lucy_ros2_control lucy_config_generator ws/src/
+          cp -r camera_ros lucy_bringup lucy_ros2_control lucy_config_generator lucy_msgs lucy_config_pipeline lucy_control_supervisor ws/src/
 
       # Do not `rm -rf /var/lib/apt/lists/*` before this: rosdep/apt need indexes for packages.ros.org.
       # Skip keys: not in this CI tree (thais_urdf), external/third-party (audio_common), or hardware agents not needed to compile/test.
@@ -61,7 +72,7 @@ jobs:
         run: |
           source /opt/ros/jazzy/setup.bash
           colcon build --symlink-install \
-            --packages-select camera_ros lucy_bringup lucy_ros2_control lucy_config_generator \
+            --packages-select camera_ros lucy_bringup lucy_ros2_control lucy_config_generator lucy_msgs lucy_config_pipeline lucy_control_supervisor \
             --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
 
       - name: colcon test
@@ -71,7 +82,7 @@ jobs:
           source /opt/ros/jazzy/setup.bash
           source install/setup.bash
           colcon test \
-            --packages-select camera_ros lucy_bringup lucy_ros2_control lucy_config_generator \
+            --packages-select camera_ros lucy_bringup lucy_ros2_control lucy_config_generator lucy_msgs lucy_config_pipeline lucy_control_supervisor \
             --event-handlers console_direct+ \
             --pytest-args -vv --tb=short
 
@@ -113,13 +124,27 @@ jobs:
             --cov-report=html:build/coverage_reports/html_lucy_config_generator \
             --cov-report=term-missing \
             --cov-branch
+          # lucy_config_pipeline — config pipeline + services
+          python3 -m pytest src/lucy_config_pipeline/test/ \
+            --cov=src/lucy_config_pipeline/src \
+            --cov-report=xml:build/coverage_reports/lucy_config_pipeline.xml \
+            --cov-report=html:build/coverage_reports/html_lucy_config_pipeline \
+            --cov-report=term-missing \
+            --cov-branch
+          # lucy_control_supervisor — process supervisor
+          python3 -m pytest src/lucy_control_supervisor/test/ \
+            --cov=src/lucy_control_supervisor/lucy_control_supervisor \
+            --cov-report=xml:build/coverage_reports/lucy_control_supervisor.xml \
+            --cov-report=html:build/coverage_reports/html_lucy_control_supervisor \
+            --cov-report=term-missing \
+            --cov-branch
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         if: success()
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ws/build/coverage_reports/camera_ros.xml,ws/build/coverage_reports/lucy_bringup.xml,ws/build/coverage_reports/lucy_config_generator.xml
+          files: ws/build/coverage_reports/camera_ros.xml,ws/build/coverage_reports/lucy_bringup.xml,ws/build/coverage_reports/lucy_config_generator.xml,ws/build/coverage_reports/lucy_config_pipeline.xml,ws/build/coverage_reports/lucy_control_supervisor.xml
           flags: lucy_ros_packages
           name: lucy_ros_packages
           fail_ci_if_error: false

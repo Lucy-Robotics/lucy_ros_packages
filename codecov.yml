@@ -1,0 +1,15 @@
+coverage:
+  status:
+    project:
+      default:
+        # No baseline yet: gate on not regressing vs. base, not a guessed target.
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+
+comment:
+  layout: "diff, flags, files"
+  require_changes: true

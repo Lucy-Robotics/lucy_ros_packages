@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.8)
 project(lucy_ros2_control)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -26,6 +30,7 @@ add_library(
   SHARED
   src/lucy_system.cpp
   src/joint_config.cpp
+  src/shared_memory_channel.cpp
 )
 
 target_compile_features(lucy_ros2_control PUBLIC cxx_std_17)
@@ -119,6 +124,12 @@ if(BUILD_TESTING)
       ${PROJECT_SOURCE_DIR}/src/include
     )
 
+    # Header-only liveness and torque-gating logic, driven with a fake time.
+    ament_add_gtest(test_link_monitor test/test_link_monitor.cpp)
+    target_include_directories(test_link_monitor PRIVATE
+      ${PROJECT_SOURCE_DIR}/src/include
+    )
+
     # Pure on_init helpers: compile the module straight into the test (no ROS node
     # needed); depends on hardware_interface for ComponentInfo / lexical_casts.
     ament_add_gtest(test_joint_config
@@ -129,6 +140,21 @@ if(BUILD_TESTING)
       ${PROJECT_SOURCE_DIR}/src/include
     )
     ament_target_dependencies(test_joint_config hardware_interface)
+
+    # Shared-memory ABI with embed-rs: struct layout plus a real POSIX segment.
+    ament_add_gtest(test_shared_memory_channel
+      test/test_shared_memory_channel.cpp
+      src/shared_memory_channel.cpp
+    )
+    target_include_directories(test_shared_memory_channel PRIVATE
+      ${PROJECT_SOURCE_DIR}/src/include
+    )
+    target_link_libraries(test_shared_memory_channel rt)
+
+    # LucySystemHardware state interfaces (temperature/effort/current/load),
+    # driven directly through on_init/on_configure/read against a shm segment.
+    ament_add_gtest(test_lucy_system_state test/test_lucy_system_state.cpp)
+    target_link_libraries(test_lucy_system_state lucy_ros2_control rt)
   endif()
 endif()
 

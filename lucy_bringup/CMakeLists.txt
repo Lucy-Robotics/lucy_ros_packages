@@ -28,6 +28,7 @@ install(FILES
 )
 
 if(BUILD_TESTING)
+  set(ament_cmake_flake8_CONFIG_FILE "${CMAKE_CURRENT_SOURCE_DIR}/ament_flake8.ini")
   find_package(ament_lint_auto REQUIRED)
   find_package(ament_cmake_pytest REQUIRED)
   set(AMENT_LINT_AUTO_EXCLUDE "")
@@ -41,6 +42,12 @@ if(BUILD_TESTING)
   endif()
   ament_lint_auto_find_test_dependencies()
   ament_add_pytest_test(test_launch_syntax test/test_launch_syntax.py
+    TIMEOUT 120
+  )
+  ament_add_pytest_test(test_lucy_launch_args test/test_lucy_launch_args.py
+    TIMEOUT 120
+  )
+  ament_add_pytest_test(test_rosbridge_port test/test_rosbridge_port.py
     TIMEOUT 120
   )
 endif()

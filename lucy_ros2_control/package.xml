@@ -4,7 +4,7 @@
   <name>lucy_ros2_control</name>
   <version>1.0.0</version>
   <description>Robot-agnostic ros2_control hardware plugin for Lucy micro-ROS actuator boards.</description>
-  <maintainer email="contact@sentience-robotics.fr">Sentience Robotics Team</maintainer>
+  <maintainer email="contact@lucy-robotics.com">Lucy Robotics Team</maintainer>
   <license>GPL-3.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
@@ -14,6 +14,7 @@
   <depend>pluginlib</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
+  <depend>std_msgs</depend>
 
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>gz_ros2_control</exec_depend>

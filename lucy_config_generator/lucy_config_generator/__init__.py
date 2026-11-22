@@ -1,4 +1,4 @@
-# Copyright 2025 Sentience Robotics Team
+# Copyright 2026 Lucy Robotics Team
 #
 # SPDX-License-Identifier: GPL-3.0-only
 

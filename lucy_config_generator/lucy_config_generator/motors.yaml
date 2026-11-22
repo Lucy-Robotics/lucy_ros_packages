@@ -1,0 +1,18 @@
+# Motor specs shared by every robot. A variant inherits its type's values and overrides them.
+# Actuators pick one with `motor: <type>/<variant>`.
+sts3215:
+  protocol: feetech
+  ticks_per_turn: 4096
+  current_lsb_a: 0.0065
+  overheat_celsius: 50
+  overheat_rearm_celsius: 48
+  max_continue_celsius: 60
+  firmware_trip_celsius: 65
+  firmware_rearm_celsius: 55
+  variants:
+    12v_345:
+      min_volts: 6.0
+      gear_ratio: 345
+      stall_torque_nm: 2.94
+      stall_current_a: 2.7
+      no_load_current_a: 0.18

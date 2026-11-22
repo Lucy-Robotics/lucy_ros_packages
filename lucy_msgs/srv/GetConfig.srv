@@ -11,3 +11,4 @@ string config_yaml            # full YAML content as string
 # Last preset successfully written to firmware (active_meta.yaml); empty if never flashed via pipeline
 string flashed_config_name
 string flashed_at             # ISO-8601 UTC timestamp; empty if unknown / never flashed
+string motors_yaml            # specs of the motors the config's actuators use, by motor ref

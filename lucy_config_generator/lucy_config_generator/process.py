@@ -1,4 +1,4 @@
-# Copyright 2025 Sentience Robotics Team
+# Copyright 2026 Lucy Robotics Team
 #
 # SPDX-License-Identifier: GPL-3.0-only
 
@@ -16,59 +16,59 @@ from lucy_config_generator.generate import generate
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            'Generate firmware C, ros2_control xacro, and controllers YAML from hardware YAML.'
+            "Generate firmware C, ros2_control xacro, and controllers YAML from hardware YAML."
         ),
     )
     parser.add_argument(
-        '--input',
+        "--input",
         type=Path,
         required=True,
-        help='Path to hardware mapping YAML (e.g. urdf/config/hardware/active.yaml).',
+        help="Path to hardware mapping YAML (e.g. urdf/config/hardware/active.yaml).",
     )
     parser.add_argument(
-        '--urdf',
+        "--urdf",
         type=Path,
         required=True,
-        help='Top-level robot xacro (e.g. urdf/description/urdf/robot.urdf.xacro).',
+        help="Top-level robot xacro (e.g. urdf/description/urdf/robot.urdf.xacro).",
     )
     parser.add_argument(
-        '--base-path',
+        "--base-path",
         type=Path,
         required=True,
-        help='xacro base_path (installed description/ or source description/).',
+        help="xacro base_path (installed description/ or source description/).",
     )
     parser.add_argument(
-        '--controller-config',
+        "--controller-config",
         type=Path,
         required=True,
-        help='controllers.yaml passed into xacro (for extra_joints / URDF processing).',
+        help="controllers.yaml passed into xacro (for extra_joints / URDF processing).",
     )
     parser.add_argument(
-        '--output-dir',
+        "--output-dir",
         type=Path,
         required=True,
-        help='Directory to write generated files.',
+        help="Directory to write generated files.",
     )
     parser.add_argument(
-        '--targets',
-        default='all',
-        choices=('all', 'firmware', 'ros2_control', 'controllers'),
-        help='Which outputs to generate (default: all).',
+        "--targets",
+        default="all",
+        choices=("all", "firmware", "ros2_control", "controllers"),
+        help="Which outputs to generate (default: all).",
     )
     parser.add_argument(
-        '--boards',
-        default='',
-        help='Comma-separated board ids to include (default: all known boards in YAML).',
+        "--boards",
+        default="",
+        help="Comma-separated board ids to include (default: all known boards in YAML).",
     )
     args = parser.parse_args(argv)
 
-    if args.targets == 'all':
-        targets = {'firmware', 'ros2_control', 'controllers', 'gazebo'}
+    if args.targets == "all":
+        targets = {"firmware", "ros2_control", "controllers", "gazebo"}
     else:
         targets = {args.targets}
     boards_filter: set[str] | None = None
     if args.boards.strip():
-        boards_filter = {b.strip() for b in args.boards.split(',') if b.strip()}
+        boards_filter = {b.strip() for b in args.boards.split(",") if b.strip()}
 
     try:
         generate(
@@ -81,10 +81,10 @@ def main(argv: list[str] | None = None) -> int:
             boards_filter=boards_filter,
         )
     except (OSError, ValueError, RuntimeError, FileNotFoundError) as e:
-        print(f'error: {e}', file=sys.stderr)
+        print(f"error: {e}", file=sys.stderr)
         return 1
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main())
