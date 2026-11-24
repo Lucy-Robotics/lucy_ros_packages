@@ -23,6 +23,8 @@
 #include <mutex>
 #include <span>
 
+#include "shared_memory_segment.hpp"
+
 struct ActuatorSharedState
 {
   alignas(64) std::atomic<uint64_t> command_seq{0};
@@ -151,6 +153,7 @@ private:
 
   std::string node_name_;
   ActuatorSharedState * actuators_state_;
+  std::optional<SharedMemorySegment> segment_;
 };
 
 #endif

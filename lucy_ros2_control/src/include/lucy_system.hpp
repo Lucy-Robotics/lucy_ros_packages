@@ -33,13 +33,17 @@
 #include <vector>
 #include <array>
 
+#ifndef _WIN32
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <semaphore.h>
+#endif
 #include <stdio.h>
+#ifndef _WIN32
 #include <fcntl.h>
 #include <sys/stat.h>
+#endif
 
 
 #include "hardware_interface/handle.hpp"

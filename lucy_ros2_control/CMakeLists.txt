@@ -31,7 +31,9 @@ add_library(
   src/lucy_system.cpp
   src/joint_config.cpp
   src/shared_memory_channel.cpp
+  src/shared_memory_segment.cpp
 )
+set_target_properties(lucy_ros2_control PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 target_compile_features(lucy_ros2_control PUBLIC cxx_std_17)
 target_include_directories(lucy_ros2_control PUBLIC
@@ -145,16 +147,17 @@ if(BUILD_TESTING)
     ament_add_gtest(test_shared_memory_channel
       test/test_shared_memory_channel.cpp
       src/shared_memory_channel.cpp
+      src/shared_memory_segment.cpp
     )
     target_include_directories(test_shared_memory_channel PRIVATE
       ${PROJECT_SOURCE_DIR}/src/include
     )
-    target_link_libraries(test_shared_memory_channel rt)
+    target_link_libraries(test_shared_memory_channel $<$<PLATFORM_ID:Linux>:rt>)
 
     # LucySystemHardware state interfaces (temperature/effort/current/load),
     # driven directly through on_init/on_configure/read against a shm segment.
     ament_add_gtest(test_lucy_system_state test/test_lucy_system_state.cpp)
-    target_link_libraries(test_lucy_system_state lucy_ros2_control rt)
+    target_link_libraries(test_lucy_system_state lucy_ros2_control $<$<PLATFORM_ID:Linux>:rt>)
   endif()
 endif()
 
