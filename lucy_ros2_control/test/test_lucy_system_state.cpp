@@ -22,9 +22,6 @@
 /// (temperature, effort, current and load) and the reaction to a lost firmware
 /// link (logs, read() result, torque written to shm).
 
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <unistd.h>
 
 #include <algorithm>
 #include <chrono>
@@ -50,7 +47,9 @@
 
 #include "link_monitor.hpp"
 #include "lucy_system.hpp"
+#include "process_env.hpp"
 #include "shared_memory_channel.hpp"
+#include "shared_memory_segment.hpp"
 
 namespace
 {
@@ -104,23 +103,9 @@ class FirmwareMapping
 {
 public:
   FirmwareMapping(const std::string & name, std::size_t max_actuators)
-  : size_(ActuatorSharedState::size_for(max_actuators))
+  : segment_(SharedMemorySegment::open(name, ActuatorSharedState::size_for(max_actuators))),
+    state_(segment_ ? static_cast<ActuatorSharedState *>(segment_->data()) : nullptr)
   {
-    const int fd = shm_open(name.c_str(), O_RDWR, 0);
-    if (fd == -1) {
-      return;
-    }
-    void * addr = mmap(nullptr, size_, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    close(fd);
-    if (addr != MAP_FAILED) {
-      state_ = static_cast<ActuatorSharedState *>(addr);
-    }
-  }
-  ~FirmwareMapping()
-  {
-    if (state_ != nullptr) {
-      munmap(state_, size_);
-    }
   }
   FirmwareMapping(const FirmwareMapping &) = delete;
   FirmwareMapping & operator=(const FirmwareMapping &) = delete;
@@ -136,7 +121,7 @@ public:
   }
 
 private:
-  std::size_t size_;
+  std::optional<SharedMemorySegment> segment_;
   ActuatorSharedState * state_{nullptr};
 };
 
@@ -199,9 +184,9 @@ protected:
   void SetUp() override
   {
     const auto * info = ::testing::UnitTest::GetInstance()->current_test_info();
-    node_name_ = "lucy_test_sys_" + std::to_string(getpid()) + "_" + info->name();
+    node_name_ = "lucy_test_sys_" + std::to_string(process_id()) + "_" + info->name();
     shm_name_ = lucy_shm_name(node_name_);
-    shm_unlink(shm_name_.c_str());
+    SharedMemorySegment::remove(shm_name_);
   }
 
   void TearDown() override
@@ -209,7 +194,7 @@ protected:
     if (configured_) {
       system_.on_deactivate(rclcpp_lifecycle::State());
     }
-    shm_unlink(shm_name_.c_str());
+    SharedMemorySegment::remove(shm_name_);
   }
 
   /// on_init + export + on_configure. Returns false on any failure.

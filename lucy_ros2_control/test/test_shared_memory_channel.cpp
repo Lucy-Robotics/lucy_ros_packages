@@ -22,10 +22,6 @@
 /// temperatures, efforts, currents, loads. These tests pin that contract so a
 /// change on one side fails here before it corrupts data at runtime.
 
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <unistd.h>
-
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -36,7 +32,9 @@
 
 #include <gtest/gtest.h>
 
+#include "process_env.hpp"
 #include "shared_memory_channel.hpp"
+#include "shared_memory_segment.hpp"
 
 namespace
 {
@@ -71,23 +69,9 @@ class ExternalMapping
 {
 public:
   ExternalMapping(const std::string & name, std::size_t size)
-  : size_(size)
+  : segment_(SharedMemorySegment::open(name, size)),
+    base_(segment_ ? static_cast<std::uint8_t *>(segment_->data()) : nullptr)
   {
-    const int fd = shm_open(name.c_str(), O_RDWR, 0);
-    if (fd == -1) {
-      return;
-    }
-    void * addr = mmap(nullptr, size_, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    close(fd);
-    if (addr != MAP_FAILED) {
-      base_ = static_cast<std::uint8_t *>(addr);
-    }
-  }
-  ~ExternalMapping()
-  {
-    if (base_ != nullptr) {
-      munmap(base_, size_);
-    }
   }
   ExternalMapping(const ExternalMapping &) = delete;
   ExternalMapping & operator=(const ExternalMapping &) = delete;
@@ -109,7 +93,7 @@ public:
   }
 
 private:
-  std::size_t size_;
+  std::optional<SharedMemorySegment> segment_;
   std::uint8_t * base_{nullptr};
 };
 
@@ -119,10 +103,10 @@ protected:
   void SetUp() override
   {
     const auto * info = ::testing::UnitTest::GetInstance()->current_test_info();
-    name_ = "/lucy_test_shm_" + std::to_string(getpid()) + "_" + info->name();
-    shm_unlink(name_.c_str());
+    name_ = "/lucy_test_shm_" + std::to_string(process_id()) + "_" + info->name();
+    SharedMemorySegment::remove(name_);
   }
-  void TearDown() override {shm_unlink(name_.c_str());}
+  void TearDown() override {SharedMemorySegment::remove(name_);}
 
   std::string name_;
 };
@@ -342,17 +326,17 @@ public:
       saved_ = old;
     }
     if (value == nullptr) {
-      unsetenv("ROS_DOMAIN_ID");
+      unset_env_var("ROS_DOMAIN_ID");
     } else {
-      setenv("ROS_DOMAIN_ID", value, 1);
+      set_env_var("ROS_DOMAIN_ID", value);
     }
   }
   ~DomainEnv()
   {
     if (saved_) {
-      setenv("ROS_DOMAIN_ID", saved_->c_str(), 1);
+      set_env_var("ROS_DOMAIN_ID", saved_->c_str());
     } else {
-      unsetenv("ROS_DOMAIN_ID");
+      unset_env_var("ROS_DOMAIN_ID");
     }
   }
 
