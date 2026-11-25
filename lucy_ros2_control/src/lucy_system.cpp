@@ -259,6 +259,10 @@ hardware_interface::CallbackReturn LucySystemHardware::on_configure(
 hardware_interface::CallbackReturn LucySystemHardware::on_activate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
+  timer_resolution_.emplace();
+  if (!timer_resolution_->granted()) {
+    RCLCPP_WARN(get_logger(), "1 ms timer resolution refused: the control loop keeps the OS tick");
+  }
   RCLCPP_INFO(get_logger(), "Successfully activated!");
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -268,6 +272,7 @@ hardware_interface::CallbackReturn LucySystemHardware::on_deactivate(
   const rclcpp_lifecycle::State & /*previous_state*/)
 {
   drop_torque_and_release_shm();
+  timer_resolution_.reset();
   RCLCPP_INFO(get_logger(), "Successfully deactivated!");
 
   return hardware_interface::CallbackReturn::SUCCESS;

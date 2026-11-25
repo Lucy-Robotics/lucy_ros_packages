@@ -65,6 +65,7 @@
 #include "joint_config.hpp"
 #include "link_monitor.hpp"
 #include "shared_memory_channel.hpp"
+#include "timer_resolution.hpp"
 
 namespace lucy_ros2_control
 {
@@ -116,6 +117,7 @@ private:
   // rclcpp::Clock::SharedPtr clock_;
 
   std::optional<SharedMemoryChannel> shared_memory_channel_;
+  std::optional<OneMillisecondTimerResolution> timer_resolution_;
 
   LinkMonitor link_monitor_{LinkMonitor::Clock::now()};
   LinkMonitor::Clock::time_point last_link_warning_{};
