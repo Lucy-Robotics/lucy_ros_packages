@@ -32,7 +32,11 @@ add_library(
   src/joint_config.cpp
   src/shared_memory_channel.cpp
   src/shared_memory_segment.cpp
+  src/timer_resolution.cpp
 )
+if(WIN32)
+  target_link_libraries(lucy_ros2_control PRIVATE winmm)
+endif()
 set_target_properties(lucy_ros2_control PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 target_compile_features(lucy_ros2_control PUBLIC cxx_std_17)
@@ -127,6 +131,17 @@ if(BUILD_TESTING)
     )
 
     # Header-only liveness and torque-gating logic, driven with a fake time.
+    ament_add_gtest(test_timer_resolution
+      test/test_timer_resolution.cpp
+      src/timer_resolution.cpp
+    )
+    target_include_directories(test_timer_resolution PRIVATE
+      ${PROJECT_SOURCE_DIR}/src/include
+    )
+    if(WIN32)
+      target_link_libraries(test_timer_resolution winmm)
+    endif()
+
     ament_add_gtest(test_link_monitor test/test_link_monitor.cpp)
     target_include_directories(test_link_monitor PRIVATE
       ${PROJECT_SOURCE_DIR}/src/include
