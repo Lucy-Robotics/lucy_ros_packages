@@ -27,6 +27,7 @@ from lucy_control_supervisor.controllers_spawn import controllers_to_spawn
 from lucy_control_supervisor.controllers_spawn import torque_command_values
 from lucy_control_supervisor.controllers_spawn import torque_enable_controllers
 from lucy_control_supervisor.controllers_spawn import wait_for_torque_match
+from lucy_control_supervisor.thread_priority import controller_manager_priority_args
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy
@@ -379,6 +380,7 @@ class ControlSupervisorNode(Node):
             str(cfg.controllers_yaml),
             "-r",
             "~/robot_description:=/robot_description",
+            *controller_manager_priority_args(),
         ]
         popen = subprocess.Popen(
             cmd,
