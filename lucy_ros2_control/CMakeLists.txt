@@ -25,6 +25,12 @@ foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
 endforeach()
 
 ## COMPILE
+if(WIN32)
+  set(LUCY_PLATFORM_SRC src/windows)
+else()
+  set(LUCY_PLATFORM_SRC src/posix)
+endif()
+
 add_library(
   lucy_ros2_control
   SHARED
@@ -32,6 +38,7 @@ add_library(
   src/joint_config.cpp
   src/shared_memory_channel.cpp
   src/shared_memory_segment.cpp
+  ${LUCY_PLATFORM_SRC}/shared_memory_segment.cpp
 )
 set_target_properties(lucy_ros2_control PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
@@ -148,6 +155,7 @@ if(BUILD_TESTING)
       test/test_shared_memory_channel.cpp
       src/shared_memory_channel.cpp
       src/shared_memory_segment.cpp
+      ${LUCY_PLATFORM_SRC}/shared_memory_segment.cpp
     )
     target_include_directories(test_shared_memory_channel PRIVATE
       ${PROJECT_SOURCE_DIR}/src/include
